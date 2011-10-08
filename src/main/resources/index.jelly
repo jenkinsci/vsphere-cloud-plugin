@@ -1,0 +1,6 @@
+<!--
+  This view is used to render the installed plugins page.
+-->
+<div>
+  Allows virtual machines in a VMware vSphere to be used as slaves. Virtual power on/off and revert can be used.
+</div>

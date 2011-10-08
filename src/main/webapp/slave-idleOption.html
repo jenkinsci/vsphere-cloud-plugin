@@ -1,0 +1,7 @@
+<div>What should be done when the slave disconnects.
+    <ul>
+        <li><b>Shutdown</b>: Shuts the virtual machine down, first attempting a Guest shutdown if VMware tools are installed, then a hard power off if VMware tools is not installed or the Guest shutdown fails.</li>
+        <li><b>Revert</b>: Shuts down the virtual machine like <b>Shutdown</b>, then reverts. If a snapshot name is specified, the revert will be to that snapshot.</li>
+        <li><b>Suspend:</b>: Suspends the virtual machine.</li>
+    </ul>
+</div>

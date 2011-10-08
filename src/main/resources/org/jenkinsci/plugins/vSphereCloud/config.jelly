@@ -1,0 +1,21 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <f:entry title="${%vSphere Host}" help="/plugin/vsphere-cloud/vsHost.html">
+        <f:textbox field="vsHost" />
+    </f:entry>
+    <f:entry title="${%Name to use for this vSphere Cloud}" help="/plugin/vsphere-cloud/vsDescription.html">
+        <f:textbox field="vsDescription" />
+    </f:entry>
+    <f:entry title="${%Username}" help="/plugin/vsphere-cloud/username.html">
+        <f:textbox field="username" />
+    </f:entry>
+    <f:entry title="${%Password}" help="/plugin/vsphere-cloud/password.html">
+        <f:password field="password" />
+    </f:entry>
+ 
+    <f:advanced>
+        <f:entry title="${%Max number of slaves online}" help="/plugin/vsphere-cloud/maxOnlineSlaves.html">
+            <f:textbox clazz="required number" field="maxOnlineSlaves" />
+        </f:entry>
+    </f:advanced>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>
+</j:jelly>
