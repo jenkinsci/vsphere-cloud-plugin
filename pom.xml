@@ -11,26 +11,42 @@
     <artifactId>vsphere-cloud</artifactId>
     <version>0.1-SNAPSHOT</version>
     <packaging>hpi</packaging>
+    <name>vSphere Cloud Plugin</name>
+    <description>Integrates Jenkins with a vSphere server to use virtual machines as slaved</description>
+    <url>https://wiki.jenkins-ci.org/display/JENKINS/vSphere+Cloud+Plugin</url>
 
+    <developers>
+        <developer>
+            <id>jswager</id>
+            <name>Jason Swager</name>
+            <email>jswager@alohaoi.com</email>
+        </developer>
+    </developers>
+    
+    <scm>
+        <connection>scm:git:ssh://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com:jenkinsci/vsphere-cloud-plugin.git</developerConnection>
+        <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
+    </scm>    
+  
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-  <!-- get every artifact through maven.glassfish.org, which proxies all the artifacts that we need -->
+    <distributionManagement>
+        <repository>
+            <id>maven.jenkins-ci.org</id>
+            <url>http://maven.jenkins-ci.org:8081/content/repositories/releases/</url>
+        </repository>
+    </distributionManagement>  
+    
     <repositories>
         <repository>
-            <id>m.g.o-public</id>
-            <url>http://maven.glassfish.org/content/groups/public/</url>
+            <id>maven.jenkins-ci.org</id>
+            <url>http://maven.jenkins-ci.org/content/repositories/releases</url>
         </repository>
-    </repositories>
-
-    <pluginRepositories>
-        <pluginRepository>
-            <id>m.g.o-public</id>
-            <url>http://maven.glassfish.org/content/groups/public/</url>
-        </pluginRepository>
-    </pluginRepositories>
-  
+    </repositories>    
+    
     <dependencies>
         <dependency>
             <groupId>org.kohsuke.stapler</groupId>
