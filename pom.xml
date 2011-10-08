@@ -4,12 +4,12 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>1.431</version><!-- which version of Jenkins is this plugin built against? -->
+        <version>1.432</version><!-- which version of Jenkins is this plugin built against? -->
     </parent>
 
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>vsphere-cloud</artifactId>
-    <version>0.1-SNAPSHOT</version>
+    <version>0.1</version>
     <packaging>hpi</packaging>
     <name>vSphere Cloud Plugin</name>
     <description>Integrates Jenkins with a vSphere server to use virtual machines as slaved</description>
@@ -25,7 +25,7 @@
     
     <scm>
         <connection>scm:git:ssh://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com:jenkinsci/vsphere-cloud-plugin.git</developerConnection>
+        <developerConnection>scm:git:ssh://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
     </scm>    
   
