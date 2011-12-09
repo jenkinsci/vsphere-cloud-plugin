@@ -4,7 +4,10 @@
  */
 package org.jenkinsci.plugins;
 
+import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.RuntimeFault;
+import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.VirtualMachine;
@@ -19,6 +22,7 @@ import hudson.slaves.Cloud;
 import hudson.util.Scrambler;
 import java.lang.String;
 import java.net.URL;
+import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Collection;
 
@@ -152,21 +156,29 @@ public class vSphereCloud extends Cloud {
     }
 
     public VirtualMachineSnapshot getSnapshotInTree(
-            VirtualMachine vm, String snapName) {
+            VirtualMachine vm, String snapName) throws Exception {
         if (vm == null || snapName == null) {
             return null;
         }
 
-        VirtualMachineSnapshotTree[] snapTree =
-                vm.getSnapshot().getRootSnapshotList();
-        if (snapTree != null) {
-            ManagedObjectReference mor = findSnapshotInTree(
-                    snapTree, snapName);
-            if (mor != null) {
-                return new VirtualMachineSnapshot(
-                        vm.getServerConnection(), mor);
+        VirtualMachineSnapshotInfo info = vm.getSnapshot();
+        if (info != null)
+        {
+            VirtualMachineSnapshotTree[] snapTree = 
+                    info.getRootSnapshotList();
+            if (snapTree != null) {
+                ManagedObjectReference mor = findSnapshotInTree(
+                        snapTree, snapName);
+                if (mor != null) {
+                    return new VirtualMachineSnapshot(
+                            vm.getServerConnection(), mor);
+                }
             }
         }
+        else
+        {
+            throw new Exception("No snapshots exist or unable to access the snapshot array");
+        }            
         return null;
     }
 
@@ -250,30 +262,6 @@ public class vSphereCloud extends Cloud {
 
                 ServiceInstance si = new ServiceInstance(new URL(vsHost + "/sdk"), username, password, true);
                 si.currentTime();
-
-                /* Install the all-trusting trust manager */
-                //Security.addProvider( new DummyTrustProvider() );
-                //Security.setProperty("ssl.TrustManagerFactory.algorithm",
-                //    "TrustAllCertificates");
-
-
-
-                /* Try and connect to it. */
-                //LabManager_x0020_SOAP_x0020_interfaceStub stub = new LabManager_x0020_SOAP_x0020_interfaceStub(lmHost + "/LabManager/SOAP/LabManager.asmx");
-                //AuthenticationHeader ah = new AuthenticationHeader();
-                //ah.setUsername(username);
-                //ah.setPassword(password);
-                //AuthenticationHeaderE ahe = new AuthenticationHeaderE();
-                //ahe.setAuthenticationHeader(ah);
-
-                /* GetCurrentOrganizationName */
-                //GetSingleConfigurationByName request = new GetSingleConfigurationByName();
-                //request.setName(lmConfiguration);
-                //GetSingleConfigurationByNameResponse resp = stub.getSingleConfigurationByName(request, ahe);
-                //if (lmConfiguration.equals(resp.getGetSingleConfigurationByNameResult().getName()))
-                //    return FormValidation.ok("Connected successfully");
-                //else
-                //    return FormValidation.error("Could not login and retrieve basic information to confirm setup");
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {
                 throw new RuntimeException(e);

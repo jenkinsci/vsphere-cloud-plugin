@@ -25,10 +25,12 @@ import hudson.util.FormValidation;
 
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
+import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.VirtualMachine;
 
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import com.vmware.vim25.mo.util.MorUtil;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.IOException;
@@ -182,6 +184,8 @@ public class vSphereCloudSlave extends Slave {
             options.add("Shutdown");
             options.add("Shutdown and Revert");
             options.add("Suspend");
+            options.add("Reset");
+            options.add("Nothing");                    
             return options;
         }
 
@@ -196,13 +200,13 @@ public class vSphereCloudSlave extends Slave {
                 vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
                 ServiceInstance si = vsC.getSI();
 
-                Folder rootFolder = si.getRootFolder();
+                Folder rootFolder = si.getRootFolder();                
                 VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
-                        rootFolder).searchManagedEntity("VirtualMachine", vmName);
+                        rootFolder).searchManagedEntity("VirtualMachine", vmName);                
                 if (vm == null) {
                     return FormValidation.error("Virtual Machine was not found");
                 }
-
+                
                 if (!snapName.isEmpty()) {
                     VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
                     if (snap == null)

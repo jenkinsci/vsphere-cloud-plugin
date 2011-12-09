@@ -49,7 +49,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
         SHUTDOWN,
         REVERT,
-        SUSPEND
+        SUSPEND,
+        RESET,
+        NOTHING
     }
 
     @DataBoundConstructor
@@ -70,8 +72,12 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             idleAction = MACHINE_ACTION.SHUTDOWN;
         } else if ("Shutdown and Revert".equals(idleOption)) {
             idleAction = MACHINE_ACTION.REVERT;
-        } else {
+        } else if ("Reset".equals(idleOption)) {
+            idleAction = MACHINE_ACTION.RESET;            
+        } else if ("Suspend".equals(idleOption)) {
             idleAction = MACHINE_ACTION.SUSPEND;
+        } else {
+            idleAction = MACHINE_ACTION.NOTHING;
         }
     }
 
@@ -206,9 +212,11 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             Folder rootFolder = si.getRootFolder();
             VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
                     rootFolder).searchManagedEntity("VirtualMachine", vmName);
-
-            if (vm != null) {
-                if (vm.getRuntime().powerState == VirtualMachinePowerState.poweredOn) {
+            
+            if ((vm != null) && (localIdle != MACHINE_ACTION.NOTHING)) {
+                //VirtualMachinePowerState power = vm.getRuntime().getPowerState();
+                VirtualMachinePowerState power = vm.getSummary().getRuntime().powerState;
+                if (power == VirtualMachinePowerState.poweredOn) {
                     switch (localIdle) {
                         case SHUTDOWN:
                         case REVERT:
@@ -239,10 +247,18 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             }
                             break;
                         case SUSPEND:
+                            taskListener.getLogger().println("Suspending the VM");
                             Task task = vm.suspendVM_Task();
                             if (!task.waitForTask().equals(Task.SUCCESS)) {
                                 taskListener.getLogger().println("Unable to susped the VM");
                             }
+                            break;                            
+                        case RESET:
+                                taskListener.getLogger().print("Resetting the VM");
+                                Task taskReset = vm.resetVM_Task();
+                                if (!taskReset.waitForTask().equals(Task.SUCCESS)) {
+                                    taskListener.getLogger().print("Unable to reset the VM");
+                                }
                             break;
                     }
 
@@ -266,6 +282,10 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             }
                         }
                     }
+                }
+                else
+                {
+                    // VM is already powered down.
                 }
             }
         } catch (Throwable t) {
