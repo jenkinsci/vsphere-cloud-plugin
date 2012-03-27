@@ -129,7 +129,7 @@ public class vSphereCloudSlave extends Slave {
             vSphereCloudLauncher vsL = (vSphereCloudLauncher) ((SlaveComputer) c).getLauncher();
             vSphereCloud vsC = vsL.findOurVsInstance();
             if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName()))
-                throw new AbortException("Clound will not allow this slave to start at this time.");
+                throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
         }
     }
 
