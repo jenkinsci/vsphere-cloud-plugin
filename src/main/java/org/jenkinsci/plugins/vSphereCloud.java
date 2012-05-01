@@ -250,6 +250,9 @@ public class vSphereCloud extends Cloud {
                     if (!vsHost.startsWith("https://")) {
                         return FormValidation.error("vSphere host must start with https://");
                     }
+                    else if (vsHost.endsWith("/")) {
+                        return FormValidation.error("vSphere host name must NOT end with a trailing slash");
+                    }
                 }
 
                 if (username.length() == 0) {
