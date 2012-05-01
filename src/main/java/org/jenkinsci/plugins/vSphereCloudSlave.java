@@ -4,8 +4,6 @@
  */
 package org.jenkinsci.plugins;
 
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
@@ -22,15 +20,18 @@ import hudson.Extension;
 import hudson.Functions;
 import hudson.AbortException;
 import hudson.util.FormValidation;
+import hudson.slaves.OfflineCause;
 
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.VirtualMachine;
 
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
-import com.vmware.vim25.mo.util.MorUtil;
+import hudson.Util;
+import hudson.model.Result;
+import hudson.model.Run;
+import hudson.slaves.OfflineCause;
 import java.util.List;
 import java.util.ArrayList;
 import java.io.IOException;
@@ -50,6 +51,8 @@ public class vSphereCloudSlave extends Slave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
+    private final Integer LimitedTestRunCount; // If limited test runs enabled, the number of tests to limit the slave too.
+    private Integer NumberOfLimitedTestRuns;
 
     @DataBoundConstructor
     public vSphereCloudSlave(String name, String nodeDescription,
@@ -59,19 +62,22 @@ public class vSphereCloudSlave extends Slave {
             List<? extends NodeProperty<?>> nodeProperties,
             String vsDescription, String vmName,
             boolean launchSupportForced, boolean waitForVMTools,
-            String snapName, String launchDelay, String idleOption)
+            String snapName, String launchDelay, String idleOption,
+            String LimitedTestRunCount)
             throws FormException, IOException {
         super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
                 new vSphereCloudLauncher(delegateLauncher, vsDescription, vmName,
                     launchSupportForced, waitForVMTools, snapName, launchDelay, 
-                    idleOption),
+                    idleOption, LimitedTestRunCount),
                 retentionStrategy, nodeProperties);
         this.vsDescription = vsDescription;
         this.vmName = vmName;
         this.snapName = snapName;
         this.waitForVMTools = waitForVMTools;
         this.launchDelay = launchDelay;
-        this.idleOption = idleOption;                
+        this.idleOption = idleOption;   
+        this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();        
+        this.NumberOfLimitedTestRuns = 0;
     }
 
     public String getVmName() {
@@ -97,6 +103,10 @@ public class vSphereCloudSlave extends Slave {
     public String getIdleOption() {
         return idleOption;
     }
+    
+    public Integer getLimitedTestRunCount() {
+        return LimitedTestRunCount;
+    }
 
     public boolean isLaunchSupportForced() {
         return ((vSphereCloudLauncher) getLauncher()).getOverrideLaunchSupported() == Boolean.TRUE;
@@ -105,7 +115,47 @@ public class vSphereCloudSlave extends Slave {
     public void setLaunchSupportForced(boolean slaveLaunchesOnBootup) {
         ((vSphereCloudLauncher) getLauncher()).setOverrideLaunchSupported(slaveLaunchesOnBootup ? Boolean.TRUE : null);
     }
+    
+    public boolean StartLimitedTestRun(Run r, TaskListener listener) {
+        boolean ret = false;
+        boolean DoUpdates = false;
+        if (LimitedTestRunCount > 0) {
+            DoUpdates = true;
+            if (NumberOfLimitedTestRuns < LimitedTestRunCount) {
+                ret = true;
+            }
+        }
+        else
+            ret = true;
+        
+        if (DoUpdates) {
+            if (ret) {
+                NumberOfLimitedTestRuns++;
+                listener.getLogger().printf("vSphere Cloud: Starting limited count build: %d", NumberOfLimitedTestRuns);
+            }
+            else {
+                listener.getLogger().printf("vSphere Cloud: Terminating build due to limited build count: %d", LimitedTestRunCount);
+                r.getExecutor().interrupt(Result.ABORTED);
+            }
+        }
+        
+        return ret;
+    }
 
+    public boolean EndLimitedTestRun(Run r) {
+        boolean ret = true;
+        if (LimitedTestRunCount > 0) {
+            if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
+                ret = false;
+                NumberOfLimitedTestRuns = 0;       
+                r.getExecutor().getOwner().disconnect();
+            }            
+        }
+        else
+            ret = true;
+        return ret;
+    }
+    
     /**
      * For UI.
      *
@@ -130,7 +180,7 @@ public class vSphereCloudSlave extends Slave {
             vSphereCloud vsC = vsL.findOurVsInstance();
             if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName()))
                 throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
-        }
+        }               
     }
 
     @Extension

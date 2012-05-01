@@ -94,6 +94,10 @@
         </f:dropdownList>
     </j:if>
 
+   <f:entry title="${%Disconnect After Limited Builds}" help="/plugin/vsphere-cloud/slave-LimitedTestRunCount.html" description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
+       <f:textbox default="0" field="LimitedTestRunCount"/>
+   </f:entry>
+
     <f:entry title="${%What to do when the slave is disconnected}" field="idleOption" name="idleOption" help="/plugin/vsphere-cloud/slave-idleOption.html">
         <select class="setting-input" name="idleOption">
             <j:forEach var="t" items="${descriptor.getIdleOptions()}" varStatus="loop">

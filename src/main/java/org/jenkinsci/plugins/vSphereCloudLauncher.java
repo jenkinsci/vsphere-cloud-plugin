@@ -20,8 +20,10 @@ import hudson.model.Descriptor;
 import hudson.model.Hudson;
 import hudson.slaves.Cloud;
 
+import hudson.slaves.NodeProperty;
 import java.io.IOException;
 import java.util.Calendar;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,6 +46,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     private Boolean isDisconnecting;
     private int launchDelay;
     private MACHINE_ACTION idleAction;
+    private int LimitedTestRunCount = 0;
 
     public enum MACHINE_ACTION {
 
@@ -58,7 +61,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public vSphereCloudLauncher(ComputerLauncher delegate,
             String vsDescription, String vmName,
             Boolean overrideLaunchSupported, Boolean waitForVMTools,
-            String snapName, String launchDelay, String idleOption) {
+            String snapName, String launchDelay, String idleOption,
+            String LimitedTestRunCount) {
         super();
         this.delegate = delegate;
         this.overrideLaunchSupported = overrideLaunchSupported;
@@ -79,6 +83,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         } else {
             idleAction = MACHINE_ACTION.NOTHING;
         }
+        this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
     }
 
     public vSphereCloud findOurVsInstance() throws RuntimeException {
@@ -329,7 +334,11 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public Boolean getWaitForVMTools() {
         return waitForVMTools;
     }
-
+    
+    public Integer getLimitedTestRunCount() {
+        return LimitedTestRunCount;
+    }
+    
     @Override
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
