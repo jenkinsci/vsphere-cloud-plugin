@@ -19,6 +19,7 @@ import hudson.model.Label;
 import hudson.Extension;
 import hudson.Util;
 import hudson.slaves.Cloud;
+import hudson.slaves.SlaveComputer;
 import hudson.util.Scrambler;
 import java.lang.String;
 import java.net.URL;
@@ -46,8 +47,9 @@ public class vSphereCloud extends Cloud {
     private final String vsDescription;
     private final String username;
     private final String password;
-    private final int maxOnlineSlaves;
+    private final int maxOnlineSlaves;    
     private transient int currentOnlineSlaveCount = 0;
+    private transient SlaveComputer slaveBeingLaunched = null;
     private transient Hashtable<String, String> currentOnline;
 
     @DataBoundConstructor
@@ -86,6 +88,14 @@ public class vSphereCloud extends Cloud {
         return vsHost;
     }
 
+    public SlaveComputer getSlaveBeingLaunched() {
+        return slaveBeingLaunched;
+    }
+
+    public void setSlaveBeingLaunched(SlaveComputer slaveBeingLaunched) {
+        this.slaveBeingLaunched = slaveBeingLaunched;
+    }
+    
     @Override
     public boolean canProvision(Label label) {
         return false;

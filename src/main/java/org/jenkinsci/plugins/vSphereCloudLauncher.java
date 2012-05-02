@@ -110,14 +110,23 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                return;
             }
             
+            // Slaves that take a while to start up make get multiple launch
+            // requests from Jenkins.  
             if (isStarting == Boolean.TRUE) {
                 return;
             }
-
+            
+            vSphereCloud vsC = findOurVsInstance();
+            SlaveComputer slaveBeingLaunched = vsC.getSlaveBeingLaunched();
+            if ((slaveBeingLaunched != null) && (slaveBeingLaunched != slaveComputer)) {
+                taskListener.getLogger().printf("Another vSphereCloud slave (%s) is being launched", slaveBeingLaunched.getName());
+                return;
+            }
+                
             taskListener.getLogger().println("Starting Virtual Machine...");
             isStarting = Boolean.TRUE;
-            vSphereCloud vsC = findOurVsInstance();
             try {
+                vsC.setSlaveBeingLaunched(slaveComputer);
                 ServiceInstance si = vsC.getSI();
                 Folder rootFolder = si.getRootFolder();
                 VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
@@ -180,6 +189,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
                 throw new RuntimeException(e);
             } finally {
+                vsC.setSlaveBeingLaunched(null);
                 isStarting = Boolean.FALSE;
             }
         } catch (Exception e) {
