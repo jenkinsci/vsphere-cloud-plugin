@@ -51,8 +51,8 @@ public class vSphereCloudSlave extends Slave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
-    private final Integer LimitedTestRunCount; // If limited test runs enabled, the number of tests to limit the slave too.
-    private Integer NumberOfLimitedTestRuns;
+    private transient Integer LimitedTestRunCount = 0; // If limited test runs enabled, the number of tests to limit the slave too.
+    private transient Integer NumberOfLimitedTestRuns = 0;
 
     @DataBoundConstructor
     public vSphereCloudSlave(String name, String nodeDescription,
