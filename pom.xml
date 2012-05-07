@@ -9,7 +9,7 @@
 
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>vsphere-cloud</artifactId>
-    <version>0.9</version>
+    <version>0.10-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>vSphere Cloud Plugin</name>
     <description>Integrates Jenkins with a vSphere server to use virtual machines as slaved</description>
