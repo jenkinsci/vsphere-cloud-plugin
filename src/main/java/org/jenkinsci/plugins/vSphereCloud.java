@@ -18,6 +18,8 @@ import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.Extension;
 import hudson.Util;
+import hudson.model.Slave;
+import hudson.model.TaskListener;
 import hudson.slaves.Cloud;
 import hudson.slaves.SlaveComputer;
 import hudson.util.Scrambler;
@@ -32,7 +34,9 @@ import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.logging.Level;
 import net.sf.json.JSONObject;
+import org.codehaus.groovy.tools.shell.util.Logger;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -49,8 +53,34 @@ public class vSphereCloud extends Cloud {
     private final String password;
     private final int maxOnlineSlaves;    
     private transient int currentOnlineSlaveCount = 0;
-    private transient SlaveComputer slaveBeingLaunched = null;
     private transient Hashtable<String, String> currentOnline;
+    
+    private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
+    public static void Log(String msg) {
+        VSLOG.log(Level.INFO, msg);
+    }
+    public static void Log(String format, Object... args) {
+        Log(String.format(format, args));
+    }            
+    public static void Log(TaskListener listener, String msg) {
+        listener.getLogger().print(msg);
+        Log(msg);
+    }
+    public static void Log(TaskListener listener, String format, Object... args) {
+        Log(listener, String.format(format, args));
+    }
+    public static void Log(Slave slave, TaskListener listener, String msg) {
+        Log(listener, String.format("[%s] %s", slave.getNodeName(), msg));
+    }
+    public static void Log(Slave slave, TaskListener listener, String format, Object... args) {
+        Log(listener, String.format("[%s] %s", slave.getNodeName(), String.format(format, args)));
+    }
+    public static void Log(SlaveComputer slave, TaskListener listener, String msg) {
+        Log(listener, String.format("[%s] %s", slave.getName(), msg));
+    }
+    public static void Log(SlaveComputer slave, TaskListener listener, String format, Object... args) {
+        Log(listener, String.format("[%s] %s", slave.getName(), String.format(format, args)));
+    }
 
     @DataBoundConstructor
     public vSphereCloud(String vsHost, String vsDescription,
@@ -61,6 +91,8 @@ public class vSphereCloud extends Cloud {
         this.username = username;
         this.password = Scrambler.scramble(Util.fixEmptyAndTrim(password));
         this.maxOnlineSlaves = maxOnlineSlaves;
+        
+        Log("STARTTING VSPHERE CLOUD");
     }
     
     protected void EnsureLists() {
@@ -88,14 +120,6 @@ public class vSphereCloud extends Cloud {
         return vsHost;
     }
 
-    public SlaveComputer getSlaveBeingLaunched() {
-        return slaveBeingLaunched;
-    }
-
-    public void setSlaveBeingLaunched(SlaveComputer slaveBeingLaunched) {
-        this.slaveBeingLaunched = slaveBeingLaunched;
-    }
-    
     @Override
     public boolean canProvision(Label label) {
         return false;

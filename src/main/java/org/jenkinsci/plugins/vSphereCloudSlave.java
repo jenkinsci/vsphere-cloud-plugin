@@ -4,12 +4,15 @@
  */
 package org.jenkinsci.plugins;
 
+import com.trilead.ssh2.log.Logger;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Hudson;
+import hudson.model.Queue.BuildableItem;
 import hudson.model.Slave;
 import hudson.model.TaskListener;
+import hudson.model.queue.CauseOfBlockage;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.ComputerListener;
 import hudson.slaves.Cloud;
@@ -29,6 +32,7 @@ import com.vmware.vim25.mo.VirtualMachine;
 
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.Util;
+import hudson.model.Messages;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.slaves.OfflineCause;
@@ -36,6 +40,12 @@ import java.util.List;
 import java.util.ArrayList;
 import java.io.IOException;
 
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Map.Entry;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -51,8 +61,10 @@ public class vSphereCloudSlave extends Slave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
-    private transient Integer LimitedTestRunCount = 0; // If limited test runs enabled, the number of tests to limit the slave too.
+    private Integer LimitedTestRunCount = 0; // If limited test runs enabled, the number of tests to limit the slave too.
     private transient Integer NumberOfLimitedTestRuns = 0;
+    private static Hashtable<vSphereCloudSlave, Date> ProbableLaunch;
+    private static Boolean ProbableLaunchLock = true;
 
     @DataBoundConstructor
     public vSphereCloudSlave(String name, String nodeDescription,
@@ -116,9 +128,81 @@ public class vSphereCloudSlave extends Slave {
         ((vSphereCloudLauncher) getLauncher()).setOverrideLaunchSupported(slaveLaunchesOnBootup ? Boolean.TRUE : null);
     }
     
+    public static void RemoveProbablLaunch(vSphereCloudSlave slave) {
+        synchronized (ProbableLaunchLock) {
+            if (ProbableLaunch != null)
+                ProbableLaunch.remove(slave);
+        }
+    }
+
+    @Override
+    public CauseOfBlockage canTake(BuildableItem item) {
+        CauseOfBlockage b = super.canTake(item);
+        boolean DoVMLaunch = false;
+        if (b == null) {
+            // This slave can handle the job. 
+            SlaveComputer sc = getComputer();
+            if (sc.isOffline() && sc.isLaunchSupported()) {
+                // Slave can handle the job, but it's not online.
+                // See if this slave is being launched, or one similar
+                // to it.
+                synchronized(ProbableLaunchLock) {
+                    if (ProbableLaunch == null)
+                        ProbableLaunch = new Hashtable<vSphereCloudSlave, Date>();
+                    
+                    // Clean out any probable launches that have elapsed.
+                    Date now = new Date();
+                    Iterator<Entry<vSphereCloudSlave, Date>> it = ProbableLaunch.entrySet().iterator();
+                    while (it.hasNext()) {
+                      Entry<vSphereCloudSlave, Date> entry = it.next();
+                      if (entry.getValue().before(now))
+                          it.remove();
+                    }                    
+                    
+                    // Check each probable launch - can they handle this job?
+                    DoVMLaunch = true;
+                    for (vSphereCloudSlave launchingSlave : ProbableLaunch.keySet()) {
+                        if (launchingSlave == this) {
+                            // It's this slave. Stop processing.
+                            DoVMLaunch = false;
+                            break;
+                        } else if (launchingSlave.canTake(item) == null) {
+                            // The slave that MIGHT be launching can take this.
+                            // Let that slave handle it.
+                            DoVMLaunch = false;
+                            b = CauseOfBlockage.fromMessage(Messages._Slave_UnableToLaunch(getNodeName(), 
+                                    String.format("Another potential slave (%s) is launching", launchingSlave.getNodeName())) );
+                            break;
+                        }
+                    }
+                }
+                
+                // If we're going to launch ourselves, start the launch,
+                // be block the item for the moment.
+                if (DoVMLaunch) {
+                    sc.connect(false);
+                    b = CauseOfBlockage.fromMessage(Messages._Slave_Launching(getNodeName()));
+                    Calendar cal = Calendar.getInstance();
+                    cal.add(Calendar.MINUTE, 10);
+                    ProbableLaunch.put(this, cal.getTime());
+                }
+            } 
+        }            
+        return b;
+    }
+    
+    
+    
+    private void CheckLimitedTestRunValues() {
+        if (NumberOfLimitedTestRuns == null)
+            NumberOfLimitedTestRuns = 0;
+        if (LimitedTestRunCount == null)
+            LimitedTestRunCount = 0;
+    }          
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
         boolean DoUpdates = false;
+        CheckLimitedTestRunValues();
         if (LimitedTestRunCount > 0) {
             DoUpdates = true;
             if (NumberOfLimitedTestRuns < LimitedTestRunCount) {
@@ -131,10 +215,10 @@ public class vSphereCloudSlave extends Slave {
         if (DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
-                listener.getLogger().printf("vSphere Cloud: Starting limited count build: %d", NumberOfLimitedTestRuns);
+                vSphereCloud.Log(listener, "Starting limited count build: %d", NumberOfLimitedTestRuns);
             }
             else {
-                listener.getLogger().printf("vSphere Cloud: Terminating build due to limited build count: %d", LimitedTestRunCount);
+                vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
                 r.getExecutor().interrupt(Result.ABORTED);
             }
         }
@@ -144,11 +228,17 @@ public class vSphereCloudSlave extends Slave {
 
     public boolean EndLimitedTestRun(Run r) {
         boolean ret = true;
+        CheckLimitedTestRunValues();
         if (LimitedTestRunCount > 0) {
             if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
                 ret = false;
-                NumberOfLimitedTestRuns = 0;       
+                NumberOfLimitedTestRuns = 0;   
                 r.getExecutor().getOwner().disconnect();
+                String Node = "NA";
+                if ((r.getExecutor() != null) && (r.getExecutor().getOwner() != null)) {
+                    Node = r.getExecutor().getOwner().getName();
+                }
+                vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", Node);
             }            
         }
         else

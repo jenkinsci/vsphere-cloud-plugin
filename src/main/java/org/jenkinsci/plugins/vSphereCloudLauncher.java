@@ -20,10 +20,8 @@ import hudson.model.Descriptor;
 import hudson.model.Hudson;
 import hudson.slaves.Cloud;
 
-import hudson.slaves.NodeProperty;
 import java.io.IOException;
 import java.util.Calendar;
-import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -35,7 +33,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
  */
 public class vSphereCloudLauncher extends ComputerLauncher {
 
-    private static final Logger LOGGER = Logger.getLogger(vSphereCloudLauncher.class.getName());
     private ComputerLauncher delegate;
     private Boolean overrideLaunchSupported;
     private String vsDescription;
@@ -96,7 +93,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 }
             }
         }
-        LOGGER.log(Level.SEVERE, "Could not find our vSphere Cloud instance!");
+        vSphereCloud.Log("Could not find our vSphere Cloud instance!");
         throw new RuntimeException("Could not find our vSphere Cloud instance!");
     }
 
@@ -104,96 +101,110 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public void launch(SlaveComputer slaveComputer, TaskListener taskListener)
             throws IOException, InterruptedException {
 
-        try {
-            if (slaveComputer.isTemporarilyOffline()) {
-               taskListener.getLogger().println("Not launching VM because it's not accepting tasks"); 
-               return;
-            }
-            
-            // Slaves that take a while to start up make get multiple launch
-            // requests from Jenkins.  
-            if (isStarting == Boolean.TRUE) {
-                return;
-            }
-            
-            vSphereCloud vsC = findOurVsInstance();
-            SlaveComputer slaveBeingLaunched = vsC.getSlaveBeingLaunched();
-            if ((slaveBeingLaunched != null) && (slaveBeingLaunched != slaveComputer)) {
-                taskListener.getLogger().printf("Another vSphereCloud slave (%s) is being launched", slaveBeingLaunched.getName());
-                return;
-            }
-                
-            taskListener.getLogger().println("Starting Virtual Machine...");
-            isStarting = Boolean.TRUE;
+        vSphereCloudSlave vsSlave = (vSphereCloudSlave)slaveComputer.getNode();
+        synchronized(vSphereCloud.class)
+        {
             try {
-                vsC.setSlaveBeingLaunched(slaveComputer);
-                ServiceInstance si = vsC.getSI();
-                Folder rootFolder = si.getRootFolder();
-                VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
-                        rootFolder).searchManagedEntity("VirtualMachine", vmName);
-                if (vm == null) {
-                    throw new IOException("Virtual Machine could not be found");
+                if (slaveComputer.isTemporarilyOffline()) {
+                    vSphereCloud.Log(slaveComputer, taskListener, "Not launching VM because it's not accepting tasks"); 
+                   return;
                 }
 
-                // Revert to a snapshot - always - if one is specified.
-                if (!snapName.isEmpty()) {
-                    VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
-                    if (snap == null) {
-                        throw new IOException("Virtual Machine snapshot cannot be found");
-                    }
-
-                    taskListener.getLogger().println("Reverting to snapshot:" + snapName);
-                    Task task = snap.revertToSnapshot_Task(null);
-                    if (!task.waitForTask().equals(Task.SUCCESS)) {
-                        throw new IOException("Error while reverting to virtual machine snapshot");
-                    }
+                // Slaves that take a while to start up make get multiple launch
+                // requests from Jenkins.  
+                if (isStarting == Boolean.TRUE) {
+                    return;
                 }
 
-                switch (vm.getRuntime().powerState) {
-                    case poweredOn:
-                        // Nothing to do.
-                        taskListener.getLogger().println("VM already powered on");
-                        break;
-                    case poweredOff:
-                    case suspended:
-                        // Power the VM up.
-                        taskListener.getLogger().println("Powering on VM");
-                        Task task = vm.powerOnVM_Task(null);
+                vSphereCloud vsC = findOurVsInstance();
+                vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
+                isStarting = Boolean.TRUE;
+                try {
+                    ServiceInstance si = vsC.getSI();
+                    Folder rootFolder = si.getRootFolder();
+                    VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
+                            rootFolder).searchManagedEntity("VirtualMachine", vmName);
+                    if (vm == null) {
+                        throw new IOException("Virtual Machine could not be found");
+                    }
+
+                    // Revert to a snapshot - always - if one is specified.
+                    if (!snapName.isEmpty()) {
+                        VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
+                        if (snap == null) {
+                            throw new IOException("Virtual Machine snapshot cannot be found");
+                        }
+
+                        vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
+                        Task task = snap.revertToSnapshot_Task(null);
                         if (!task.waitForTask().equals(Task.SUCCESS)) {
-                            throw new IOException("Unable to power on VM");
+                            throw new IOException("Error while reverting to virtual machine snapshot");
                         }
-                        break;
-                }
-
-                if (waitForVMTools) {
-                    taskListener.getLogger().println("Waiting for VMTools");
-
-                    Calendar target = Calendar.getInstance();
-                    target.add(Calendar.SECOND, 120);
-                    while (Calendar.getInstance().before(target)) {
-                        VirtualMachineToolsStatus status = vm.getGuest().toolsStatus;
-                        if ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld)) {
-                            taskListener.getLogger().println("VM Tools are running");
-                            break;
-                        }
-                        Thread.sleep(5000);
                     }
-                    taskListener.getLogger().println("Finished wait for VMTools");
-                }
 
-                /* At this point we have told vSphere to get the VM going.
-                 * Now we wait our launch delay amount before trying to connect. */
-                Thread.sleep(launchDelay * 1000);
-                delegate.launch(slaveComputer, taskListener);
+                    switch (vm.getRuntime().powerState) {
+                        case poweredOn:
+                            // Nothing to do.
+                            vSphereCloud.Log(slaveComputer, taskListener, "VM already powered on");
+                            break;
+                        case poweredOff:
+                        case suspended:
+                            // Power the VM up.
+                            vSphereCloud.Log(slaveComputer, taskListener, "Powering on VM");
+                            Task task = vm.powerOnVM_Task(null);
+                            if (!task.waitForTask().equals(Task.SUCCESS)) {
+                                throw new IOException("Unable to power on VM");
+                            }
+                            break;
+                    }
+
+                    if (waitForVMTools) {
+                        vSphereCloud.Log(slaveComputer, taskListener, "Waiting for VMTools");
+
+                        Calendar target = Calendar.getInstance();
+                        target.add(Calendar.SECOND, 120);
+                        while (Calendar.getInstance().before(target)) {
+                            VirtualMachineToolsStatus status = vm.getGuest().toolsStatus;
+                            if ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld)) {
+                                vSphereCloud.Log(slaveComputer, taskListener, "VM Tools are running");
+                                break;
+                            }
+                            Thread.sleep(5000);
+                        }
+                        vSphereCloud.Log(slaveComputer, taskListener, "Finished wait for VMTools");
+                    }
+
+                    /* At this point we have told vSphere to get the VM going.
+                     * Now we wait our launch delay amount before trying to connect.
+                     */
+                    
+                    if (delegate.isLaunchSupported()) {
+                        // Delegate is going to do launch.
+                        Thread.sleep(launchDelay * 1000);
+                        delegate.launch(slaveComputer, taskListener);
+                    }
+                    else {
+                        for (int i = 0; i <= launchDelay; i++) {
+                            Thread.sleep(1000);
+                            if (slaveComputer.isOnline()) {
+                                break;
+                            }
+                        }
+                        if (!slaveComputer.isOnline()) {
+                            vSphereCloud.Log(slaveComputer, taskListener, "Slave did not come online in allowed time");
+                            throw new IOException("Slave did not come online in allowed time");
+                        }
+                    }
+                } catch (Exception e) {
+                    vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
+                    throw new RuntimeException(e);
+                } finally {
+                    isStarting = Boolean.FALSE;                    
+                    vSphereCloudSlave.RemoveProbablLaunch(vsSlave);
+                }
             } catch (Exception e) {
-                vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
                 throw new RuntimeException(e);
-            } finally {
-                vsC.setSlaveBeingLaunched(null);
-                isStarting = Boolean.FALSE;
             }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 
@@ -201,20 +212,20 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public synchronized void afterDisconnect(SlaveComputer slaveComputer,
             TaskListener taskListener) {
         if (isDisconnecting == Boolean.TRUE) {
-            taskListener.getLogger().println("Already disconnecting on a separate thread");
+            vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
             return;
         }
         
         if (slaveComputer.isTemporarilyOffline()) {
-           taskListener.getLogger().println("Not disconnecting VM because it's not accepting tasks"); 
+           vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks"); 
            return;
         }
             
         try {
             isDisconnecting = Boolean.TRUE;
-            taskListener.getLogger().println("Running disconnect procedure...");
+            vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             delegate.afterDisconnect(slaveComputer, taskListener);
-            taskListener.getLogger().println("Shutting down Virtual Machine...");
+            vSphereCloud.Log(slaveComputer, taskListener, "Shutting down Virtual Machine...");
             
             MACHINE_ACTION localIdle = idleAction;
             if (localIdle == null)
@@ -239,13 +250,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             // gracefully first, then hard.
                             VirtualMachineToolsStatus status = vm.getGuest().toolsStatus;
                             if ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld)) {
-                                taskListener.getLogger().println("Attempting a graceful shutdown");
+                                vSphereCloud.Log(slaveComputer, taskListener, "Attempting a graceful shutdown");
                                 vm.shutdownGuest();
                                 Calendar target = Calendar.getInstance();
                                 target.add(Calendar.MINUTE, 3);
                                 while (Calendar.getInstance().before(target)) {
                                     if (vm.getRuntime().powerState == VirtualMachinePowerState.poweredOff) {
-                                        taskListener.getLogger().println("Guest shutdown succeeded");
+                                        vSphereCloud.Log(slaveComputer, taskListener, "Guest shutdown succeeded");
                                         break;
                                     }
                                     Thread.sleep(5000);
@@ -254,25 +265,25 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             
                             // Still powered on or no tools?  Hard power down time.
                             if (vm.getRuntime().powerState == VirtualMachinePowerState.poweredOn) {
-                                taskListener.getLogger().println("Powering down hard");
+                                vSphereCloud.Log(slaveComputer, taskListener, "Powering down hard");
                                 Task task = vm.powerOffVM_Task();
                                 if (!task.waitForTask().equals(Task.SUCCESS)) {
-                                    taskListener.getLogger().println("Unable to power down the VM");
+                                    vSphereCloud.Log(slaveComputer, taskListener, "Unable to power down the VM");
                                 }
                             }
                             break;
                         case SUSPEND:
-                            taskListener.getLogger().println("Suspending the VM");
+                            vSphereCloud.Log(slaveComputer, taskListener, "Suspending the VM");
                             Task task = vm.suspendVM_Task();
                             if (!task.waitForTask().equals(Task.SUCCESS)) {
-                                taskListener.getLogger().println("Unable to susped the VM");
+                                vSphereCloud.Log(slaveComputer, taskListener, "Unable to susped the VM");
                             }
                             break;                            
                         case RESET:
-                                taskListener.getLogger().print("Resetting the VM");
+                                vSphereCloud.Log(slaveComputer, taskListener, "Resetting the VM");
                                 Task taskReset = vm.resetVM_Task();
                                 if (!taskReset.waitForTask().equals(Task.SUCCESS)) {
-                                    taskListener.getLogger().print("Unable to reset the VM");
+                                    vSphereCloud.Log(slaveComputer, taskListener, "Unable to reset the VM");
                                 }
                             break;
                     }
@@ -284,13 +295,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                                 throw new IOException("Virtual Machine snapshot cannot be found");
                             }
 
-                            taskListener.getLogger().println("Reverting to snapshot:" + snapName);
+                            vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
                             Task task = snap.revertToSnapshot_Task(null);
                             if (!task.waitForTask().equals(Task.SUCCESS)) {
                                 throw new IOException("Error while reverting to virtual machine snapshot");
                             }
                         } else {
-                            taskListener.getLogger().println("Reverting to current snapshot");
+                            vSphereCloud.Log(slaveComputer, taskListener, "Reverting to current snapshot");
                             Task task = vm.revertToCurrentSnapshot_Task(null);
                             if (!task.waitForTask().equals(Task.SUCCESS)) {
                                 throw new IOException("Error while reverting to virtual machine snapshot");
@@ -304,9 +315,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 }
             }
         } catch (Throwable t) {
-            taskListener.getLogger().println("Got an exception");
-            taskListener.getLogger().print(t.toString());
-            taskListener.getLogger().println("Printed exception");
+            vSphereCloud.Log(slaveComputer, taskListener, "Got an exception");
+            vSphereCloud.Log(slaveComputer, taskListener, t.toString());
+            vSphereCloud.Log(slaveComputer, taskListener, "Printed exception");
             taskListener.fatalError(t.getMessage(), t);
         } finally {
             isDisconnecting = Boolean.FALSE;
@@ -353,8 +364,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
             return delegate.isLaunchSupported();
-        } else {
-            LOGGER.log(Level.FINE, "Launch support is overridden to always return: " + overrideLaunchSupported);
+        } else {            
             return overrideLaunchSupported;
         }
     }
