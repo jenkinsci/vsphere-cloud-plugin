@@ -10,6 +10,8 @@ import hudson.model.TaskListener;
 import hudson.model.listeners.RunListener;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
+import hudson.model.Computer;
+import hudson.model.Executor;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,12 +31,20 @@ public final class vSphereCloudRunListener extends RunListener<Run> {
     @Override
     public void onStarted(Run r, TaskListener listener) {
         super.onStarted(r, listener);
-        Node node = r.getExecutor().getOwner().getNode();
-        if (node instanceof vSphereCloudSlave) {
-            LimitedRuns.add(r);
-            vSphereCloudSlave s = (vSphereCloudSlave)node;
-            s.StartLimitedTestRun(r, listener);
-        }        
+        if (r != null) {
+            Executor exec = r.getExecutor();
+            if (exec != null) {
+                Computer owner = exec.getOwner();
+                if (owner != null) {
+                    Node node = owner.getNode();
+                    if ((node != null) && (node instanceof vSphereCloudSlave)) {
+                        LimitedRuns.add(r);
+                        vSphereCloudSlave s = (vSphereCloudSlave)node;
+                        s.StartLimitedTestRun(r, listener);
+                    }
+                }
+            }
+        }
     }
 
     @Override
