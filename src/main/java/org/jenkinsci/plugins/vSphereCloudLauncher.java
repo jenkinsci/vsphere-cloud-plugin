@@ -100,13 +100,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public void launch(SlaveComputer slaveComputer, TaskListener taskListener)
             throws IOException, InterruptedException {
-
+        
         vSphereCloudSlave vsSlave = (vSphereCloudSlave)slaveComputer.getNode();
-        synchronized(vSphereCloud.class)
+        //synchronized(vSphereCloud.class)
         {
             try {
                 if (slaveComputer.isTemporarilyOffline()) {
-                    vSphereCloud.Log(slaveComputer, taskListener, "Not launching VM because it's not accepting tasks"); 
+                    vSphereCloud.Log(slaveComputer, taskListener, "Not launching VM because it's not accepting tasks; temporarily offline"); 
                    return;
                 }
 
@@ -116,10 +116,24 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     return;
                 }
 
+                // Not the most efficient way, but only allow one VM
+                // to startup at at time. Prevents multiple launches for
+                // the same job.
+                vSphereCloudSlave.ProbableLaunchCleanup();
+                //if (vSphereCloudSlave.ProbableLaunchCount() > 0) {
+                //    vSphereCloud.Log(slaveComputer, taskListener, "Aborting this slave start since another slave is being started");
+                //    return;
+                //}
+                    
                 vSphereCloud vsC = findOurVsInstance();
-                vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
                 isStarting = Boolean.TRUE;
                 try {
+                    vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
+                    
+                    Calendar cal = Calendar.getInstance();
+                    cal.add(Calendar.MINUTE, 5);
+                    vSphereCloudSlave.AddProbableLaunch(vsSlave, cal.getTime());
+                    
                     ServiceInstance si = vsC.getSI();
                     Folder rootFolder = si.getRootFolder();
                     VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
@@ -199,8 +213,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
                     throw new RuntimeException(e);
                 } finally {
+                    vSphereCloudSlave.RemoveProbableLaunch(vsSlave);
                     isStarting = Boolean.FALSE;                    
-                    vSphereCloudSlave.RemoveProbablLaunch(vsSlave);
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);

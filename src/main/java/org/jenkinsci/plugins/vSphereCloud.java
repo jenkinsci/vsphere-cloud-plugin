@@ -56,30 +56,41 @@ public class vSphereCloud extends Cloud {
     private transient Hashtable<String, String> currentOnline;
     
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
+    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, String format, Object... args)
+    {
+        String s = "";
+        if (slave != null)
+            s = String.format("[%s] ", slave.getNodeName());
+        if (slaveComputer != null)
+            s = String.format("[%s] ", slaveComputer.getName());
+        s = s + String.format(format, args);
+        if (listener != null)
+            listener.getLogger().print(s);
+        VSLOG.log(Level.INFO, s);
+    }
     public static void Log(String msg) {
-        VSLOG.log(Level.INFO, msg);
+        InternalLog(null, null, null, msg, null);
     }
     public static void Log(String format, Object... args) {
-        Log(String.format(format, args));
+        InternalLog(null, null, null, format, args);
     }            
     public static void Log(TaskListener listener, String msg) {
-        listener.getLogger().print(msg);
-        Log(msg);
+        InternalLog(null, null, listener, msg, null);
     }
     public static void Log(TaskListener listener, String format, Object... args) {
-        Log(listener, String.format(format, args));
+        InternalLog(null, null, listener, format, args);
     }
     public static void Log(Slave slave, TaskListener listener, String msg) {
-        Log(listener, String.format("[%s] %s", slave.getNodeName(), msg));
+        InternalLog(slave, null, listener, msg, null);
     }
     public static void Log(Slave slave, TaskListener listener, String format, Object... args) {
-        Log(listener, String.format("[%s] %s", slave.getNodeName(), String.format(format, args)));
+        InternalLog(slave, null, listener, format, args);
     }
     public static void Log(SlaveComputer slave, TaskListener listener, String msg) {
-        Log(listener, String.format("[%s] %s", slave.getName(), msg));
+        InternalLog(null, slave, listener, msg, null);
     }
     public static void Log(SlaveComputer slave, TaskListener listener, String format, Object... args) {
-        Log(listener, String.format("[%s] %s", slave.getName(), String.format(format, args)));
+        InternalLog(null, slave, listener, format, args);
     }
 
     @DataBoundConstructor
