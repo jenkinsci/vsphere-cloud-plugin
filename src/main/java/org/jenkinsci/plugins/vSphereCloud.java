@@ -4,42 +4,38 @@
  */
 package org.jenkinsci.plugins;
 
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-import hudson.slaves.NodeProvisioner.PlannedNode;
-import hudson.util.FormValidation;
-import hudson.model.Descriptor;
-import hudson.model.Label;
 import hudson.Extension;
 import hudson.Util;
-import hudson.model.Slave;
 import hudson.model.TaskListener;
+import hudson.model.Descriptor;
+import hudson.model.Label;
+import hudson.model.Slave;
 import hudson.slaves.Cloud;
+import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.slaves.SlaveComputer;
+import hudson.util.FormValidation;
 import hudson.util.Scrambler;
-import java.lang.String;
-import java.net.URL;
-import java.rmi.RemoteException;
-import java.util.ArrayList;
-import java.util.Collection;
 
+import java.util.Collection;
 import java.util.Collections;
-import java.util.Dictionary;
 import java.util.Hashtable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
+
 import net.sf.json.JSONObject;
-import org.codehaus.groovy.tools.shell.util.Logger;
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.QueryParameter;
+
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest;
+
+import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.VirtualMachineSnapshotInfo;
+import com.vmware.vim25.VirtualMachineSnapshotTree;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 /**
  *
@@ -130,6 +126,10 @@ public class vSphereCloud extends Cloud {
     public String getVsHost() {
         return vsHost;
     }
+    
+    public VSphere vSphereInstance() throws VSphereException{
+    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
+    }
 
     @Override
     public boolean canProvision(Label label) {
@@ -149,14 +149,6 @@ public class vSphereCloud extends Cloud {
         sb.append(", Description='").append(vsDescription).append('\'');
         sb.append('}');
         return sb.toString();
-    }
-
-    public ServiceInstance getSI()
-            throws Exception {
-
-        ServiceInstance si = new ServiceInstance(new URL(vsHost + "/sdk"), getUsername(), getPassword(), true);
-        si.currentTime();
-        return si;
     }
 
     public synchronized Boolean canMarkVMOnline(String slaveName, String vmName) {
@@ -212,7 +204,7 @@ public class vSphereCloud extends Cloud {
             VirtualMachineSnapshotTree[] snapTree = 
                     info.getRootSnapshotList();
             if (snapTree != null) {
-                ManagedObjectReference mor = findSnapshotInTree(
+                ManagedObjectReference mor = vSphereInstance().findSnapshotInTree(
                         snapTree, snapName);
                 if (mor != null) {
                     return new VirtualMachineSnapshot(
@@ -224,27 +216,6 @@ public class vSphereCloud extends Cloud {
         {
             throw new Exception("No snapshots exist or unable to access the snapshot array");
         }            
-        return null;
-    }
-
-    public ManagedObjectReference findSnapshotInTree(
-            VirtualMachineSnapshotTree[] snapTree, String snapName) {
-        for (int i = 0; i < snapTree.length; i++) {
-            VirtualMachineSnapshotTree node = snapTree[i];
-            if (snapName.equals(node.getName())) {
-                return node.getSnapshot();
-            } else {
-                VirtualMachineSnapshotTree[] childTree =
-                        node.getChildSnapshotList();
-                if (childTree != null) {
-                    ManagedObjectReference mor = findSnapshotInTree(
-                            childTree, snapName);
-                    if (mor != null) {
-                        return mor;
-                    }
-                }
-            }
-        }
         return null;
     }
 
@@ -308,8 +279,8 @@ public class vSphereCloud extends Cloud {
                     return FormValidation.error("Password is not specified");
                 }
 
-                ServiceInstance si = new ServiceInstance(new URL(vsHost + "/sdk"), username, password, true);
-                si.currentTime();
+                VSphere.connect(vsHost + "/sdk", username, password);
+                
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {
                 throw new RuntimeException(e);

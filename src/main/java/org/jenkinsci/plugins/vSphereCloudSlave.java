@@ -383,11 +383,7 @@ public class vSphereCloudSlave extends Slave {
                 @QueryParameter String snapName) {
             try {
                 vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
-                ServiceInstance si = vsC.getSI();
-
-                Folder rootFolder = si.getRootFolder();                
-                VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
-                        rootFolder).searchManagedEntity("VirtualMachine", vmName);                
+                VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);              
                 if (vm == null) {
                     return FormValidation.error("Virtual Machine was not found");
                 }
