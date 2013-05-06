@@ -1,15 +1,10 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.Server;
-
-//import org.jenkinsci.plugins.vsphere.Server;
 
 import com.vmware.vim25.FileFault;
 import com.vmware.vim25.InsufficientResourcesFault;
@@ -22,17 +17,17 @@ import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.VmConfigFault;
+import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
+import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
+
 
 
 /**
@@ -42,8 +37,13 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 public class VSphere {
 	private final URL url;
 	private final String session;
+	private final String resourcePool;
+	private final String cluster;
 	
-	private VSphere(String url, String user, String pw) throws VSphereException{
+	private VSphere(String url, String user, String pw, String cluster, String resourcePool) throws VSphereException{
+		
+		this.resourcePool = resourcePool;
+		this.cluster = cluster;
 		
 		try {
 			this.url = new URL(url);
@@ -62,11 +62,11 @@ public class VSphere {
 	 * @throws VSphereException 
 	 */
 	public static VSphere connect(Server server) throws VSphereException {
-		return new VSphere(server.getServer(), server.getUser(), server.getPw());
+		return new VSphere(server.getServer(), server.getUser(), server.getPw(), server.getCluster(), server.getResourcePool());
 	}
 	
 	public static VSphere connect(String server, String user, String pw) throws VSphereException {
-		return new VSphere(server, user, pw);
+		return new VSphere(server, user, pw, null, null);
 	}
 
 
@@ -87,7 +87,7 @@ public class VSphere {
 	 */
 	public VirtualMachine shallowCloneVm(String cloneName, String template, boolean powerOn) throws VSphereException {
 
-		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName);
+		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
 		try{
 			VirtualMachine sourceVm = getVmByName(template);
 
@@ -99,9 +99,10 @@ public class VSphere {
 				throw new VSphereException("VM " + cloneName + " already exists");
 			}
 
+			
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 			rel.setDiskMoveType("createNewChildDiskBacking");
-			rel.setPool(getResourcePoolByName(Messages.VSphere_pool_default()).getMOR());
+			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster, null)).getMOR());
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
@@ -254,8 +255,8 @@ public class VSphere {
 			VirtualMachine vm = getVmByName(name);
 			if(vm.getConfig().template){
 				vm.markAsVirtualMachine(
-						getResourcePoolByName(Messages.VSphere_pool_default()),
-						getHostByName(Messages.VSphere_host_default())
+						getResourcePoolByName(resourcePool, getClusterByName(cluster, null)),
+						null
 				);
 			}
 			return vm;
@@ -315,9 +316,11 @@ public class VSphere {
 	 * @throws MalformedURLException 
 	 * @throws VSphereException 
 	 */
-	private ResourcePool getResourcePoolByName(final String poolName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+	private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
+		
 		return (ResourcePool) new InventoryNavigator(
-				getServiceInstance().getRootFolder()).searchManagedEntity(
+				rootEntity).searchManagedEntity(
 						"ResourcePool", poolName);
 	}
 
@@ -330,10 +333,12 @@ public class VSphere {
 	 * @throws MalformedURLException 
 	 * @throws VSphereException 
 	 */
-	private HostSystem getHostByName(final String hostName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
-		return (HostSystem) new InventoryNavigator(
-				getServiceInstance().getRootFolder()).searchManagedEntity(
-						"HostSystem", hostName);
+	private ClusterComputeResource getClusterByName(final String clusterName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
+			
+		return (ClusterComputeResource) new InventoryNavigator(
+				rootEntity).searchManagedEntity(
+						"ClusterComputeResource", clusterName);
 	}
 
 	/**

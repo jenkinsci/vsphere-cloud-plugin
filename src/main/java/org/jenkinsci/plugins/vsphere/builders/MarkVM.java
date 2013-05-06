@@ -75,6 +75,7 @@ public class MarkVM extends Builder {
 
 		} catch (VSphereException e) {
 			logger.verboseLogger(jLogger, e.getMessage(), true);
+			e.printStackTrace(jLogger);
 		}
 
 		return changed;

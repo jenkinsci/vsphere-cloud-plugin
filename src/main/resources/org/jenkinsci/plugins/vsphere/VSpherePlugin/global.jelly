@@ -26,17 +26,23 @@
                     add="${%Add Server}">
         <table width="100%">
           <br/>
-		  <f:entry field="name" title="${%Name}" help="/plugin/vSphereTools/help/global/help-Name.html">
+		  <f:entry field="name" title="${%Name}" help="/plugin/vsphere-cloud/help/global/help-Name.html">
            <f:textbox  />
 		  </f:entry>
-          <f:entry field="server" title="${%Server}" help="/plugin/vSphereTools/help/global/help-Server.html">
+          <f:entry field="server" title="${%Server}" help="/plugin/vsphere-cloud/help/global/help-Server.html">
             <f:textbox  />
           </f:entry>
-          <f:entry field="user" title="${%Username}" help="/plugin/vSphereTools/help/global/help-Username.html">
+          <f:entry field="user" title="${%Username}" help="/plugin/vsphere-cloud/help/global/help-Username.html">
             <f:textbox />
           </f:entry>
-          <f:entry field="pw" title="${%Password}" help="/plugin/vSphereTools/help/global/help-Password.html">
+          <f:entry field="pw" title="${%Password}" help="/plugin/vsphere-cloud/help/global/help-Password.html">
              <f:password />
+          </f:entry>
+		  <f:entry field="resourcePool" title="${%Resource Pool}" help="/plugin/vsphere-cloud/help/global/help-ResourcePool.html">
+             <f:textbox />
+          </f:entry>
+		  <f:entry field="cluster" title="${%Cluster}" help="/plugin/vsphere-cloud/help/global/help-Cluster.html">
+             <f:textbox />
           </f:entry>
         </table>
         <div align="right">

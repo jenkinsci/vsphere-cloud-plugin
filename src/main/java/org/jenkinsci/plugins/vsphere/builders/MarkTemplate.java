@@ -78,6 +78,7 @@ public class MarkTemplate extends Builder {
 
 		} catch (VSphereException e) {
 			logger.verboseLogger(jLogger, e.getMessage(), true);
+			e.printStackTrace(jLogger);
 		}
 
 		return changed;

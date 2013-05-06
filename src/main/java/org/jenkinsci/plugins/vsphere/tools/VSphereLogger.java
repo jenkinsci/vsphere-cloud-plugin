@@ -48,5 +48,7 @@ public class VSphereLogger {
 				(verboseOutput || force)){
 			logger.println("["+Messages.VSphereLogger_title()+"] "+str);
 		}
+		
+		
 	}
 }

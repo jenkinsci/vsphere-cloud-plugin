@@ -13,6 +13,8 @@ public class Server extends AbstractDescribableImpl<Server> {
 	private String user;
 	private Secret secretPassphrase;
 	private String name;
+	private String resourcePool;
+	private String cluster;
 
 	public final String getName() {
 		return name;
@@ -29,6 +31,14 @@ public class Server extends AbstractDescribableImpl<Server> {
 
 	public final String getServer() {
 		return server;
+	}
+	
+	public final String getResourcePool(){
+		return resourcePool;
+	}
+	
+	public final String getCluster(){
+		return cluster;
 	}
 
 	public final String getUser() {
@@ -52,17 +62,23 @@ public class Server extends AbstractDescribableImpl<Server> {
 	}
 
 	@DataBoundConstructor
-	public Server(final String server, final String user, final String pw, final String name){  
+	public Server(final String server, final String user, 
+				final String pw, final String name,
+				final String resourcePool, final String cluster){  
 
 		secretPassphrase = Secret.fromString(pw);
 		//TODO:  check for /sdk and add if missing
 		this.server = server;
 		this.user = user;
 		this.name = name;
+		this.resourcePool = resourcePool;
+		this.cluster = cluster;
 	}  
 
 	public Server(final JSONObject obj){
-		this(obj.getString("server"), obj.getString("user"),obj.getString("pw"),obj.getString("name"));
+		this(obj.getString("server"), obj.getString("user"),
+				obj.getString("pw"),obj.getString("name"),
+				obj.getString("resourcePool"), obj.getString("cluster"));
 	}
 
 	@Extension
@@ -94,4 +110,6 @@ public class Server extends AbstractDescribableImpl<Server> {
 			}
 		}
 	}*/
+	
+	//TODO get working, add in validation of cluster and resourcepool
 }

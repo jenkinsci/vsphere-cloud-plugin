@@ -86,6 +86,7 @@ public class Starter extends Builder{
 			success = deployFromTemplate(build, launcher, listener);
 		} catch(VSphereException e){
 			logger.verboseLogger(jLogger, e.getMessage(), true);
+			e.printStackTrace(jLogger);
 		}
 
 		return success;
