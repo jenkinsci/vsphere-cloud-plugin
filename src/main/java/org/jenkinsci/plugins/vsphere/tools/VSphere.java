@@ -108,6 +108,10 @@ public class VSphere {
 			cloneSpec.setLocation(rel);
 			cloneSpec.setPowerOn(powerOn);
 			cloneSpec.setTemplate(false);
+			
+			if(sourceVm.getCurrentSnapShot()==null){
+				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
+			}
 			cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
 
 			Task task = sourceVm.cloneVM_Task((Folder) sourceVm.getParent(), 
