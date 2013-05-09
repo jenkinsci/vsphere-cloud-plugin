@@ -102,7 +102,7 @@ public class VSphere {
 			
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 			rel.setDiskMoveType("createNewChildDiskBacking");
-			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster, null)).getMOR());
+			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster)).getMOR());
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
@@ -259,7 +259,7 @@ public class VSphere {
 			VirtualMachine vm = getVmByName(name);
 			if(vm.getConfig().template){
 				vm.markAsVirtualMachine(
-						getResourcePoolByName(resourcePool, getClusterByName(cluster, null)),
+						getResourcePoolByName(resourcePool, getClusterByName(cluster)),
 						null
 				);
 			}
@@ -329,8 +329,9 @@ public class VSphere {
 	}
 
 	/**
-	 * @param poolName - Name of pool to use
-	 * @return - ResourcePool obect
+	 * @param clusterName - Name of cluster name to find
+	 * @param rootEntity - managed entity to search
+	 * @return - ClusterComputeResource object
 	 * @throws InvalidProperty
 	 * @throws RuntimeFault
 	 * @throws RemoteException
@@ -343,6 +344,19 @@ public class VSphere {
 		return (ClusterComputeResource) new InventoryNavigator(
 				rootEntity).searchManagedEntity(
 						"ClusterComputeResource", clusterName);
+	}
+	
+	/**
+	 * @param clusterName - Name of cluster name to find
+	 * @return - ClusterComputeResource object
+	 * @throws InvalidProperty
+	 * @throws RuntimeFault
+	 * @throws RemoteException
+	 * @throws MalformedURLException 
+	 * @throws VSphereException 
+	 */
+	private ClusterComputeResource getClusterByName(final String clusterName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+		return getClusterByName(clusterName, null);
 	}
 
 	/**
