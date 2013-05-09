@@ -32,8 +32,7 @@ public class MarkTemplate extends Builder {
 	private final boolean force;
 	private final String serverName;
 	private final String description;
-	private transient VSphere vsphere = null;
-	private transient final VSphereLogger logger;
+	private VSphere vsphere = null;
 	
 	@DataBoundConstructor
 	public MarkTemplate(String serverName, String vm, String description, boolean force) throws VSphereException {
@@ -41,7 +40,6 @@ public class MarkTemplate extends Builder {
 		this.force = force;
 		this.vm = vm;
 		this.description = description;
-		this.logger = VSphereLogger.getVSphereLogger();
 	}
 
 	public String getVm() {
@@ -64,7 +62,7 @@ public class MarkTemplate extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Attempting to use server configuration: " + serverName, true);
+		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
 		boolean changed = false;
 
 		try {
@@ -77,7 +75,7 @@ public class MarkTemplate extends Builder {
 			changed = markTemplate(build, launcher, listener);
 
 		} catch (VSphereException e) {
-			logger.verboseLogger(jLogger, e.getMessage(), true);
+			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
@@ -89,7 +87,7 @@ public class MarkTemplate extends Builder {
 	 */
 	private boolean markTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Converting VM to template. Please wait ...", true);	
+		VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");	
 
 		EnvVars env;
 		try {
@@ -105,7 +103,7 @@ public class MarkTemplate extends Builder {
 		String expandedVm = env.expand(vm);
 
 		vsphere.markAsTemplate(expandedVm, df.format(date), env.expand(description), force);
-		logger.verboseLogger(jLogger, "\""+expandedVm+"\" is now a template.", true);
+		VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
 
 		return true;
 	}

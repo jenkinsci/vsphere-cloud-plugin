@@ -29,15 +29,13 @@ public class Destroyer extends Builder{
 	private final String vm;
 	private final String serverName;
 	private final boolean failOnNoExist;
-	private transient VSphere vsphere = null;
-	private transient final VSphereLogger logger;
+	private VSphere vsphere = null;
 
 	@DataBoundConstructor
 	public Destroyer(String serverName,	String vm, boolean failOnNoExist) throws VSphereException {
 		this.serverName = serverName;
 		this.failOnNoExist = failOnNoExist;
 		this.vm = vm;
-		this.logger = VSphereLogger.getVSphereLogger();
 	}
 
 	public String getVm() {
@@ -56,7 +54,7 @@ public class Destroyer extends Builder{
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
 
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Attempting to use server configuration: " + serverName, true);
+		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
 		boolean killed = false;
 
 		try {
@@ -71,10 +69,10 @@ public class Destroyer extends Builder{
 			if(VSpherePlugin.DescriptorImpl.allowDelete())
 				killed = killVm(build, launcher, listener);
 			else
-				logger.verboseLogger(jLogger, "Deletion is disabled!", true);
+				VSphereLogger.vsLogger(jLogger, "Deletion is disabled!");
 
 		} catch (VSphereException e) {
-			logger.verboseLogger(jLogger, e.getMessage(), true);
+			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
@@ -93,9 +91,9 @@ public class Destroyer extends Builder{
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		logger.verboseLogger(jLogger, "Destroying VM \""+expandedVm+".\" Please wait ...", true);
+		VSphereLogger.vsLogger(jLogger, "Destroying VM \""+expandedVm+".\" Please wait ...");
 		vsphere.destroyVm(expandedVm, failOnNoExist);
-		logger.verboseLogger(jLogger, "Destroyed!", true);
+		VSphereLogger.vsLogger(jLogger, "Destroyed!");
 
 		return true;
 	}

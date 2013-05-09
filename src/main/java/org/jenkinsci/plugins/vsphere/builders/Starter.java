@@ -36,8 +36,7 @@ public class Starter extends Builder{
 	private final String serverName;
 	private final String clone;
 	private final boolean powerOn;
-	private transient VSphere vsphere = null;
-	private transient final VSphereLogger logger;
+	private VSphere vsphere = null;
 
 	@DataBoundConstructor
 	public Starter(String serverName, String template,
@@ -46,7 +45,6 @@ public class Starter extends Builder{
 		this.serverName = serverName;
 		this.clone = clone;
 		this.powerOn = powerOn;
-		this.logger  = VSphereLogger.getVSphereLogger();
 	}
 
 
@@ -73,7 +71,7 @@ public class Starter extends Builder{
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Attempting to use server configuration: " + serverName, true);
+		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
 		boolean success=false;
 
 		try{
@@ -85,7 +83,7 @@ public class Starter extends Builder{
 			vsphere = VSphere.connect(server);
 			success = deployFromTemplate(build, launcher, listener);
 		} catch(VSphereException e){
-			logger.verboseLogger(jLogger, e.getMessage(), true);
+			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
@@ -94,7 +92,7 @@ public class Starter extends Builder{
 
 	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Cloning VM. Please wait ...", true);
+		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
 
 		EnvVars env;
 		try {
@@ -110,24 +108,24 @@ public class Starter extends Builder{
 			throw new VSphereException("VM is null");
 		
 		if(!powerOn){
-			logger.verboseLogger(jLogger, "Clone successful!");
+			VSphereLogger.vsLogger(jLogger, "Clone successful!");
 			return true;
 		}
 
 		//TODO: Removing hardcoding of wait time
-		logger.verboseLogger(jLogger, "Clone successful! Waiting a maximum of " +
-				VSphereConstants.IP_MAX_SECONDS * VSphereConstants.IP_MAX_TRIES +" seconds for IP.", true);
+		VSphereLogger.vsLogger(jLogger, "Clone successful! Waiting a maximum of " +
+				VSphereConstants.IP_MAX_SECONDS * VSphereConstants.IP_MAX_TRIES +" seconds for IP.");
 		String vmIP = vsphere.getIp(vm);
 
 		if(vmIP!=null){
-			logger.verboseLogger(jLogger, "Got IP for \""+expandedClone+"\" ", true);
+			VSphereLogger.vsLogger(jLogger, "Got IP for \""+expandedClone+"\" ");
 			VSphereEnvAction envAction = new VSphereEnvAction();
 			envAction.add("VSPHERE_IP", vmIP);
 			build.addAction(envAction);
 			return true;
 		}
 
-		logger.verboseLogger(jLogger, "Error: Could not get IP for \""+expandedClone+"\" ", true);
+		VSphereLogger.vsLogger(jLogger, "Error: Could not get IP for \""+expandedClone+"\" ");
 		return false;
 	}
 

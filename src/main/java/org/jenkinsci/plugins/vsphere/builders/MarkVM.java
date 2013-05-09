@@ -34,15 +34,13 @@ public class MarkVM extends Builder {
 	private final String template;
 	private final boolean powerOn;
 	private final String serverName;
-	private transient VSphere vsphere = null;
-	private transient final VSphereLogger logger;
+	private VSphere vsphere = null;
 	
 	@DataBoundConstructor
 	public MarkVM(String serverName, String template, boolean powerOn) throws VSphereException {
 		this.serverName = serverName;
 		this.powerOn = powerOn;
 		this.template = template;
-		this.logger  = VSphereLogger.getVSphereLogger();
 	}
 
 	public String getTemplate() {
@@ -61,7 +59,7 @@ public class MarkVM extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Attempting to use server configuration: " + serverName, true);
+		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
 		boolean changed = false;
 
 		try {
@@ -74,7 +72,7 @@ public class MarkVM extends Builder {
 			changed = markVm(build, launcher, listener);
 
 		} catch (VSphereException e) {
-			logger.verboseLogger(jLogger, e.getMessage(), true);
+			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
@@ -86,7 +84,7 @@ public class MarkVM extends Builder {
 	 */
 	private boolean markVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Converting template to VM. Please wait ...", true);		
+		VSphereLogger.vsLogger(jLogger, "Converting template to VM. Please wait ...");		
 
 		EnvVars env;
 		try {
@@ -100,20 +98,20 @@ public class MarkVM extends Builder {
 		String expandedTemplate = env.expand(template);
 
 		VirtualMachine vm = vsphere.markAsVm(expandedTemplate);
-		logger.verboseLogger(jLogger, "\""+expandedTemplate+"\" is a VM!", true);
+		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
 
 		if(powerOn){
 			vsphere.startVm(expandedTemplate);
 			String vmIP = vsphere.getIp(vm); 
 			if(vmIP!=null){
-				logger.verboseLogger(jLogger, "Got IP for \""+expandedTemplate+"\" ", true);
+				VSphereLogger.vsLogger(jLogger, "Got IP for \""+expandedTemplate+"\" ");
 				VSphereEnvAction envAction = new VSphereEnvAction();
 				envAction.add("VSPHERE_IP", vmIP);
 				build.addAction(envAction);
 				return true;
 			}
 
-			logger.verboseLogger(jLogger, "Error: Could not get IP for \""+expandedTemplate+"\" ", true);
+			VSphereLogger.vsLogger(jLogger, "Error: Could not get IP for \""+expandedTemplate+"\" ");
 			return false;
 		}
 
