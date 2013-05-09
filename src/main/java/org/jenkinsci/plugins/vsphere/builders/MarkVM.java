@@ -33,17 +33,16 @@ public class MarkVM extends Builder {
 
 	private final String template;
 	private final boolean powerOn;
-	private final Server server;
 	private final String serverName;
-	private final VSphereLogger logger = VSphereLogger.getVSphereLogger();
-	private VSphere vsphere = null;
-
+	private transient VSphere vsphere = null;
+	private transient final VSphereLogger logger;
+	
 	@DataBoundConstructor
 	public MarkVM(String serverName, String template, boolean powerOn) throws VSphereException {
 		this.serverName = serverName;
-		server = VSpherePlugin.DescriptorImpl.get().getServer(serverName);
 		this.powerOn = powerOn;
 		this.template = template;
+		this.logger  = VSphereLogger.getVSphereLogger();
 	}
 
 	public String getTemplate() {
@@ -62,10 +61,11 @@ public class MarkVM extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		logger.verboseLogger(jLogger, "Using server configuration: " + server.getName(), true);
+		logger.verboseLogger(jLogger, "Attempting to use server configuration: " + serverName, true);
 		boolean changed = false;
 
 		try {
+			Server server = VSpherePlugin.DescriptorImpl.get().getServer(serverName);
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
 			VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
