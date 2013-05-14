@@ -152,6 +152,13 @@ public class VSphere {
 				return;
 
 			String status = vm.powerOnVM_Task(null).waitForTask(10000, 10000);
+			
+			//TODO Answer VM question w/ default answer
+			//VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
+			//if(q!=null){
+			//	vm.answerVM("_vmx1", q.getChoice().getDefaultIndex().toString());
+			//}
+			
 			if(status==Task.SUCCESS){
 				System.out.println("VM was powered up successfully.");
 				return;
