@@ -16,6 +16,7 @@ import com.vmware.vim25.TaskInProgress;
 import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
+import com.vmware.vim25.VirtualMachineQuestionInfo;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.VmConfigFault;
@@ -39,12 +40,12 @@ public class VSphere {
 	private final String session;
 	private final String resourcePool;
 	private final String cluster;
-	
+
 	private VSphere(String url, String user, String pw, String cluster, String resourcePool) throws VSphereException{
-		
+
 		this.resourcePool = resourcePool;
 		this.cluster = cluster;
-		
+
 		try {
 			this.url = new URL(url);
 			this.session = (new ServiceInstance(this.url, user, pw, true)).getServerConnection().getSessionStr();
@@ -64,13 +65,13 @@ public class VSphere {
 	public static VSphere connect(Server server) throws VSphereException {
 		return new VSphere(server.getServer(), server.getUser(), server.getPw(), server.getCluster(), server.getResourcePool());
 	}
-	
+
 	public static VSphere connect(String server, String user, String pw) throws VSphereException {
 		return new VSphere(server, user, pw, null, null);
 	}
 
 
-	
+
 
 	public static String vSphereOutput(String msg){
 		return (Messages.VSphereLogger_title()+": ").concat(msg);
@@ -99,7 +100,7 @@ public class VSphere {
 				throw new VSphereException("VM " + cloneName + " already exists");
 			}
 
-			
+
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 			rel.setDiskMoveType("createNewChildDiskBacking");
 			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster)).getMOR());
@@ -108,7 +109,7 @@ public class VSphere {
 			cloneSpec.setLocation(rel);
 			cloneSpec.setPowerOn(powerOn);
 			cloneSpec.setTemplate(false);
-			
+
 			if(sourceVm.getCurrentSnapShot()==null){
 				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
 			}
@@ -151,17 +152,26 @@ public class VSphere {
 			if(isPoweredOn(vm))
 				return;
 
-			String status = vm.powerOnVM_Task(null).waitForTask(10000, 10000);
-			
-			//TODO Answer VM question w/ default answer
-			//VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
-			//if(q!=null){
-			//	vm.answerVM("_vmx1", q.getChoice().getDefaultIndex().toString());
-			//}
-			
-			if(status==Task.SUCCESS){
-				System.out.println("VM was powered up successfully.");
-				return;
+			Task task = vm.powerOnVM_Task(null);
+
+			for (int i=0, j=3; i<j; i++){
+				
+				if(task.getTaskInfo().getState()==TaskInfoState.success){
+					System.out.println("VM was powered up successfully.");
+					return;
+				}
+				
+				if (task.getTaskInfo().getState()==TaskInfoState.running ||
+						task.getTaskInfo().getState()==TaskInfoState.queued){
+					Thread.sleep(5000);
+				}
+				
+				//Check for copied/moved question
+				VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
+				if(q!=null && q.getId().equals("_vmx1")){
+					vm.answerVM(q.getId(), q.getChoice().getDefaultIndex().toString());
+					return;
+				}
 			}
 		}catch(Exception e){
 			throw new VSphereException("VM cannot be started:", e);
@@ -170,29 +180,29 @@ public class VSphere {
 		throw new VSphereException("VM cannot be started");
 	}
 
-    public ManagedObjectReference findSnapshotInTree(
-            VirtualMachineSnapshotTree[] snapTree, String snapName) {
-        for (int i = 0; i < snapTree.length; i++) {
-            VirtualMachineSnapshotTree node = snapTree[i];
-            if (snapName.equals(node.getName())) {
-                return node.getSnapshot();
-            } else {
-                VirtualMachineSnapshotTree[] childTree =
-                        node.getChildSnapshotList();
-                if (childTree != null) {
-                    ManagedObjectReference mor = findSnapshotInTree(
-                            childTree, snapName);
-                    if (mor != null) {
-                        return mor;
-                    }
-                }
-            }
-        }
-        return null;
-    }
-    
+	public ManagedObjectReference findSnapshotInTree(
+			VirtualMachineSnapshotTree[] snapTree, String snapName) {
+		for (int i = 0; i < snapTree.length; i++) {
+			VirtualMachineSnapshotTree node = snapTree[i];
+			if (snapName.equals(node.getName())) {
+				return node.getSnapshot();
+			} else {
+				VirtualMachineSnapshotTree[] childTree =
+					node.getChildSnapshotList();
+				if (childTree != null) {
+					ManagedObjectReference mor = findSnapshotInTree(
+							childTree, snapName);
+					if (mor != null) {
+						return mor;
+					}
+				}
+			}
+		}
+		return null;
+	}
+
 	public void revertToSnapshot(String vmName, String snapName){
-       
+
 		/*VirtualMachine vm = getVmByName(vmName);
         VirtualMachineSnapshotInfo info = vm.getSnapshot();
         if (info != null)
@@ -213,8 +223,8 @@ public class VSphere {
             throw new Exception("No snapshots exist or unable to access the snapshot array");
         }            
         return null;
-        
-		
+
+
 		VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
         if (snap == null) {
             throw new IOException("Virtual Machine snapshot cannot be found");
@@ -226,7 +236,7 @@ public class VSphere {
             throw new IOException("Error while reverting to virtual machine snapshot");
         }*/
 	}
-    
+
 	public void takeSnapshot(String name, String snapshot, String description) throws VSphereException{
 
 		try {
@@ -329,7 +339,7 @@ public class VSphere {
 	 */
 	private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
 		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
-		
+
 		return (ResourcePool) new InventoryNavigator(
 				rootEntity).searchManagedEntity(
 						"ResourcePool", poolName);
@@ -347,12 +357,12 @@ public class VSphere {
 	 */
 	private ClusterComputeResource getClusterByName(final String clusterName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
 		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
-			
+
 		return (ClusterComputeResource) new InventoryNavigator(
 				rootEntity).searchManagedEntity(
 						"ClusterComputeResource", clusterName);
 	}
-	
+
 	/**
 	 * @param clusterName - Name of cluster name to find
 	 * @return - ClusterComputeResource object
@@ -376,7 +386,7 @@ public class VSphere {
 			VirtualMachine vm = getVmByName(name);
 			if(vm==null){
 				if(failOnNoExist) throw new VSphereException("VM does not exist");
-				
+
 				System.out.println("VM does not exist, or already deleted!");
 				return;
 			}
