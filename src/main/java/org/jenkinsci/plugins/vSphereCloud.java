@@ -64,6 +64,7 @@ public class vSphereCloud extends Cloud {
         if (slaveComputer != null)
             s = String.format("[%s] ", slaveComputer.getName());
         s = s + String.format(format, args);
+        s = s + "\n";
         if (listener != null)
             listener.getLogger().print(s);
         VSLOG.log(Level.INFO, s);
