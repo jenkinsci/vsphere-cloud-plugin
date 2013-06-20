@@ -4,28 +4,25 @@
  */
 package org.jenkinsci.plugins;
 
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineToolsStatus;
-import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.Task;
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.Util;
-import hudson.slaves.ComputerLauncher;
-import hudson.slaves.SlaveComputer;
 import hudson.model.TaskListener;
 import hudson.model.Descriptor;
 import hudson.model.Hudson;
 import hudson.slaves.Cloud;
+import hudson.slaves.ComputerLauncher;
+import hudson.slaves.SlaveComputer;
 
 import java.io.IOException;
 import java.util.Calendar;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.DataBoundConstructor;
+
+import com.vmware.vim25.VirtualMachinePowerState;
+import com.vmware.vim25.VirtualMachineToolsStatus;
+import com.vmware.vim25.mo.Task;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 /**
  *
@@ -134,10 +131,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     cal.add(Calendar.MINUTE, 5);
                     vSphereCloudSlave.AddProbableLaunch(vsSlave, cal.getTime());
                     
-                    ServiceInstance si = vsC.getSI();
-                    Folder rootFolder = si.getRootFolder();
-                    VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
-                            rootFolder).searchManagedEntity("VirtualMachine", vmName);
+                    VSphere v = vsC.vSphereInstance();
+                    VirtualMachine vm = v.getVmByName(vmName);
                     if (vm == null) {
                         throw new IOException("Virtual Machine could not be found");
                     }
@@ -165,10 +160,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         case suspended:
                             // Power the VM up.
                             vSphereCloud.Log(slaveComputer, taskListener, "Powering on VM");
-                            Task task = vm.powerOnVM_Task(null);
-                            if (!task.waitForTask().equals(Task.SUCCESS)) {
-                                throw new IOException("Unable to power on VM");
-                            }
+                            v.startVm(vmName);
                             break;
                     }
 
@@ -248,10 +240,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud vsC = findOurVsInstance();
             vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
 
-            ServiceInstance si = vsC.getSI();
-            Folder rootFolder = si.getRootFolder();
-            VirtualMachine vm = (VirtualMachine) new InventoryNavigator(
-                    rootFolder).searchManagedEntity("VirtualMachine", vmName);
+            VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
             
             if ((vm != null) && (localIdle != MACHINE_ACTION.NOTHING)) {
                 //VirtualMachinePowerState power = vm.getRuntime().getPowerState();
