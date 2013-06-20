@@ -1,0 +1,21 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <!--
+    This jelly script is used for per-project configuration.
+
+    See global.jelly for a general discussion about jelly script.
+  -->
+
+<!-- TODO:  Make sure to set a default blank option in case the saved item gets deleted -->
+	<f:entry title="${%Server}" field="serverName">
+		<f:select />
+    </f:entry>
+
+	<f:entry title="${%VM}" field="vm">
+      <f:textbox  />
+    </f:entry>
+    
+    <f:entry title="${%Fail on null?}" field="failOnNoExist">
+      <f:checkbox  />
+    </f:entry>
+
+</j:jelly>
