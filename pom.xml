@@ -1,18 +1,16 @@
-
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>org.jenkins-ci.plugins</groupId>
-        <artifactId>plugin</artifactId>
-        <version>1.464</version><!-- which version of Jenkins is this plugin built against? -->
+    <groupId>org.jenkins-ci.plugins</groupId>
+    <artifactId>plugin</artifactId>
+        <version>1.504</version><!-- which version of Jenkins is this plugin built against? -->
     </parent>
 
-    <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>vsphere-cloud</artifactId>
-    <version>0.11-SNAPSHOT</version>
+    <version>1.0.1</version>
     <packaging>hpi</packaging>
-    <name>vSphere Cloud Plugin</name>
-    <description>Integrates Jenkins with a vSphere server to use virtual machines as slaved</description>
+    <name>vSphere Plugin</name>
+    <description>Integrates Jenkins with a vSphere server</description>
     <url>https://wiki.jenkins-ci.org/display/JENKINS/vSphere+Cloud+Plugin</url>
 
     <developers>
@@ -20,6 +18,11 @@
             <id>jswager</id>
             <name>Jason Swager</name>
             <email>jswager@alohaoi.com</email>
+        </developer>
+			<developer>
+            <id>elordahl</id>
+            <name>Eric Lordahl</name>
+            <email>elordahl@vt.edu</email>
         </developer>
     </developers>
     
@@ -33,12 +36,20 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
-    <repositories>
-        <repository>
-            <id>repo.jenkins-ci.org</id>
-            <url>http://repo.jenkins-ci.org/public/</url>
-        </repository>
-    </repositories>    
+ <repositories>
+    <repository>
+      <id>repo.jenkins-ci.org</id>
+      <name>Jenkins Repository</name>
+      <url>http://repo.jenkins-ci.org/public/</url>
+    </repository>
+  </repositories>
+
+  <pluginRepositories>
+     <pluginRepository>
+        <id>repo.jenkins-ci.org</id>
+        <url>http://repo.jenkins-ci.org/public/</url>
+     </pluginRepository>
+  </pluginRepositories>
     
     <dependencies>
         <dependency>
@@ -47,19 +58,11 @@
             <version>2.1-rev7</version>
             <type>jar</type>
         </dependency>
-        <dependency>
-            <groupId>com.vmware</groupId>
-            <artifactId>vijava</artifactId>
-            <version>5.0</version>
-        </dependency>
+    <dependency>
+      <groupId>com.cloudbees.thirdparty</groupId>
+      <artifactId>vijava</artifactId>
+      <version>5.0.0</version>
+     </dependency>
     </dependencies>
-  
-
-    <pluginRepositories>
-        <pluginRepository>
-            <id>repo.jenkins-ci.org</id>
-            <url>http://repo.jenkins-ci.org/public/</url>
-        </pluginRepository>
-    </pluginRepositories>
 </project>  
 
