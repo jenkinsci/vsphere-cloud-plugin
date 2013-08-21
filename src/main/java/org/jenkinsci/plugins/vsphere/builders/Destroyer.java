@@ -30,6 +30,7 @@ public class Destroyer extends Builder{
 	private final String vm;
 	private final String serverName;
 	private final boolean failOnNoExist;
+	private final int serverHash;
 	private VSphere vsphere = null;
 
 	@DataBoundConstructor
@@ -37,6 +38,7 @@ public class Destroyer extends Builder{
 		this.serverName = serverName;
 		this.failOnNoExist = failOnNoExist;
 		this.vm = vm;
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getVm() {
@@ -61,8 +63,7 @@ public class Destroyer extends Builder{
 		try {
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
-			//VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			
 			if(VSpherePlugin.DescriptorImpl.allowDelete())
 				killed = killVm(build, launcher, listener);
@@ -143,7 +144,7 @@ public class Destroyer extends Builder{
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String vm) {
             try {
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vmObj = vsphere.getVmByName(vm);         
                 
                 if (vmObj == null) {

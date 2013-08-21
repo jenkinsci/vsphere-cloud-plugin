@@ -48,14 +48,12 @@ public class Starter extends Builder{
 		this.clone = clone;
 		this.powerOn = powerOn;
 		this.linkedClone = linkedClone;
-		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).getHash();
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
-
 
 	public String getTemplate() {
 		return template;
 	}
-	
 
 	public String getClone() {
 		return clone;
@@ -81,17 +79,17 @@ public class Starter extends Builder{
 		boolean success=false;
 
 		try{
-		
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
-			
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			success = deployFromTemplate(build, launcher, listener);
+			
 		} catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
+		//TODO throw AbortException instead of returning value
 		return success;
 	}
 
@@ -195,7 +193,7 @@ public class Starter extends Builder{
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String template, @QueryParameter String clone) {
             try {
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);         
                 
                 if (vm == null) {

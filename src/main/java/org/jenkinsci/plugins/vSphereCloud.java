@@ -157,7 +157,7 @@ public class vSphereCloud extends Cloud {
     public VSphere vSphereInstance() throws VSphereException{
     	return VSphere.connect(vsHost + "/sdk", username, getPassword(), cluster, resourcePool);
     }
-
+    
     @Override
     public boolean canProvision(Label label) {
         return false;

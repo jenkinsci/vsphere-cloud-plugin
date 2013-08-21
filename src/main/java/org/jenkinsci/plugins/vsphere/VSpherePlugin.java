@@ -9,7 +9,6 @@ import hudson.tasks.Builder;
 import hudson.util.ListBoxModel;
 
 import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
 /**
@@ -71,7 +70,7 @@ public class VSpherePlugin extends Builder {
 			load();
 		}
 
-	    public vSphereCloud getVSphereCloud(String serverName) throws RuntimeException, VSphereException {
+	    public vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
 	        if (serverName != null){
 	            for (Cloud cloud : Hudson.getInstance().clouds) {
 	                if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getVsDescription().equals(serverName)) {
@@ -79,8 +78,16 @@ public class VSpherePlugin extends Builder {
 	                }
 	            }
 	        }
-	        vSphereCloud.Log("Could not find our vSphere Cloud instance!");
 	        throw new RuntimeException("Could not find our vSphere Cloud instance!");
+	    }
+	    
+	    public vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
+	    	for (Cloud cloud : Hudson.getInstance().clouds) {
+	    		if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getHash()==hash ){
+	    			return (vSphereCloud) cloud;
+	    		}
+	    	}
+	    	throw new RuntimeException("Server does not exist in global config! Please re-save your job configuration.");
 	    }
 
 		public ListBoxModel doFillServerItems(){

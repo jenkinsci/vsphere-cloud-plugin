@@ -33,6 +33,7 @@ public class MarkVM extends Builder {
 	private final String template;
 	private final boolean powerOn;
 	private final String serverName;
+	private final int serverHash;
 	private VSphere vsphere = null;
 	
 	@DataBoundConstructor
@@ -40,6 +41,7 @@ public class MarkVM extends Builder {
 		this.serverName = serverName;
 		this.powerOn = powerOn;
 		this.template = template;
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getTemplate() {
@@ -64,8 +66,7 @@ public class MarkVM extends Builder {
 		try {
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
-			//VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			changed = markVm(build, launcher, listener);
 
 		} catch (VSphereException e) {
@@ -155,7 +156,7 @@ public class MarkVM extends Builder {
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String template) {
             try {
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloud(serverName).vSphereInstance();
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);         
                 
                 if (vm == null) {
