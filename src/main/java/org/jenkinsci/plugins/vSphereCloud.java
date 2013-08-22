@@ -25,6 +25,7 @@ import java.util.logging.Level;
 
 import net.sf.json.JSONObject;
 
+import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -47,6 +48,8 @@ public class vSphereCloud extends Cloud {
     private final String vsDescription;
     private final String username;
     private final String password;
+	private final String resourcePool;
+	private final String cluster;
     private final int maxOnlineSlaves;    
     private transient int currentOnlineSlaveCount = 0;
     private transient Hashtable<String, String> currentOnline;
@@ -91,13 +94,16 @@ public class vSphereCloud extends Cloud {
 
     @DataBoundConstructor
     public vSphereCloud(String vsHost, String vsDescription,
-            String username, String password, int maxOnlineSlaves) {
+            String username, String password, String resourcePool, 
+            String cluster, int maxOnlineSlaves) {
         super("vSphereCloud");
         this.vsHost = vsHost;
         this.vsDescription = vsDescription;
         this.username = username;
         this.password = Scrambler.scramble(Util.fixEmptyAndTrim(password));
         this.maxOnlineSlaves = maxOnlineSlaves;
+		this.resourcePool = resourcePool;
+		this.cluster = cluster;
         
         Log("STARTTING VSPHERE CLOUD");
     }
@@ -114,7 +120,7 @@ public class vSphereCloud extends Cloud {
     public String getPassword() {
         return Scrambler.descramble(password);
     }
-
+    
     public String getUsername() {
         return username;
     }
@@ -127,10 +133,25 @@ public class vSphereCloud extends Cloud {
         return vsHost;
     }
     
+	public String getResourcePool(){
+		return resourcePool;
+	}
+	
+	public String getCluster(){
+		return cluster;
+	}
+	
+	public final int getHash() {
+		return new HashCodeBuilder(67, 89).
+		append(getVsDescription()).
+		append(getVsHost()).
+		toHashCode();
+	}
+    
     public VSphere vSphereInstance() throws VSphereException{
-    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
+    	return VSphere.connect(vsHost + "/sdk", username, getPassword(), cluster, resourcePool);
     }
-
+    
     @Override
     public boolean canProvision(Label label) {
         return false;

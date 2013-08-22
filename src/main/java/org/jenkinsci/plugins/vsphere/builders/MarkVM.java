@@ -19,7 +19,6 @@ import java.util.Map;
 
 import javax.servlet.ServletException;
 
-import org.jenkinsci.plugins.vsphere.Server;
 import org.jenkinsci.plugins.vsphere.VSpherePlugin;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -34,6 +33,7 @@ public class MarkVM extends Builder {
 	private final String template;
 	private final boolean powerOn;
 	private final String serverName;
+	private final int serverHash;
 	private VSphere vsphere = null;
 	
 	@DataBoundConstructor
@@ -41,6 +41,7 @@ public class MarkVM extends Builder {
 		this.serverName = serverName;
 		this.powerOn = powerOn;
 		this.template = template;
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getTemplate() {
@@ -63,12 +64,9 @@ public class MarkVM extends Builder {
 		boolean changed = false;
 
 		try {
-			Server server = VSpherePlugin.DescriptorImpl.get().getServer(serverName);
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
-
-			vsphere = VSphere.connect(server);
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			changed = markVm(build, launcher, listener);
 
 		} catch (VSphereException e) {
@@ -153,6 +151,27 @@ public class MarkVM extends Builder {
 				return FormValidation.error("Please enter the Template name");
 			return FormValidation.ok();
 		}
+		
+		//TODO ensure variables are not null
+		public FormValidation doTestData(@QueryParameter String serverName,
+                @QueryParameter String template) {
+            try {
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+                VirtualMachine vm = vsphere.getVmByName(template);         
+                
+                if (vm == null) {
+                    return FormValidation.error("Specified template not found!");
+                }
+                
+                if(!vm.getConfig().template){
+                	return FormValidation.error("Specified template is already a VM!");
+                }
+
+                return FormValidation.ok("Success");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {

@@ -16,4 +16,7 @@
 	<f:entry title="${%Power On?}" field="powerOn">
 	      <f:checkbox  />
     </f:entry>
+    
+    <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template"/>
+    
 </j:jelly>

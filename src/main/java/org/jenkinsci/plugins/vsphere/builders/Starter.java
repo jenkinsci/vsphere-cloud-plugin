@@ -19,7 +19,6 @@ import java.util.Map;
 
 import javax.servlet.ServletException;
 
-import org.jenkinsci.plugins.vsphere.Server;
 import org.jenkinsci.plugins.vsphere.VSpherePlugin;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereConstants;
@@ -29,6 +28,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Starter extends Builder{
 
@@ -36,17 +36,20 @@ public class Starter extends Builder{
 	private final String serverName;
 	private final String clone;
 	private final boolean powerOn;
+	private final boolean linkedClone;
+	private final int serverHash;
 	private VSphere vsphere = null;
 
 	@DataBoundConstructor
 	public Starter(String serverName, String template,
-			String clone, boolean powerOn) throws VSphereException {
+			String clone, boolean powerOn, boolean linkedClone) throws VSphereException {
 		this.template = template;
 		this.serverName = serverName;
 		this.clone = clone;
 		this.powerOn = powerOn;
+		this.linkedClone = linkedClone;
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
-
 
 	public String getTemplate() {
 		return template;
@@ -60,11 +63,12 @@ public class Starter extends Builder{
 		return serverName;
 	}
 
-	/**
-	 * @return the powerOn
-	 */
 	public boolean isPowerOn() {
 		return powerOn;
+	}
+
+	public boolean isLinkedClone() {
+		return linkedClone;
 	}
 
 	@Override
@@ -75,18 +79,17 @@ public class Starter extends Builder{
 		boolean success=false;
 
 		try{
-			Server server = VSpherePlugin.DescriptorImpl.get().getServer(serverName);
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			//TODO:  Need to redo this because server object will change after each reboot of jenkins.
-			VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
-			vsphere = VSphere.connect(server);
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			success = deployFromTemplate(build, launcher, listener);
+			
 		} catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
+		//TODO throw AbortException instead of returning value
 		return success;
 	}
 
@@ -103,7 +106,7 @@ public class Starter extends Builder{
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
 
-		VirtualMachine vm = vsphere.shallowCloneVm(expandedClone, expandedTemplate, powerOn);
+		VirtualMachine vm = vsphere.shallowCloneVm(expandedClone, expandedTemplate, powerOn, linkedClone);
 		if(vm==null)
 			throw new VSphereException("VM is null");
 		
@@ -186,6 +189,37 @@ public class Starter extends Builder{
 				return FormValidation.error("Please enter the clone name");
 			return FormValidation.ok();
 		}
+		
+		public FormValidation doTestData(@QueryParameter String serverName,
+                @QueryParameter String template, @QueryParameter String clone) {
+            try {
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+                VirtualMachine vm = vsphere.getVmByName(template);         
+                
+                if (vm == null) {
+                    return FormValidation.error("Specified template not found!");
+                }
+                
+                if(!vm.getConfig().template){
+                	return FormValidation.error("Specified template is not actually a template!");
+                }
+                
+                VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
+                
+                if (snap == null)
+                	return FormValidation.error("No snapshots found for specified template!");
+                
+                VirtualMachine cloneVM = vsphere.getVmByName(clone);
+                if (cloneVM != null) {
+                    return FormValidation.error("Specified clone already exists!");
+                }
+
+
+                return FormValidation.ok("Success");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
 
 		public ListBoxModel doFillServerNameItems(){
 			return VSpherePlugin.DescriptorImpl.get().doFillServerItems();
