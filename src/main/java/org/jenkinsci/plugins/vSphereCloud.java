@@ -144,7 +144,6 @@ public class vSphereCloud extends Cloud {
 	public final int getHash() {
 		return new HashCodeBuilder(67, 89).
 		append(getVsDescription()).
-		append(getUsername()).
 		append(getVsHost()).
 		toHashCode();
 	}
