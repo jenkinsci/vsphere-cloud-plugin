@@ -193,6 +193,10 @@ public class Starter extends Builder{
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String template, @QueryParameter String clone) {
             try {
+            	
+            	if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
+    				return FormValidation.error("Please enter required values!");
+            	
                 VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);         
                 

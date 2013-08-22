@@ -23,8 +23,6 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
-
 public class Destroyer extends Builder{
 
 	private final String vm;
@@ -144,10 +142,13 @@ public class Destroyer extends Builder{
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String vm) {
             try {
+            	
+            	if (serverName.length() == 0 || vm.length()==0 )
+    				return FormValidation.error("Please enter required values!");
+            	
                 VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-                VirtualMachine vmObj = vsphere.getVmByName(vm);         
                 
-                if (vmObj == null) {
+                if (vsphere.getVmByName(vm) == null) {
                     return FormValidation.error("Specified VM not found!");
                 }
                 

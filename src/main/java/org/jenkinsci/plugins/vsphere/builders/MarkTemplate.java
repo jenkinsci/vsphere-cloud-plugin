@@ -25,8 +25,6 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
-
 public class MarkTemplate extends Builder {
 
 	private final String vm;
@@ -145,14 +143,23 @@ public class MarkTemplate extends Builder {
 			return FormValidation.ok();
 		}
 		
-		//TODO ensure variables are not null
+		public FormValidation doCheckDescription(@QueryParameter String value)
+		throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error("Please enter the description");
+			return FormValidation.ok();
+		}
+		
 		public FormValidation doTestData(@QueryParameter String serverName,
-                @QueryParameter String vm) {
+                @QueryParameter String vm, @QueryParameter String description) {
             try {
+            	
+            	if (serverName.length() == 0 || vm.length() == 0 || description.length() == 0)
+    				return FormValidation.error("Please enter required values!");
+            	
                 VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-                VirtualMachine vmObj = vsphere.getVmByName(vm);         
                 
-                if (vmObj == null) {
+                if (vsphere.getVmByName(vm) == null) {
                     return FormValidation.error("Specified VM not found!");
                 }
                 

@@ -152,10 +152,13 @@ public class MarkVM extends Builder {
 			return FormValidation.ok();
 		}
 		
-		//TODO ensure variables are not null
 		public FormValidation doTestData(@QueryParameter String serverName,
                 @QueryParameter String template) {
             try {
+            	
+            	if (serverName.length() == 0 || template.length() == 0)
+    				return FormValidation.error("Please enter required values!");
+            	
                 VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);         
                 
