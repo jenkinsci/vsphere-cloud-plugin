@@ -16,6 +16,12 @@
         <f:entry title="${%Max number of slaves online}" help="/plugin/vsphere-cloud/maxOnlineSlaves.html">
             <f:textbox clazz="required number" field="maxOnlineSlaves" />
         </f:entry>
+        <f:entry title="${%Resource Pool}" help="/plugin/vsphere-cloud/help-ResourcePool.html">
+            <f:textbox field="resourcePool" />
+        </f:entry>
+		<f:entry title="${%Cluster}" help="/plugin/vsphere-cloud/help-Cluster.html">
+            <f:textbox field="cluster" />
+        </f:entry>
     </f:advanced>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>
 </j:jelly>

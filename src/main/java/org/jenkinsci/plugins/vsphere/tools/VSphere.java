@@ -4,8 +4,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 
-import org.jenkinsci.plugins.vsphere.Server;
-
 import com.vmware.vim25.FileFault;
 import com.vmware.vim25.InsufficientResourcesFault;
 import com.vmware.vim25.InvalidProperty;
@@ -62,12 +60,12 @@ public class VSphere {
 	 * Initiates Connection to vSphere Server
 	 * @throws VSphereException 
 	 */
-	public static VSphere connect(Server server) throws VSphereException {
-		return new VSphere(server.getServer(), server.getUser(), server.getPw(), server.getCluster(), server.getResourcePool());
-	}
-
 	public static VSphere connect(String server, String user, String pw) throws VSphereException {
 		return new VSphere(server, user, pw, null, null);
+	}
+
+	public static VSphere connect(String server, String user, String pw, String cluster, String resourcePool) throws VSphereException {
+		return new VSphere(server, user, pw, cluster, resourcePool);
 	}
 
 
@@ -86,7 +84,7 @@ public class VSphere {
 	 * @return - Virtual Machine object of the new VM
 	 * @throws Exception 
 	 */
-	public VirtualMachine shallowCloneVm(String cloneName, String template, boolean powerOn) throws VSphereException {
+	public VirtualMachine shallowCloneVm(String cloneName, String template, boolean powerOn, boolean linkedClone) throws VSphereException {
 
 		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
 		try{
@@ -100,9 +98,15 @@ public class VSphere {
 				throw new VSphereException("VM " + cloneName + " already exists");
 			}
 
-
+			System.out.println("with \""+ cluster + "\" and  \""+resourcePool+"\"");
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
-			rel.setDiskMoveType("createNewChildDiskBacking");
+			
+			if(linkedClone){
+				rel.setDiskMoveType("createNewChildDiskBacking");
+			}else{
+				rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
+			}
+			
 			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster)).getMOR());
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
