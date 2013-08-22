@@ -18,7 +18,6 @@ import java.util.Date;
 
 import javax.servlet.ServletException;
 
-import org.jenkinsci.plugins.vsphere.Server;
 import org.jenkinsci.plugins.vsphere.VSpherePlugin;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -26,13 +25,17 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import com.vmware.vim25.mo.VirtualMachine;
+
 public class MarkTemplate extends Builder {
 
 	private final String vm;
 	private final boolean force;
 	private final String serverName;
 	private final String description;
+	private final int serverHash;
 	private VSphere vsphere = null;
+	
 	
 	@DataBoundConstructor
 	public MarkTemplate(String serverName, String vm, String description, boolean force) throws VSphereException {
@@ -40,6 +43,7 @@ public class MarkTemplate extends Builder {
 		this.force = force;
 		this.vm = vm;
 		this.description = description;
+		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getVm() {
@@ -66,12 +70,9 @@ public class MarkTemplate extends Builder {
 		boolean changed = false;
 
 		try {
-			Server server = VSpherePlugin.DescriptorImpl.get().getServer(serverName);
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			VSpherePlugin.DescriptorImpl.get().checkServerExistence(server);
-
-			vsphere = VSphere.connect(server);
+			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			changed = markTemplate(build, launcher, listener);
 
 		} catch (VSphereException e) {
@@ -143,6 +144,23 @@ public class MarkTemplate extends Builder {
 				return FormValidation.error("Please enter the VM name");
 			return FormValidation.ok();
 		}
+		
+		//TODO ensure variables are not null
+		public FormValidation doTestData(@QueryParameter String serverName,
+                @QueryParameter String vm) {
+            try {
+                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+                VirtualMachine vmObj = vsphere.getVmByName(vm);         
+                
+                if (vmObj == null) {
+                    return FormValidation.error("Specified VM not found!");
+                }
+                
+                return FormValidation.ok("Success");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
