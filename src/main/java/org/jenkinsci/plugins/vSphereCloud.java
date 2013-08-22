@@ -121,10 +121,6 @@ public class vSphereCloud extends Cloud {
         return Scrambler.descramble(password);
     }
     
-    private String getEncryptedPassword() {
-        return password;
-    }
-
     public String getUsername() {
         return username;
     }
@@ -150,7 +146,6 @@ public class vSphereCloud extends Cloud {
 		append(getVsDescription()).
 		append(getUsername()).
 		append(getVsHost()).
-		append(getEncryptedPassword()).
 		toHashCode();
 	}
     
