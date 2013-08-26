@@ -2,5 +2,5 @@
   This view is used to render the installed plugins page.
 -->
 <div>
-  Allows virtual machines in a VMware vSphere to be used as slaves. Virtual power on/off and revert can be used.
+This plugin provides tools to implement "cloud" like functionality in Jenkins for those using a vSphere Virtualization infrastructure. 
 </div>

@@ -1,3 +1,17 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere.builders;
 
 import hudson.EnvVars;
@@ -42,7 +56,7 @@ public class Destroyer extends Builder{
 	public String getVm() {
 		return vm;
 	}
-	
+
 	public boolean isFailOnNoExist(){
 		return failOnNoExist;
 	}
@@ -62,7 +76,7 @@ public class Destroyer extends Builder{
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
 			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
-			
+
 			if(VSpherePlugin.DescriptorImpl.allowDelete())
 				killed = killVm(build, launcher, listener);
 			else
@@ -117,10 +131,9 @@ public class Destroyer extends Builder{
 		 */
 		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
-			
+
 			if (value.length() == 0)
 				return FormValidation.error("Please enter the VM name");
-			//TODO check if Vm exists
 			return FormValidation.ok();
 		}
 
@@ -134,29 +147,27 @@ public class Destroyer extends Builder{
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
-			// TODO Auto-generated method stub
 			return true;
 		}
-		
-		//TODO ensure variables are not null
+
 		public FormValidation doTestData(@QueryParameter String serverName,
-                @QueryParameter String vm) {
-            try {
-            	
-            	if (serverName.length() == 0 || vm.length()==0 )
-    				return FormValidation.error("Please enter required values!");
-            	
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-                
-                if (vsphere.getVmByName(vm) == null) {
-                    return FormValidation.error("Specified VM not found!");
-                }
-                
-                return FormValidation.ok("Success");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+				@QueryParameter String vm) {
+			try {
+
+				if (serverName.length() == 0 || vm.length()==0 )
+					return FormValidation.error("Please enter required values!");
+
+				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+
+				if (vsphere.getVmByName(vm) == null) {
+					return FormValidation.error("Specified VM not found!");
+				}
+
+				return FormValidation.ok("Success");
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 
 		public ListBoxModel doFillServerNameItems(){
 			return VSpherePlugin.DescriptorImpl.get().doFillServerItems();

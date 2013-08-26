@@ -1,3 +1,17 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere;
 
 import hudson.Extension;
@@ -11,15 +25,6 @@ import hudson.util.ListBoxModel;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
-/**
- * Descriptor for {@link VSpherePlugin}. Used as a singleton.
- * The class is marked as public so that it can be accessed from views.
- *
- * <p>
- * See <tt>src/main/resources/hudson/plugins/hello_world/HelloWorldBuilder/*.jelly</tt>
- * for the actual HTML fragment for the configuration screen.
- */
-// This indicates to Jenkins that this is an implementation of an extension point.
 @Extension
 public class VSpherePlugin extends Builder {
 
@@ -29,76 +34,52 @@ public class VSpherePlugin extends Builder {
 		return (DescriptorImpl)super.getDescriptor();
 	}
 
-	// this annotation tells Hudson that this is the implementation of an extension point
 	@Extension
 	public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
-			// TODO Auto-generated method stub
 			return false;
 		}
 
 		@Override
 		public String getDisplayName() {
-			// TODO Auto-generated method stub
 			return null;
 		}
 
 		public DescriptorImpl () {
-			//super();
-			/*			ALLOW_VM_DELETE = false;
-			FileInputStream propFile;
-			try {
-				System.out.println("DIRRRR"+System.getProperty("user.dir"));
-				propFile = new FileInputStream( "myProperties.txt");
-
-		        Properties p =
-		            new Properties(System.getProperties());
-		        p.load(propFile);
-
-		        // set the system properties
-		        System.setProperties(p);
-		        // display new properties
-		        System.getProperties().list(System.out);
-
-		        ALLOW_VM_DELETE = !Boolean.getBoolean(VSpherePlugin.class.getName()+".disableDelete");
-			} catch (Exception e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}*/
 			load();
 		}
 
-	    public vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
-	        if (serverName != null){
-	            for (Cloud cloud : Hudson.getInstance().clouds) {
-	                if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getVsDescription().equals(serverName)) {
-	                    return (vSphereCloud) cloud;
-	                }
-	            }
-	        }
-	        throw new RuntimeException("Could not find our vSphere Cloud instance!");
-	    }
-	    
-	    public vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
-	    	for (Cloud cloud : Hudson.getInstance().clouds) {
-	    		if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getHash()==hash ){
-	    			return (vSphereCloud) cloud;
-	    		}
-	    	}
-	    	throw new RuntimeException("Server does not exist in global config! Please re-save your job configuration.");
-	    }
+		public vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
+			if (serverName != null){
+				for (Cloud cloud : Hudson.getInstance().clouds) {
+					if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getVsDescription().equals(serverName)) {
+						return (vSphereCloud) cloud;
+					}
+				}
+			}
+			throw new RuntimeException("Could not find our vSphere Cloud instance!");
+		}
+
+		public vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
+			for (Cloud cloud : Hudson.getInstance().clouds) {
+				if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getHash()==hash ){
+					return (vSphereCloud) cloud;
+				}
+			}
+			throw new RuntimeException("Server does not exist in global config! Please re-save your job configuration.");
+		}
 
 		public ListBoxModel doFillServerItems(){
 			ListBoxModel select = new ListBoxModel();
 
 			for (Cloud cloud : Hudson.getInstance().clouds) {
-                if (cloud instanceof vSphereCloud ){
-                	select.add( ((vSphereCloud) cloud).getVsDescription()  );
-                }
-            }
-			
+				if (cloud instanceof vSphereCloud ){
+					select.add( ((vSphereCloud) cloud).getVsDescription()  );
+				}
+			}
+
 			return select;
 		}
 
@@ -106,10 +87,11 @@ public class VSpherePlugin extends Builder {
 			return Builder.all().get(DescriptorImpl.class);
 		}
 
+		//TODO Configure this base on config value or system property
 		public static boolean allowDelete() {
 			return ALLOW_VM_DELETE;
 		}
 
-		private static boolean ALLOW_VM_DELETE = true; //!Boolean.getBoolean(VSpherePlugin.class.getName()+".disableDelete");; 
+		private static boolean ALLOW_VM_DELETE = true;
 	}
 }
