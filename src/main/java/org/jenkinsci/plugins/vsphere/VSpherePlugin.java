@@ -59,7 +59,7 @@ public class VSpherePlugin extends Builder {
 					}
 				}
 			}
-			throw new RuntimeException("Could not find our vSphere Cloud instance!");
+			throw new RuntimeException(Messages.validation_instanceNotFound());
 		}
 
 		public vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
@@ -68,7 +68,7 @@ public class VSpherePlugin extends Builder {
 					return (vSphereCloud) cloud;
 				}
 			}
-			throw new RuntimeException("Server does not exist in global config! Please re-save your job configuration.");
+			throw new RuntimeException(Messages.validation_serverExistence());
 		}
 
 		public ListBoxModel doFillServerItems(){

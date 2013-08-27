@@ -434,7 +434,7 @@ public class VSphere {
 			}
 		}
 		else if (isPoweredOff(vm)){
-			System.out.println("Machine in already off.");
+			System.out.println("Machine is already off.");
 			return;
 		}
 

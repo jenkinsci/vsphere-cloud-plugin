@@ -69,7 +69,7 @@ public class Destroyer extends Builder{
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
+		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean killed = false;
 
 		try {
@@ -133,7 +133,7 @@ public class Destroyer extends Builder{
 				throws IOException, ServletException {
 
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the VM name");
+				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();
 		}
 
@@ -155,15 +155,17 @@ public class Destroyer extends Builder{
 			try {
 
 				if (serverName.length() == 0 || vm.length()==0 )
-					return FormValidation.error("Please enter required values!");
+					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
 
-				if (vsphere.getVmByName(vm) == null) {
-					return FormValidation.error("Specified VM not found!");
-				}
+				if (vm.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				return FormValidation.ok("Success");
+				if (vsphere.getVmByName(vm) == null)
+					return FormValidation.error(Messages.validation_notFound("VM"));
+
+				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}

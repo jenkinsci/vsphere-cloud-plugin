@@ -74,7 +74,7 @@ public class MarkVM extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
+		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean changed = false;
 
 		try {
@@ -159,7 +159,7 @@ public class MarkVM extends Builder {
 		public FormValidation doCheckTemplate(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the Template name");
+				return FormValidation.error(Messages.validation_required("the Template name"));
 			return FormValidation.ok();
 		}
 
@@ -168,20 +168,21 @@ public class MarkVM extends Builder {
 			try {
 
 				if (serverName.length() == 0 || template.length() == 0)
-					return FormValidation.error("Please enter required values!");
+					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+
+				if (template.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("Template"));
+
 				VirtualMachine vm = vsphere.getVmByName(template);         
+				if (vm == null)
+					return FormValidation.error(Messages.validation_notFound("template"));
 
-				if (vm == null) {
-					return FormValidation.error("Specified template not found!");
-				}
+				if(!vm.getConfig().template)
+					return FormValidation.error(Messages.validation_alreadySet("template", "VM"));
 
-				if(!vm.getConfig().template){
-					return FormValidation.error("Specified template is already a VM!");
-				}
-
-				return FormValidation.ok("Success");
+				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}

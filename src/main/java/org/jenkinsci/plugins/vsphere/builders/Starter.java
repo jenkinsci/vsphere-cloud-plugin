@@ -89,7 +89,7 @@ public class Starter extends Builder{
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
+		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean success=false;
 
 		try{
@@ -197,7 +197,7 @@ public class Starter extends Builder{
 		public FormValidation doCheckClone(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the clone name");
+				return FormValidation.error(Messages.validation_required("the clone name"));
 			return FormValidation.ok();
 		}
 
@@ -206,31 +206,29 @@ public class Starter extends Builder{
 			try {
 
 				if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
-					return FormValidation.error("Please enter required values!");
+					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-				VirtualMachine vm = vsphere.getVmByName(template);         
-
-				if (vm == null) {
-					return FormValidation.error("Specified template not found!");
-				}
-
-				if(!vm.getConfig().template){
-					return FormValidation.error("Specified template is not actually a template!");
-				}
-
-				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
-
-				if (snap == null)
-					return FormValidation.error("No snapshots found for specified template!");
 
 				VirtualMachine cloneVM = vsphere.getVmByName(clone);
-				if (cloneVM != null) {
-					return FormValidation.error("Specified clone already exists!");
-				}
+				if (cloneVM != null)
+					return FormValidation.error(Messages.validation_exists("clone"));
+				
+				if (template.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
+				VirtualMachine vm = vsphere.getVmByName(template);      
+				if (vm == null)
+					return FormValidation.error(Messages.validation_notFound("template"));
 
-				return FormValidation.ok("Success");
+				if(!vm.getConfig().template)
+					return FormValidation.error(Messages.validation_notActually("template"));
+
+				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
+				if (snap == null)
+					return FormValidation.error(Messages.validation_noSnapshots());
+
+				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}
