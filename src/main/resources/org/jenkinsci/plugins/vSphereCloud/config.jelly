@@ -1,26 +1,26 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <f:entry title="${%vSphere Host}" help="/plugin/vsphere-cloud/vsHost.html">
-        <f:textbox field="vsHost" />
+    <f:entry title="${%vSphere Host}" field="vsHost">
+        <f:textbox />
     </f:entry>
-    <f:entry title="${%Name to use for this vSphere Cloud}" help="/plugin/vsphere-cloud/vsDescription.html">
-        <f:textbox field="vsDescription" />
+    <f:entry title="${%Name to use for this vSphere Cloud}" field="vsDescription">
+        <f:textbox />
     </f:entry>
-    <f:entry title="${%Username}" help="/plugin/vsphere-cloud/username.html">
-        <f:textbox field="username" />
+    <f:entry title="${%Username}" field="username">
+        <f:textbox />
     </f:entry>
-    <f:entry title="${%Password}" help="/plugin/vsphere-cloud/password.html">
-        <f:password field="password" />
+    <f:entry title="${%Password}" field="password">
+        <f:password />
     </f:entry>
  
     <f:advanced>
-        <f:entry title="${%Max number of slaves online}" help="/plugin/vsphere-cloud/maxOnlineSlaves.html">
-            <f:textbox clazz="required number" field="maxOnlineSlaves" />
+        <f:entry title="${%Max number of slaves online}" field="maxOnlineSlaves">
+            <f:textbox clazz="required number" />
         </f:entry>
-        <f:entry title="${%Resource Pool}" help="/plugin/vsphere-cloud/help-ResourcePool.html">
-            <f:textbox field="resourcePool" />
+        <f:entry title="${%Resource Pool}" field="resourcePool">
+            <f:textbox />
         </f:entry>
-		<f:entry title="${%Cluster}" help="/plugin/vsphere-cloud/help-Cluster.html">
-            <f:textbox field="cluster" />
+		<f:entry title="${%Cluster}" field="cluster">
+            <f:textbox />
         </f:entry>
     </f:advanced>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>

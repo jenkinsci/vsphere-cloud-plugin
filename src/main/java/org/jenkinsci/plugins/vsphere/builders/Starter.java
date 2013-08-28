@@ -1,3 +1,17 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere.builders;
 
 import hudson.EnvVars;
@@ -75,7 +89,7 @@ public class Starter extends Builder{
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
+		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean success=false;
 
 		try{
@@ -83,7 +97,7 @@ public class Starter extends Builder{
 			//and a job is not opened, it will still try to connect
 			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			success = deployFromTemplate(build, launcher, listener);
-			
+
 		} catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
@@ -109,7 +123,7 @@ public class Starter extends Builder{
 		VirtualMachine vm = vsphere.shallowCloneVm(expandedClone, expandedTemplate, powerOn, linkedClone);
 		if(vm==null)
 			throw new VSphereException("VM is null");
-		
+
 		if(!powerOn){
 			VSphereLogger.vsLogger(jLogger, "Clone successful!");
 			return true;
@@ -132,12 +146,10 @@ public class Starter extends Builder{
 		return false;
 	}
 
-
 	@Override
 	public DescriptorImpl getDescriptor() {
 		return (DescriptorImpl )super.getDescriptor();
 	}
-
 
 	@Extension
 	public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
@@ -154,7 +166,6 @@ public class Starter extends Builder{
 			return VSphere.vSphereOutput(Messages.vm_title_Starter());
 		}
 
-
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
 			return true;
@@ -169,7 +180,7 @@ public class Starter extends Builder{
 		 *      Indicates the outcome of the validation. This is sent to the browser.
 		 */
 		public FormValidation doCheckTemplate(@QueryParameter String value)
-		throws IOException, ServletException {
+				throws IOException, ServletException {
 			if (value.length() == 0)
 				return FormValidation.error("Please enter the template name");
 			return FormValidation.ok();
@@ -184,42 +195,44 @@ public class Starter extends Builder{
 		 *      Indicates the outcome of the validation. This is sent to the browser.
 		 */
 		public FormValidation doCheckClone(@QueryParameter String value)
-		throws IOException, ServletException {
+				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the clone name");
+				return FormValidation.error(Messages.validation_required("the clone name"));
 			return FormValidation.ok();
 		}
-		
+
 		public FormValidation doTestData(@QueryParameter String serverName,
-                @QueryParameter String template, @QueryParameter String clone) {
-            try {
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-                VirtualMachine vm = vsphere.getVmByName(template);         
-                
-                if (vm == null) {
-                    return FormValidation.error("Specified template not found!");
-                }
-                
-                if(!vm.getConfig().template){
-                	return FormValidation.error("Specified template is not actually a template!");
-                }
-                
-                VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
-                
-                if (snap == null)
-                	return FormValidation.error("No snapshots found for specified template!");
-                
-                VirtualMachine cloneVM = vsphere.getVmByName(clone);
-                if (cloneVM != null) {
-                    return FormValidation.error("Specified clone already exists!");
-                }
+				@QueryParameter String template, @QueryParameter String clone) {
+			try {
 
+				if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
+					return FormValidation.error(Messages.validation_requiredValues());
 
-                return FormValidation.ok("Success");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+
+				VirtualMachine cloneVM = vsphere.getVmByName(clone);
+				if (cloneVM != null)
+					return FormValidation.error(Messages.validation_exists("clone"));
+				
+				if (template.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("VM"));
+
+				VirtualMachine vm = vsphere.getVmByName(template);      
+				if (vm == null)
+					return FormValidation.error(Messages.validation_notFound("template"));
+
+				if(!vm.getConfig().template)
+					return FormValidation.error(Messages.validation_notActually("template"));
+
+				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
+				if (snap == null)
+					return FormValidation.error(Messages.validation_noSnapshots());
+
+				return FormValidation.ok(Messages.validation_success());
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 
 		public ListBoxModel doFillServerNameItems(){
 			return VSpherePlugin.DescriptorImpl.get().doFillServerItems();

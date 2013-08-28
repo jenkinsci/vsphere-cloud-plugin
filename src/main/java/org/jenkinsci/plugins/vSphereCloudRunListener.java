@@ -4,14 +4,14 @@
  */
 package org.jenkinsci.plugins;
 
-import hudson.model.Node;
-import hudson.model.Run;
-import hudson.model.TaskListener;
-import hudson.model.listeners.RunListener;
 import hudson.Extension;
-import hudson.model.AbstractBuild;
+import hudson.model.TaskListener;
 import hudson.model.Computer;
 import hudson.model.Executor;
+import hudson.model.Node;
+import hudson.model.Run;
+import hudson.model.listeners.RunListener;
+
 import java.util.ArrayList;
 import java.util.List;
 

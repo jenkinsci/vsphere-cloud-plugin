@@ -1,3 +1,17 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere.builders;
 
 import hudson.EnvVars;
@@ -35,7 +49,7 @@ public class MarkVM extends Builder {
 	private final String serverName;
 	private final int serverHash;
 	private VSphere vsphere = null;
-	
+
 	@DataBoundConstructor
 	public MarkVM(String serverName, String template, boolean powerOn) throws VSphereException {
 		this.serverName = serverName;
@@ -60,7 +74,7 @@ public class MarkVM extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Attempting to use server configuration: " + serverName);
+		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean changed = false;
 
 		try {
@@ -77,9 +91,6 @@ public class MarkVM extends Builder {
 		return changed;
 	}
 
-	/* (non-Javadoc)
-	 * @see hudson.tasks.BuildWrapper#setUp(hudson.model.AbstractBuild, hudson.Launcher, hudson.model.BuildListener)
-	 */
 	private boolean markVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
 		VSphereLogger.vsLogger(jLogger, "Converting template to VM. Please wait ...");		
@@ -92,7 +103,7 @@ public class MarkVM extends Builder {
 		}
 
 		//TODO:  take in a comma delimited list and convert all
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
+		env.overrideAll(build.getBuildVariables()); // Add in matrix axis..
 		String expandedTemplate = env.expand(template);
 
 		VirtualMachine vm = vsphere.markAsVm(expandedTemplate);
@@ -146,32 +157,36 @@ public class MarkVM extends Builder {
 		 *      Indicates the outcome of the validation. This is sent to the browser.
 		 */
 		public FormValidation doCheckTemplate(@QueryParameter String value)
-		throws IOException, ServletException {
+				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the Template name");
+				return FormValidation.error(Messages.validation_required("the Template name"));
 			return FormValidation.ok();
 		}
-		
-		//TODO ensure variables are not null
-		public FormValidation doTestData(@QueryParameter String serverName,
-                @QueryParameter String template) {
-            try {
-                VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-                VirtualMachine vm = vsphere.getVmByName(template);         
-                
-                if (vm == null) {
-                    return FormValidation.error("Specified template not found!");
-                }
-                
-                if(!vm.getConfig().template){
-                	return FormValidation.error("Specified template is already a VM!");
-                }
 
-                return FormValidation.ok("Success");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+		public FormValidation doTestData(@QueryParameter String serverName,
+				@QueryParameter String template) {
+			try {
+
+				if (serverName.length() == 0 || template.length() == 0)
+					return FormValidation.error(Messages.validation_requiredValues());
+
+				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
+
+				if (template.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("Template"));
+
+				VirtualMachine vm = vsphere.getVmByName(template);         
+				if (vm == null)
+					return FormValidation.error(Messages.validation_notFound("template"));
+
+				if(!vm.getConfig().template)
+					return FormValidation.error(Messages.validation_alreadySet("template", "VM"));
+
+				return FormValidation.ok(Messages.validation_success());
+			} catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
