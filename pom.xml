@@ -7,12 +7,11 @@
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.2-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
     <url>https://wiki.jenkins-ci.org/display/JENKINS/vSphere+Cloud+Plugin</url>
-
     <developers>
         <developer>
             <id>jswager</id>
@@ -25,7 +24,15 @@
             <email>elordahl@vt.edu</email>
         </developer>
     </developers>
-    
+    <licenses>
+        <license>
+	    <name>The Apache Software License, Version 2.0</name>
+	    <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+	    <distribution>repo</distribution>
+	    <comments>A business-friendly OSS license</comments>
+        </license>
+     </licenses>
+ 
     <scm>
         <connection>scm:git:https://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
         <developerConnection>scm:git:https://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
