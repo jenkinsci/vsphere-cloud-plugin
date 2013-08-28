@@ -1,6 +1,0 @@
-<!--
-  This view is used to render the installed plugins page.
--->
-<div>
-  This plugin provides tools to implement "cloud" like functionality in Jenkins jobs for those using a vSphere Virtualization infrastructure.
-</div>

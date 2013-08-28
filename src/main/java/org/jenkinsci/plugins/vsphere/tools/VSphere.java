@@ -1,23 +1,32 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere.tools;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 
-import com.vmware.vim25.FileFault;
-import com.vmware.vim25.InsufficientResourcesFault;
 import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.TaskInProgress;
 import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineQuestionInfo;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
-import com.vmware.vim25.VmConfigFault;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
@@ -27,12 +36,6 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 
-
-
-/**
- * @author Eric Lordahl
- *
- */
 public class VSphere {
 	private final URL url;
 	private final String session;
@@ -68,9 +71,6 @@ public class VSphere {
 		return new VSphere(server, user, pw, cluster, resourcePool);
 	}
 
-
-
-
 	public static String vSphereOutput(String msg){
 		return (Messages.VSphereLogger_title()+": ").concat(msg);
 	}
@@ -100,13 +100,13 @@ public class VSphere {
 
 			System.out.println("with \""+ cluster + "\" and  \""+resourcePool+"\"");
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
-			
+
 			if(linkedClone){
 				rel.setDiskMoveType("createNewChildDiskBacking");
 			}else{
 				rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
 			}
-			
+
 			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster)).getMOR());
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
@@ -137,16 +137,7 @@ public class VSphere {
 	}	  
 
 	/**
-	 * @param vm
-	 * @return
-	 * @throws VmConfigFault
-	 * @throws TaskInProgress
-	 * @throws FileFault
-	 * @throws InvalidState
-	 * @throws InsufficientResourcesFault
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws InterruptedException
+	 * @param name - Name of VM to start
 	 * @throws VSphereException 
 	 */
 	public void startVm(String name) throws VSphereException {
@@ -159,17 +150,17 @@ public class VSphere {
 			Task task = vm.powerOnVM_Task(null);
 
 			for (int i=0, j=3; i<j; i++){
-				
+
 				if(task.getTaskInfo().getState()==TaskInfoState.success){
 					System.out.println("VM was powered up successfully.");
 					return;
 				}
-				
+
 				if (task.getTaskInfo().getState()==TaskInfoState.running ||
 						task.getTaskInfo().getState()==TaskInfoState.queued){
 					Thread.sleep(5000);
 				}
-				
+
 				//Check for copied/moved question
 				VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
 				if(q!=null && q.getId().equals("_vmx1")){
@@ -192,7 +183,7 @@ public class VSphere {
 				return node.getSnapshot();
 			} else {
 				VirtualMachineSnapshotTree[] childTree =
-					node.getChildSnapshotList();
+						node.getChildSnapshotList();
 				if (childTree != null) {
 					ManagedObjectReference mor = findSnapshotInTree(
 							childTree, snapName);
@@ -282,7 +273,7 @@ public class VSphere {
 				vm.markAsVirtualMachine(
 						getResourcePoolByName(resourcePool, getClusterByName(cluster)),
 						null
-				);
+						);
 			}
 			return vm;
 
@@ -383,7 +374,7 @@ public class VSphere {
 	/**
 	 * Detroys the VM in vSphere
 	 * @param vm - VM object to destroy
-	 * @throws InterruptedException 
+	 * @throws VSphereException 
 	 */
 	public void destroyVm(String name, boolean failOnNoExist) throws VSphereException{
 		try{
@@ -443,11 +434,10 @@ public class VSphere {
 			}
 		}
 		else if (isPoweredOff(vm)){
-			System.out.println("Machine in already off.");
+			System.out.println("Machine is already off.");
 			return;
 		}
 
 		throw new VSphereException("Machine could not be powered down!");
 	}
-
 }

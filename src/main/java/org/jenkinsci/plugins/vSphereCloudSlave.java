@@ -4,51 +4,41 @@
  */
 package org.jenkinsci.plugins;
 
-import com.trilead.ssh2.log.Logger;
+import hudson.AbortException;
+import hudson.Extension;
+import hudson.Functions;
+import hudson.Util;
+import hudson.model.Queue.BuildableItem;
+import hudson.model.Result;
+import hudson.model.TaskListener;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Hudson;
-import hudson.model.Queue.BuildableItem;
-import hudson.model.Slave;
-import hudson.model.TaskListener;
-import hudson.model.queue.CauseOfBlockage;
-import hudson.slaves.ComputerLauncher;
-import hudson.slaves.ComputerListener;
-import hudson.slaves.Cloud;
-import hudson.slaves.RetentionStrategy;
-import hudson.slaves.NodeProperty;
-import hudson.slaves.SlaveComputer;
-import hudson.Extension;
-import hudson.Functions;
-import hudson.AbortException;
-import hudson.util.FormValidation;
-import hudson.slaves.OfflineCause;
-
-import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.VirtualMachine;
-
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-import hudson.Util;
-import hudson.model.Messages;
-import hudson.model.Result;
 import hudson.model.Run;
-import hudson.slaves.OfflineCause;
-import java.util.List;
-import java.util.ArrayList;
-import java.io.IOException;
+import hudson.model.Slave;
+import hudson.model.queue.CauseOfBlockage;
+import hudson.slaves.Cloud;
+import hudson.slaves.ComputerListener;
+import hudson.slaves.NodeProperty;
+import hudson.slaves.ComputerLauncher;
+import hudson.slaves.RetentionStrategy;
+import hudson.slaves.SlaveComputer;
+import hudson.util.FormValidation;
 
-import java.util.Calendar;
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Hashtable;
 import java.util.Iterator;
-import java.util.ListIterator;
-import java.util.Map;
+import java.util.List;
 import java.util.Map.Entry;
+
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 /**
  *
