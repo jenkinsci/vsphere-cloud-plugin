@@ -289,17 +289,29 @@ public class VSphere {
 	 * @return - String containing IP address
 	 * @throws VSphereException 
 	 */
-	public String getIp(VirtualMachine vm) throws VSphereException {
+	public String getIp(VirtualMachine vm, int timeout) throws VSphereException {
 
 		if (vm==null)
 			throw new VSphereException("vm is null");
 
-		for(int count=0; count<VSphereConstants.IP_MAX_TRIES; ++count){
+		//Determine how many attempts will be made to fetch the IP address
+		final int waitSeconds = 5;
+		final int maxTries;
+		if (timeout<=waitSeconds) 
+			maxTries = 1;
+		else
+			maxTries = (int) Math.round((double)timeout / waitSeconds);
+
+		for(int count=0; count<maxTries; count++){
+
+			//get IP
 			if(vm.getGuest().getIpAddress()!=null){
 				return vm.getGuest().getIpAddress();
 			}
+
 			try {
-				Thread.sleep(VSphereConstants.IP_MAX_SECONDS * 1000);
+				//wait
+				Thread.sleep(waitSeconds * 1000);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}

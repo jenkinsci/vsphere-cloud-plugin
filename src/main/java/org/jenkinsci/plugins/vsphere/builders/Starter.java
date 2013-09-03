@@ -35,7 +35,6 @@ import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSpherePlugin;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
-import org.jenkinsci.plugins.vsphere.tools.VSphereConstants;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -51,17 +50,19 @@ public class Starter extends Builder{
 	private final String clone;
 	private final boolean powerOn;
 	private final boolean linkedClone;
+	private final int timeoutInSeconds;
 	private final int serverHash;
 	private VSphere vsphere = null;
 
 	@DataBoundConstructor
 	public Starter(String serverName, String template,
-			String clone, boolean powerOn, boolean linkedClone) throws VSphereException {
+			String clone, boolean powerOn, boolean linkedClone, int timeoutInSeconds) throws VSphereException {
 		this.template = template;
 		this.serverName = serverName;
 		this.clone = clone;
 		this.powerOn = powerOn;
 		this.linkedClone = linkedClone;
+		this.timeoutInSeconds = timeoutInSeconds;
 		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
@@ -83,6 +84,10 @@ public class Starter extends Builder{
 
 	public boolean isLinkedClone() {
 		return linkedClone;
+	}
+	
+	public int getTimeoutInSeconds(){
+		return timeoutInSeconds;
 	}
 
 	@Override
@@ -124,15 +129,12 @@ public class Starter extends Builder{
 		if(vm==null)
 			throw new VSphereException("VM is null");
 
-		if(!powerOn){
-			VSphereLogger.vsLogger(jLogger, "Clone successful!");
+		VSphereLogger.vsLogger(jLogger, "Clone successful!");
+		if(!powerOn)
 			return true;
-		}
 
-		//TODO: Removing hardcoding of wait time
-		VSphereLogger.vsLogger(jLogger, "Clone successful! Waiting a maximum of " +
-				VSphereConstants.IP_MAX_SECONDS * VSphereConstants.IP_MAX_TRIES +" seconds for IP.");
-		String vmIP = vsphere.getIp(vm);
+		VSphereLogger.vsLogger(jLogger, "Waiting for IP (VM may be restarted during this time)");
+		String vmIP = vsphere.getIp(vm, getTimeoutInSeconds());
 
 		if(vmIP!=null){
 			VSphereLogger.vsLogger(jLogger, "Got IP for \""+expandedClone+"\" ");
@@ -198,6 +200,20 @@ public class Starter extends Builder{
 				throws IOException, ServletException {
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the clone name"));
+			return FormValidation.ok();
+		}
+		
+		public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("Timeout"));
+			
+			if (!value.matches("\\d+"))
+				return FormValidation.error(Messages.validation_positiveInteger("Timeout"));
+			
+			if (Integer.parseInt(value)>3600)
+				return FormValidation.error(Messages.validation_maxValue(3600));
+			
 			return FormValidation.ok();
 		}
 

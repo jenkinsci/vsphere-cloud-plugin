@@ -48,13 +48,15 @@ public class MarkVM extends Builder {
 	private final boolean powerOn;
 	private final String serverName;
 	private final int serverHash;
+	private final int timeoutInSeconds;
 	private VSphere vsphere = null;
 
 	@DataBoundConstructor
-	public MarkVM(String serverName, String template, boolean powerOn) throws VSphereException {
+	public MarkVM(String serverName, String template, boolean powerOn, int timeoutInSeconds) throws VSphereException {
 		this.serverName = serverName;
 		this.powerOn = powerOn;
 		this.template = template;
+		this.timeoutInSeconds = timeoutInSeconds;
 		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
@@ -68,6 +70,10 @@ public class MarkVM extends Builder {
 
 	public boolean isPowerOn() {
 		return powerOn;
+	}
+
+	public int getTimeoutInSeconds(){
+		return timeoutInSeconds;
 	}
 
 	@Override
@@ -110,8 +116,10 @@ public class MarkVM extends Builder {
 		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
 
 		if(powerOn){
+			VSphereLogger.vsLogger(jLogger, "Waiting for IP (VM may be restarted during this time)");
+
 			vsphere.startVm(expandedTemplate);
-			String vmIP = vsphere.getIp(vm); 
+			String vmIP = vsphere.getIp(vm, getTimeoutInSeconds()); 
 			if(vmIP!=null){
 				VSphereLogger.vsLogger(jLogger, "Got IP for \""+expandedTemplate+"\" ");
 				VSphereEnvAction envAction = new VSphereEnvAction();
@@ -160,6 +168,20 @@ public class MarkVM extends Builder {
 				throws IOException, ServletException {
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the Template name"));
+			return FormValidation.ok();
+		}
+
+		public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("Timeout"));
+
+			if (!value.matches("\\d+"))
+				return FormValidation.error(Messages.validation_positiveInteger("Timeout"));
+
+			if (Integer.parseInt(value)>3600)
+				return FormValidation.error(Messages.validation_maxValue(3600));
+
 			return FormValidation.ok();
 		}
 
