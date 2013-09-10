@@ -129,7 +129,7 @@ public class Starter extends Builder{
 		if(vm==null)
 			throw new VSphereException("VM is null");
 
-		VSphereLogger.vsLogger(jLogger, "Clone successful!");
+		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 		if(!powerOn)
 			return true;
 
