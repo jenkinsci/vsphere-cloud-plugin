@@ -13,25 +13,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 -->
-
+ 
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-	<f:entry title="${%Server}" field="serverName">
-		<f:select />
-    </f:entry>	
-
-	<f:entry title="${%Template}" field="template">
+	<f:entry title="${%VM}" field="vm">
       <f:textbox  />
     </f:entry>
-
-	<f:advanced>
-		<f:entry title="${%Power On?}" field="powerOn">
-		  <f:checkbox  />
-		</f:entry>
 	
-		<f:entry title="${%Timeout}" field="timeoutInSeconds">
-		  <f:textbox default="180" />
-		</f:entry>
-	</f:advanced>
-    
-    <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template"/>
+	<f:entry title="${%Timeout}" field="timeoutInSeconds">
+	  <f:textbox default="180" />
+	</f:entry>
+	
+	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm"/>
 </j:jelly>

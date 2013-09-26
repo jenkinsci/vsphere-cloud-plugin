@@ -33,50 +33,47 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class Destroyer extends VSphereBuildStep {
+public class PowerOff extends VSphereBuildStep {
 
-	private final String vm;
-	private final boolean failOnNoExist;
+	private final String vm;    
+	private final boolean evenIfSuspended;
 
 	@DataBoundConstructor
-	public Destroyer(String vm, boolean failOnNoExist) throws VSphereException {
-		this.failOnNoExist = failOnNoExist;
+	public PowerOff( final String vm, final boolean evenIfSuspended) throws VSphereException {
 		this.vm = vm;
+		this.evenIfSuspended = evenIfSuspended;
+	}
+
+	public boolean isEvenIfSuspended() {
+		return evenIfSuspended;
 	}
 
 	public String getVm() {
 		return vm;
 	}
 
-	public boolean isFailOnNoExist(){
-		return failOnNoExist;
-	}
-
 	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
 		PrintStream jLogger = listener.getLogger();
-		boolean killed = false;
+		boolean success=false;
 
-		try {
+		try{
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
+			success = powerOff(build, launcher, listener);
 
-			if(allowDelete())
-				killed = killVm(build, launcher, listener);
-			else
-				VSphereLogger.vsLogger(jLogger, "Deletion is disabled!");
-
-		} catch (VSphereException e) {
+		} catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
-		return killed;
+		//TODO throw AbortException instead of returning value
+		return success;
+
+
 	}
 
-	private boolean killVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
-
+	private boolean powerOff(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
 		EnvVars env;
 		try {
@@ -84,47 +81,35 @@ public class Destroyer extends VSphereBuildStep {
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
+
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Destroying VM \""+expandedVm+".\" Please wait ...");
-		vsphere.destroyVm(expandedVm, failOnNoExist);
-		VSphereLogger.vsLogger(jLogger, "Destroyed!");
+		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
+		vsphere.powerDown( vsphere.getVmByName(expandedVm), evenIfSuspended );
+
+
+		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
 
 		return true;
 	}
-	
-	
+
+
 
 	@Extension
-	public static final class DestroyerDescriptor extends VSphereBuildStepDescriptor {
+	public static class PowerOffDescriptor extends VSphereBuildStepDescriptor {
 
-		public DestroyerDescriptor() {
-			load();
+		@Override
+		public String getDisplayName() {
+			return Messages.vm_title_PowerOff();
 		}
 
-		/**
-		 * Performs on-the-fly validation of the form field 'clone'.
-		 *
-		 * @param value
-		 *      This parameter receives the value that the user has typed.
-		 * @return
-		 *      Indicates the outcome of the validation. This is sent to the browser.
-		 */
 		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
 
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();
-		}
-
-		/**
-		 * This human readable name is used in the configuration screen.
-		 */
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_Destroyer();
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
@@ -134,11 +119,10 @@ public class Destroyer extends VSphereBuildStep {
 				if (serverName.length() == 0 || vm.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
-
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				if (vsphere.getVmByName(vm) == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
 

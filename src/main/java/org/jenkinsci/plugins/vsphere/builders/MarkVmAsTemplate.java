@@ -19,11 +19,7 @@ import hudson.Extension;
 import hudson.Launcher;
 import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.tasks.BuildStepDescriptor;
-import hudson.tasks.Builder;
 import hudson.util.FormValidation;
-import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -32,38 +28,28 @@ import java.util.Date;
 
 import javax.servlet.ServletException;
 
-import org.jenkinsci.plugins.vsphere.VSpherePlugin;
+import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class MarkTemplate extends Builder {
+public class MarkVmAsTemplate extends VSphereBuildStep {
 
 	private final String vm;
 	private final boolean force;
-	private final String serverName;
 	private final String description;
-	private final int serverHash;
-	private VSphere vsphere = null;
-
 
 	@DataBoundConstructor
-	public MarkTemplate(String serverName, String vm, String description, boolean force) throws VSphereException {
-		this.serverName = serverName;
+	public MarkVmAsTemplate(String vm, String description, boolean force) throws VSphereException {
 		this.force = force;
 		this.vm = vm;
 		this.description = description;
-		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getVm() {
 		return vm;
-	}
-
-	public String getServerName(){
-		return serverName;
 	}
 
 	public String getDescription(){
@@ -78,13 +64,11 @@ public class MarkTemplate extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean changed = false;
 
 		try {
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			changed = markTemplate(build, launcher, listener);
 
 		} catch (VSphereException e) {
@@ -118,16 +102,10 @@ public class MarkTemplate extends Builder {
 		return true;
 	}
 
-
-	@Override
-	public DescriptorImpl getDescriptor() {
-		return (DescriptorImpl )super.getDescriptor();
-	}
-
 	@Extension
-	public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
+	public static final class MarkTemplateDescriptor extends VSphereBuildStepDescriptor {
 
-		public DescriptorImpl() {
+		public MarkTemplateDescriptor() {
 			load();
 		}
 
@@ -136,7 +114,7 @@ public class MarkTemplate extends Builder {
 		 */
 		@Override
 		public String getDisplayName() {
-			return VSphere.vSphereOutput(Messages.vm_title_MarkTemplate());
+			return Messages.vm_title_MarkVmAsTemplate();
 		}
 
 		/**
@@ -168,11 +146,10 @@ public class MarkTemplate extends Builder {
 				if (serverName.length() == 0 || vm.length() == 0 || description.length() == 0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				if (vsphere.getVmByName(vm) == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
 
@@ -180,15 +157,6 @@ public class MarkTemplate extends Builder {
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}
-		}
-
-		@Override
-		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
-			return true;
-		}
-
-		public ListBoxModel doFillServerNameItems(){
-			return VSpherePlugin.DescriptorImpl.get().doFillServerItems();
 		}
 	}	
 }

@@ -84,7 +84,7 @@ public class VSphere {
 	 * @return - Virtual Machine object of the new VM
 	 * @throws Exception 
 	 */
-	public VirtualMachine shallowCloneVm(String cloneName, String template, boolean powerOn, boolean linkedClone) throws VSphereException {
+	public void shallowCloneVm(String cloneName, String template, boolean linkedClone) throws VSphereException {
 
 		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
 		try{
@@ -111,7 +111,6 @@ public class VSphere {
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
-			cloneSpec.setPowerOn(powerOn);
 			cloneSpec.setTemplate(false);
 
 			if(sourceVm.getCurrentSnapShot()==null){
@@ -125,8 +124,7 @@ public class VSphere {
 
 			String status = task.waitForTask();
 			if(status==TaskInfoState.success.toString()) {
-				System.out.println("VM got cloned successfully.");
-				return getVmByName(cloneName);
+				return;
 			}
 
 		}catch(Exception e){
@@ -266,7 +264,7 @@ public class VSphere {
 		throw new VSphereException("Error: Could not mark as Template. Check it's power state or select \"force.\"");
 	}
 
-	public VirtualMachine markAsVm(String name) throws VSphereException{
+	public void markAsVm(String name) throws VSphereException{
 		try{
 			VirtualMachine vm = getVmByName(name);
 			if(vm.getConfig().template){
@@ -275,8 +273,6 @@ public class VSphere {
 						null
 						);
 			}
-			return vm;
-
 		}catch(Exception e){
 			throw new VSphereException("Error: Could not convert to VM", e);
 		}
@@ -328,11 +324,14 @@ public class VSphere {
 	 * @throws MalformedURLException 
 	 * @throws VSphereException 
 	 */
-	public VirtualMachine getVmByName(String vmName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
-
-		return (VirtualMachine) new InventoryNavigator(
-				getServiceInstance().getRootFolder()).searchManagedEntity(
-						"VirtualMachine", vmName);
+	public VirtualMachine getVmByName(String vmName) throws VSphereException {
+		try {
+			return (VirtualMachine) new InventoryNavigator(
+					getServiceInstance().getRootFolder()).searchManagedEntity(
+							"VirtualMachine", vmName);
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		} 
 	}
 
 	/**
@@ -429,7 +428,7 @@ public class VSphere {
 		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
 	}
 
-	private void powerDown(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
+	public void powerDown(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
 		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
 			String status;
 			try {

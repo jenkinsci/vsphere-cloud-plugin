@@ -18,22 +18,15 @@ import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
 import hudson.model.BuildListener;
-import hudson.model.EnvironmentContributingAction;
 import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.tasks.BuildStepDescriptor;
-import hudson.tasks.Builder;
 import hudson.util.FormValidation;
-import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.HashMap;
-import java.util.Map;
 
 import javax.servlet.ServletException;
 
-import org.jenkinsci.plugins.vsphere.VSpherePlugin;
+import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
@@ -42,51 +35,28 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 
-public class MarkVM extends Builder {
+public class MarkTemplateAsVm extends VSphereBuildStep {
 
 	private final String template;
-	private final boolean powerOn;
-	private final String serverName;
-	private final int serverHash;
-	private final int timeoutInSeconds;
-	private VSphere vsphere = null;
 
 	@DataBoundConstructor
-	public MarkVM(String serverName, String template, boolean powerOn, int timeoutInSeconds) throws VSphereException {
-		this.serverName = serverName;
-		this.powerOn = powerOn;
+	public MarkTemplateAsVm(String template) throws VSphereException {
 		this.template = template;
-		this.timeoutInSeconds = timeoutInSeconds;
-		this.serverHash = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).getHash();
 	}
 
 	public String getTemplate() {
 		return template;
 	}
 
-	public String getServerName(){
-		return serverName;
-	}
-
-	public boolean isPowerOn() {
-		return powerOn;
-	}
-
-	public int getTimeoutInSeconds(){
-		return timeoutInSeconds;
-	}
-
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, Messages.console_usingServerConfig(serverName));
 		boolean changed = false;
 
 		try {
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			changed = markVm(build, launcher, listener);
 
 		} catch (VSphereException e) {
@@ -112,39 +82,16 @@ public class MarkVM extends Builder {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axis..
 		String expandedTemplate = env.expand(template);
 
-		VirtualMachine vm = vsphere.markAsVm(expandedTemplate);
+		vsphere.markAsVm(expandedTemplate);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
-
-		if(powerOn){
-			VSphereLogger.vsLogger(jLogger, "Waiting for IP (VM may be restarted during this time)");
-
-			vsphere.startVm(expandedTemplate);
-			String vmIP = vsphere.getIp(vm, getTimeoutInSeconds()); 
-			if(vmIP!=null){
-				VSphereLogger.vsLogger(jLogger, "Got IP for \""+expandedTemplate+"\" ");
-				VSphereEnvAction envAction = new VSphereEnvAction();
-				envAction.add("VSPHERE_IP", vmIP);
-				build.addAction(envAction);
-				return true;
-			}
-
-			VSphereLogger.vsLogger(jLogger, "Error: Could not get IP for \""+expandedTemplate+"\" ");
-			return false;
-		}
 
 		return true;
 	}
 
-
-	@Override
-	public DescriptorImpl getDescriptor() {
-		return (DescriptorImpl )super.getDescriptor();
-	}
-
 	@Extension
-	public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
+	public static final class MarkVMDescriptor extends VSphereBuildStepDescriptor {
 
-		public DescriptorImpl() {
+		public MarkVMDescriptor() {
 			load();
 		}
 
@@ -153,7 +100,7 @@ public class MarkVM extends Builder {
 		 */
 		@Override
 		public String getDisplayName() {
-			return VSphere.vSphereOutput(Messages.vm_title_MarkVM());
+			return Messages.vm_title_MarkTemplateAsVM();
 		}
 
 		/**
@@ -171,20 +118,6 @@ public class MarkVM extends Builder {
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("Timeout"));
-
-			if (!value.matches("\\d+"))
-				return FormValidation.error(Messages.validation_positiveInteger("Timeout"));
-
-			if (Integer.parseInt(value)>3600)
-				return FormValidation.error(Messages.validation_maxValue(3600));
-
-			return FormValidation.ok();
-		}
-
 		public FormValidation doTestData(@QueryParameter String serverName,
 				@QueryParameter String template) {
 			try {
@@ -192,11 +125,10 @@ public class MarkVM extends Builder {
 				if (serverName.length() == 0 || template.length() == 0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = VSpherePlugin.DescriptorImpl.get().getVSphereCloudByName(serverName).vSphereInstance();
-
 				if (template.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("Template"));
 
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				VirtualMachine vm = vsphere.getVmByName(template);         
 				if (vm == null)
 					return FormValidation.error(Messages.validation_notFound("template"));
@@ -209,40 +141,5 @@ public class MarkVM extends Builder {
 				throw new RuntimeException(e);
 			}
 		}
-
-		@Override
-		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
-			return true;
-		}
-
-		public ListBoxModel doFillServerNameItems(){
-			return VSpherePlugin.DescriptorImpl.get().doFillServerItems();
-		}
 	}	
-
-
-	//TODO move to own class/file
-	/**
-	 * This class is used to inject the IP value into the build environment
-	 * as a variable so that it can be used with other plugins.
-	 * 
-	 * @author Lordahl
-	 */
-	private static class VSphereEnvAction implements EnvironmentContributingAction {
-		// Decided not to record this data in build.xml, so marked transient:
-		private transient Map<String,String> data = new HashMap<String,String>();
-
-		private void add(String key, String val) {
-			if (data==null) return;
-			data.put(key, val);
-		}
-
-		public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
-			if (data!=null) env.putAll(data);
-		}
-
-		public String getIconFileName() { return null; }
-		public String getDisplayName() { return null; }
-		public String getUrlName() { return null; }
-	}
 }
