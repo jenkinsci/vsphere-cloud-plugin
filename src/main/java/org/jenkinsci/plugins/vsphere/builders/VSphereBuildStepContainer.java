@@ -14,6 +14,8 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import java.io.PrintStream;
+
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.Launcher;
@@ -36,53 +38,60 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 public class VSphereBuildStepContainer extends Builder {
 
-    private final VSphereBuildStep buildStep;
-    private final String serverName;
+	private final VSphereBuildStep buildStep;
+	private final String serverName;
 	private final int serverHash;
-	
-    @DataBoundConstructor
-    public VSphereBuildStepContainer(final VSphereBuildStep buildStep, final String serverName) throws VSphereException {
-        this.buildStep = buildStep;
-        this.serverName = serverName;
-        this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName).getHash();
-    }
 
-    public VSphereBuildStep getBuildStep() {
-        return buildStep;
-    }
+	@DataBoundConstructor
+	public VSphereBuildStepContainer(final VSphereBuildStep buildStep, final String serverName) throws VSphereException {
+		this.buildStep = buildStep;
+		this.serverName = serverName;
+		this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName).getHash();
+	}
+
+	public VSphereBuildStep getBuildStep() {
+		return buildStep;
+	}
 
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-	    try {
-	    	
-	    	VSphereLogger.vsLogger(listener.getLogger(), Messages.console_usingServerConfig(serverName));
-	    	VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
-	    	buildStep.setVsphere(vsphere);
-	    	
+		try {
+			startLogs(listener.getLogger());
+			VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
+			buildStep.setVsphere(vsphere);
+
 			return buildStep.perform(build, launcher, listener);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return false;	
 	}
-	
-    @Extension
-    public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
-    	
-        @Override
-        public String getDisplayName() {
-            return Messages.plugin_title_BuildStep();
-        }
 
-        public DescriptorExtensionList<VSphereBuildStep, VSphereBuildStepDescriptor> getBuildSteps() {
-            return VSphereBuildStep.all();
-        }
+	private void startLogs(PrintStream logger){
+		VSphereLogger.vsLogger(logger,"");
+		VSphereLogger.vsLogger(logger,
+				Messages.console_buildStepStart(buildStep.getDescriptor().getDisplayName()));
+		VSphereLogger.vsLogger(logger, 
+				Messages.console_usingServerConfig(serverName));
+	}
+
+	@Extension
+	public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
+
+		@Override
+		public String getDisplayName() {
+			return Messages.plugin_title_BuildStep();
+		}
+
+		public DescriptorExtensionList<VSphereBuildStep, VSphereBuildStepDescriptor> getBuildSteps() {
+			return VSphereBuildStep.all();
+		}
 
 		@Override
 		public boolean isApplicable(Class<? extends AbstractProject> jobType) {
 			return true;
 		}
-		
+
 		public ListBoxModel doFillServerNameItems(){
 			ListBoxModel select = new ListBoxModel();
 
@@ -94,6 +103,6 @@ public class VSphereBuildStepContainer extends Builder {
 
 			return select;
 		}
-    }
+	}
 
 }
