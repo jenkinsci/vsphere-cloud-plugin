@@ -34,42 +34,57 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
-public class MarkTemplateAsVm extends VSphereBuildStep {
+public class Deploy extends VSphereBuildStep {
 
 	private final String template;
+	private final String clone;
+	private final boolean linkedClone;
 
 	@DataBoundConstructor
-	public MarkTemplateAsVm(String template) throws VSphereException {
+	public Deploy(String template, String clone, 
+			boolean linkedClone) throws VSphereException {
 		this.template = template;
+		this.clone = clone;
+		this.linkedClone = linkedClone;
 	}
 
 	public String getTemplate() {
 		return template;
 	}
 
+	public String getClone() {
+		return clone;
+	}
+
+	public boolean isLinkedClone() {
+		return linkedClone;
+	}
+
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		boolean changed = false;
+		boolean success=false;
 
-		try {
+		try{
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-			changed = markVm(build, launcher, listener);
+			success = deployFromTemplate(build, launcher, listener);
 
-		} catch (VSphereException e) {
+		} catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
-		return changed;
+		//TODO throw AbortException instead of returning value
+		return success;
 	}
 
-	private boolean markVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Converting template to VM. Please wait ...");		
+		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
 
 		EnvVars env;
 		try {
@@ -78,20 +93,19 @@ public class MarkTemplateAsVm extends VSphereBuildStep {
 			throw new VSphereException(e);
 		}
 
-		//TODO:  take in a comma delimited list and convert all
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axis..
-		String expandedTemplate = env.expand(template);
+		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
+		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
 
-		vsphere.markAsVm(expandedTemplate);
-		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
+		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone);
+		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
 	}
 
 	@Extension
-	public static final class MarkVMDescriptor extends VSphereBuildStepDescriptor {
+	public static final class DeployDescriptor extends VSphereBuildStepDescriptor {
 
-		public MarkVMDescriptor() {
+		public DeployDescriptor() {
 			load();
 		}
 
@@ -100,7 +114,7 @@ public class MarkTemplateAsVm extends VSphereBuildStep {
 		 */
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_MarkTemplateAsVM();
+			return Messages.vm_title_Starter();
 		}
 
 		/**
@@ -114,32 +128,56 @@ public class MarkTemplateAsVm extends VSphereBuildStep {
 		public FormValidation doCheckTemplate(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the Template name"));
+				return FormValidation.error("Please enter the template name");
+			return FormValidation.ok();
+		}
+
+		/**
+		 * Performs on-the-fly validation of the form field 'clone'.
+		 *
+		 * @param value
+		 *      This parameter receives the value that the user has typed.
+		 * @return
+		 *      Indicates the outcome of the validation. This is sent to the browser.
+		 */
+		public FormValidation doCheckClone(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the clone name"));
 			return FormValidation.ok();
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String template) {
+				@QueryParameter String template, @QueryParameter String clone) {
 			try {
 
-				if (serverName.length() == 0 || template.length() == 0)
+				if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				if (template.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("Template"));
-
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
-				VirtualMachine vm = vsphere.getVmByName(template);         
+
+				VirtualMachine cloneVM = vsphere.getVmByName(clone);
+				if (cloneVM != null)
+					return FormValidation.error(Messages.validation_exists("clone"));
+
+				if (template.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("VM"));
+
+				VirtualMachine vm = vsphere.getVmByName(template);      
 				if (vm == null)
 					return FormValidation.error(Messages.validation_notFound("template"));
 
 				if(!vm.getConfig().template)
-					return FormValidation.error(Messages.validation_alreadySet("template", "VM"));
+					return FormValidation.error(Messages.validation_notActually("template"));
+
+				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
+				if (snap == null)
+					return FormValidation.error(Messages.validation_noSnapshots());
 
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}
 		}
-	}	
+	}
 }

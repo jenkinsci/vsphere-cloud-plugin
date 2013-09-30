@@ -86,7 +86,7 @@ public class PowerOff extends VSphereBuildStep {
 		String expandedVm = env.expand(vm);
 
 		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
-		vsphere.powerDown( vsphere.getVmByName(expandedVm), evenIfSuspended );
+		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended );
 
 
 		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");

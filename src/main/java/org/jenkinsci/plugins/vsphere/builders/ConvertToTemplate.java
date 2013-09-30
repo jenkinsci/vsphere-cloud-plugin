@@ -23,6 +23,8 @@ import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import javax.servlet.ServletException;
 
@@ -33,78 +35,90 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class Destroyer extends VSphereBuildStep {
+public class ConvertToTemplate extends VSphereBuildStep {
 
 	private final String vm;
-	private final boolean failOnNoExist;
+	private final boolean force;
+	private final String description;
 
 	@DataBoundConstructor
-	public Destroyer(String vm, boolean failOnNoExist) throws VSphereException {
-		this.failOnNoExist = failOnNoExist;
+	public ConvertToTemplate(String vm, String description, boolean force) throws VSphereException {
+		this.force = force;
 		this.vm = vm;
+		this.description = description;
 	}
 
 	public String getVm() {
 		return vm;
 	}
 
-	public boolean isFailOnNoExist(){
-		return failOnNoExist;
+	public String getDescription(){
+		return description;
+	}
+
+	public boolean isForce() {
+		return force;
 	}
 
 	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
 
 		PrintStream jLogger = listener.getLogger();
-		boolean killed = false;
+		boolean changed = false;
 
 		try {
 			//Need to ensure this server still exists.  If it's deleted
 			//and a job is not opened, it will still try to connect
-
-			if(allowDelete())
-				killed = killVm(build, launcher, listener);
-			else
-				VSphereLogger.vsLogger(jLogger, "Deletion is disabled!");
+			changed = convert(build, launcher, listener);
 
 		} catch (VSphereException e) {
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
-		return killed;
+		return changed;
 	}
 
-	private boolean killVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
-
+	private boolean convert(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
+		VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");	
+
 		EnvVars env;
 		try {
 			env = build.getEnvironment(listener);
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
+
+		Date date = new Date();
+		SimpleDateFormat df = new SimpleDateFormat("MMM dd, yyyy hh:mm:ss aaa");
+
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Destroying VM \""+expandedVm+".\" Please wait ...");
-		vsphere.destroyVm(expandedVm, failOnNoExist);
-		VSphereLogger.vsLogger(jLogger, "Destroyed!");
+		vsphere.markAsTemplate(expandedVm, df.format(date), env.expand(description), force);
+		VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
 
 		return true;
 	}
-	
-	
 
 	@Extension
-	public static final class DestroyerDescriptor extends VSphereBuildStepDescriptor {
+	public static final class ConvertToTemplateDescriptor extends VSphereBuildStepDescriptor {
 
-		public DestroyerDescriptor() {
+		public ConvertToTemplateDescriptor() {
 			load();
 		}
 
 		/**
-		 * Performs on-the-fly validation of the form field 'clone'.
+		 * This human readable name is used in the configuration screen.
+		 */
+		@Override
+		public String getDisplayName() {
+			return Messages.vm_title_MarkVmAsTemplate();
+		}
+
+		/**
+		 * Performs on-the-fly validation of the form field 'name'.
 		 *
 		 * @param value
 		 *      This parameter receives the value that the user has typed.
@@ -113,32 +127,29 @@ public class Destroyer extends VSphereBuildStep {
 		 */
 		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
-
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();
 		}
 
-		/**
-		 * This human readable name is used in the configuration screen.
-		 */
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_Destroyer();
+		public FormValidation doCheckDescription(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the description"));
+			return FormValidation.ok();
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String vm) {
+				@QueryParameter String vm, @QueryParameter String description) {
 			try {
 
-				if (serverName.length() == 0 || vm.length()==0 )
+				if (serverName.length() == 0 || vm.length() == 0 || description.length() == 0)
 					return FormValidation.error(Messages.validation_requiredValues());
-
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				if (vsphere.getVmByName(vm) == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
 
@@ -147,5 +158,5 @@ public class Destroyer extends VSphereBuildStep {
 				throw new RuntimeException(e);
 			}
 		}
-	}
+	}	
 }

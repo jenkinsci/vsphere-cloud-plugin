@@ -80,11 +80,10 @@ public class VSphere {
 	 * 
 	 * @param cloneName - name of VM to be created
 	 * @param template - vsphere template name to clone
-	 * @param verboseOutput - true for extra output to logs
-	 * @return - Virtual Machine object of the new VM
-	 * @throws Exception 
+	 * @param linkedClone - true if you want to re-use disk backings
+	 * @throws VSphereException 
 	 */
-	public void shallowCloneVm(String cloneName, String template, boolean linkedClone) throws VSphereException {
+	public void cloneVm(String cloneName, String template, boolean linkedClone) throws VSphereException {
 
 		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
 		try{
@@ -113,6 +112,7 @@ public class VSphere {
 			cloneSpec.setLocation(rel);
 			cloneSpec.setTemplate(false);
 
+			//TODO add config to allow state of VM or snapshot
 			if(sourceVm.getCurrentSnapShot()==null){
 				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
 			}
@@ -252,7 +252,7 @@ public class VSphere {
 				return;
 
 			if(isPoweredOff(vm) || force){
-				powerDown(vm, force);
+				powerOffVm(vm, force);
 				takeSnapshot(vmName, snapName, desc);
 				vm.markAsTemplate();
 				return;
@@ -400,7 +400,7 @@ public class VSphere {
 			if(vm.getConfig().template)
 				throw new VSphereException("Error: Specified name represents a template, not a VM.");
 
-			powerDown(vm, true);
+			powerOffVm(vm, true);
 
 			String status = vm.destroy_Task().waitForTask();
 			if(status==Task.SUCCESS)
@@ -428,7 +428,7 @@ public class VSphere {
 		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
 	}
 
-	public void powerDown(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
+	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
 		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
 			String status;
 			try {
