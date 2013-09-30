@@ -59,15 +59,12 @@ public class Delete extends VSphereBuildStep {
 		boolean killed = false;
 
 		try {
-			//Need to ensure this server still exists.  If it's deleted
-			//and a job is not opened, it will still try to connect
-
 			if(allowDelete())
 				killed = killVm(build, launcher, listener);
 			else
 				VSphereLogger.vsLogger(jLogger, "Deletion is disabled!");
-
-		} catch (VSphereException e) {
+		} 
+		catch (VSphereException e) {
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
@@ -93,8 +90,6 @@ public class Delete extends VSphereBuildStep {
 
 		return true;
 	}
-	
-	
 
 	@Extension
 	public static final class DeleteDescriptor extends VSphereBuildStepDescriptor {
@@ -103,14 +98,6 @@ public class Delete extends VSphereBuildStep {
 			load();
 		}
 
-		/**
-		 * Performs on-the-fly validation of the form field 'clone'.
-		 *
-		 * @param value
-		 *      This parameter receives the value that the user has typed.
-		 * @return
-		 *      Indicates the outcome of the validation. This is sent to the browser.
-		 */
 		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
 
@@ -119,12 +106,9 @@ public class Delete extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
-		/**
-		 * This human readable name is used in the configuration screen.
-		 */
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_Destroyer();
+			return Messages.vm_title_Delete();
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,

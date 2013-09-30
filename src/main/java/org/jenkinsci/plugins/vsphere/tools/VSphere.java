@@ -26,6 +26,7 @@ import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineQuestionInfo;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
+import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
@@ -35,6 +36,7 @@ import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class VSphere {
 	private final URL url;
@@ -173,10 +175,10 @@ public class VSphere {
 		throw new VSphereException("VM cannot be started");
 	}
 
-	public ManagedObjectReference findSnapshotInTree(
+	private ManagedObjectReference findSnapshotInTree(
 			VirtualMachineSnapshotTree[] snapTree, String snapName) {
-		for (int i = 0; i < snapTree.length; i++) {
-			VirtualMachineSnapshotTree node = snapTree[i];
+
+		for (VirtualMachineSnapshotTree node : snapTree) {
 			if (snapName.equals(node.getName())) {
 				return node.getSnapshot();
 			} else {
@@ -194,46 +196,56 @@ public class VSphere {
 		return null;
 	}
 
-	public void revertToSnapshot(String vmName, String snapName){
+	public VirtualMachineSnapshot getSnapshotInTree(
+			VirtualMachine vm, String snapName) throws VSphereException {
+		if (vm == null || snapName == null) {
+			return null;
+		}
 
-		/*VirtualMachine vm = getVmByName(vmName);
-        VirtualMachineSnapshotInfo info = vm.getSnapshot();
-        if (info != null)
-        {
-            VirtualMachineSnapshotTree[] snapTree = 
-                    info.getRootSnapshotList();
-            if (snapTree != null) {
-                ManagedObjectReference mor = findSnapshotInTree(
-                        snapTree, snapName);
-                if (mor != null) {
-                    return new VirtualMachineSnapshot(
-                            vm.getServerConnection(), mor);
-                }
-            }
-        }
-        else
-        {
-            throw new Exception("No snapshots exist or unable to access the snapshot array");
-        }            
-        return null;
-
-
-		VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
-        if (snap == null) {
-            throw new IOException("Virtual Machine snapshot cannot be found");
-        }
-
-        vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-        Task task = snap.revertToSnapshot_Task(null);
-        if (!task.waitForTask().equals(Task.SUCCESS)) {
-            throw new IOException("Error while reverting to virtual machine snapshot");
-        }*/
+		VirtualMachineSnapshotInfo info = vm.getSnapshot();
+		if (info != null)
+		{
+			VirtualMachineSnapshotTree[] snapTree = 
+					info.getRootSnapshotList();
+			if (snapTree != null) {
+				ManagedObjectReference mor = findSnapshotInTree(
+						snapTree, snapName);
+				if (mor != null) {
+					return new VirtualMachineSnapshot(
+							vm.getServerConnection(), mor);
+				}
+			}
+		}
+		else
+		{
+			throw new VSphereException("No snapshots exist or unable to access the snapshot array");
+		}            
+		return null;
 	}
 
-	public void takeSnapshot(String name, String snapshot, String description) throws VSphereException{
+	public void revertToSnapshot(String vmName, String snapName) throws VSphereException{
+
+		VirtualMachine vm = getVmByName(vmName);
+		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
+
+		if (snap == null) {
+			throw new VSphereException("Virtual Machine snapshot cannot be found");
+		}
+
+		try{
+			Task task = snap.revertToSnapshot_Task(null);
+			if (!task.waitForTask().equals(Task.SUCCESS)) {
+				throw new VSphereException("Error while reverting to virtual machine snapshot");
+			}
+		}catch(Exception e){
+			throw new VSphereException(e);
+		}
+	}
+
+	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
 
 		try {
-			Task task = getVmByName(name).createSnapshot_Task(snapshot, description, false, false);
+			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, false);
 			if (task.waitForTask()==Task.SUCCESS) {
 				return;
 			}
@@ -244,7 +256,7 @@ public class VSphere {
 		throw new VSphereException("Could not take snapshot");
 	}
 
-	public void markAsTemplate(String vmName, String snapName, String desc, boolean force) throws VSphereException {
+	public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
 
 		try{
 			VirtualMachine vm = getVmByName(vmName);
@@ -253,7 +265,7 @@ public class VSphere {
 
 			if(isPoweredOff(vm) || force){
 				powerOffVm(vm, force);
-				takeSnapshot(vmName, snapName, desc);
+				//takeSnapshot(vmName, snapName, desc);
 				vm.markAsTemplate();
 				return;
 			}
@@ -450,5 +462,29 @@ public class VSphere {
 		}
 
 		throw new VSphereException("Machine could not be powered down!");
+	}
+
+	public void suspendVm(VirtualMachine vm) throws VSphereException{
+		if (isPoweredOn(vm)) {
+			String status;
+			try {
+				//TODO is this better?
+				//vm.shutdownGuest()
+				status = vm.suspendVM_Task().waitForTask();
+			} catch (Exception e) {
+				throw new VSphereException(e);
+			}
+
+			if(status==Task.SUCCESS) {
+				System.out.println("VM was suspended successfully.");
+				return;
+			}
+		}
+		else {
+			System.out.println("Machine not powered on.");
+			return;
+		}
+
+		throw new VSphereException("Machine could not be suspended!");
 	}
 }

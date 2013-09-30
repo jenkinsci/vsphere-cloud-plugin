@@ -33,23 +33,35 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class PowerOff extends VSphereBuildStep {
+public class TakeSnapshot extends VSphereBuildStep {
 
 	private final String vm;    
-	private final boolean evenIfSuspended;
+	private final String snapshotName;
+	private final String description;
+	private final boolean includeMemory;
 
 	@DataBoundConstructor
-	public PowerOff( final String vm, final boolean evenIfSuspended) throws VSphereException {
+	public TakeSnapshot(final String vm, final String snapshotName, final String description, final boolean memory) throws VSphereException {
 		this.vm = vm;
-		this.evenIfSuspended = evenIfSuspended;
-	}
-
-	public boolean isEvenIfSuspended() {
-		return evenIfSuspended;
+		this.snapshotName = snapshotName;
+		this.description = description;
+		this.includeMemory = memory;
 	}
 
 	public String getVm() {
 		return vm;
+	}
+
+	public String getSnapshotName() {
+		return snapshotName;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public boolean isIncludeMemory(){
+		return includeMemory;
 	}
 
 	@Override
@@ -58,7 +70,7 @@ public class PowerOff extends VSphereBuildStep {
 		boolean success=false;
 
 		try{
-			success = powerOff(build, launcher, listener);
+			success = takeSnapshot(build, launcher, listener);
 		} 
 		catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
@@ -69,7 +81,7 @@ public class PowerOff extends VSphereBuildStep {
 		return success;
 	}
 
-	private boolean powerOff(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
+	private boolean takeSnapshot(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
 		EnvVars env;
 		try {
@@ -79,22 +91,20 @@ public class PowerOff extends VSphereBuildStep {
 		}
 
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
-		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended );
-
-		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
+		VSphereLogger.vsLogger(jLogger, "Taking snapshot...");
+		vsphere.takeSnapshot(env.expand(vm), env.expand(snapshotName), env.expand(description), includeMemory);
+		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;
 	}
 
 	@Extension
-	public static class PowerOffDescriptor extends VSphereBuildStepDescriptor {
+	public static class TakeSnapshotDescriptor extends VSphereBuildStepDescriptor {
 
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_PowerOff();
+			return Messages.vm_title_TakeSnapshot();
 		}
 
 		public FormValidation doCheckVm(@QueryParameter String value)
@@ -105,17 +115,34 @@ public class PowerOff extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
+		public FormValidation doCheckSnapshotName(@QueryParameter String value)
+				throws IOException, ServletException {
+
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the snapshot name"));
+			return FormValidation.ok();
+		}
+
+		public FormValidation doCheckDescription(@QueryParameter String value)
+				throws IOException, ServletException {
+
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the Description"));
+			return FormValidation.ok();
+		}
+
 		public FormValidation doTestData(@QueryParameter String serverName,
 				@QueryParameter String vm) {
 			try {
 
-				if (serverName.length() == 0 || vm.length()==0 )
+				if (vm.length() == 0 || serverName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
+
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				if (vsphere.getVmByName(vm) == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
 
@@ -124,5 +151,6 @@ public class PowerOff extends VSphereBuildStep {
 				throw new RuntimeException(e);
 			}
 		}
+
 	}
 }

@@ -33,43 +33,34 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
-public class Deploy extends VSphereBuildStep {
+public class RevertToSnapshot extends VSphereBuildStep {
 
-	private final String template;
-	private final String clone;
-	private final boolean linkedClone;
+	private final String vm;    
+	private final String snapshotName;
 
 	@DataBoundConstructor
-	public Deploy(String template, String clone, 
-			boolean linkedClone) throws VSphereException {
-		this.template = template;
-		this.clone = clone;
-		this.linkedClone = linkedClone;
+	public RevertToSnapshot(final String vm, final String snapshotName) throws VSphereException {
+		this.vm = vm;
+		this.snapshotName = snapshotName;
 	}
 
-	public String getTemplate() {
-		return template;
+	public String getVm() {
+		return vm;
 	}
 
-	public String getClone() {
-		return clone;
-	}
-
-	public boolean isLinkedClone() {
-		return linkedClone;
+	public String getSnapshotName() {
+		return snapshotName;
 	}
 
 	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
 		PrintStream jLogger = listener.getLogger();
 		boolean success=false;
 
 		try{
-			success = deployFromTemplate(build, launcher, listener);
+			success = revertToSnapshot(build, launcher, listener);
 		} 
 		catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
@@ -80,10 +71,8 @@ public class Deploy extends VSphereBuildStep {
 		return success;
 	}
 
-	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+	private boolean revertToSnapshot(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
-
 		EnvVars env;
 		try {
 			env = build.getEnvironment(listener);
@@ -92,66 +81,62 @@ public class Deploy extends VSphereBuildStep {
 		}
 
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
+		String expandedSnap = env.expand(snapshotName);
+		String expandedVm = env.expand(vm);
 
-		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone);
-		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
+		VSphereLogger.vsLogger(jLogger, "Reverting to snapshot \""+expandedSnap+"\" for VM "+expandedVm+"...");
+		vsphere.revertToSnapshot(expandedVm, expandedSnap);
+		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;
 	}
 
 	@Extension
-	public static final class DeployDescriptor extends VSphereBuildStepDescriptor {
-
-		public DeployDescriptor() {
-			load();
-		}
+	public static class RevertToSnapshotDescriptor extends VSphereBuildStepDescriptor {
 
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_Deploy();
+			return Messages.vm_title_RevertToSnapshot();
 		}
 
-		public FormValidation doCheckTemplate(@QueryParameter String value)
+		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
+
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the template name");
+				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckClone(@QueryParameter String value)
+		public FormValidation doCheckSnapshotName(@QueryParameter String value)
 				throws IOException, ServletException {
+
 			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the clone name"));
+				return FormValidation.error(Messages.validation_required("the snapshot name"));
 			return FormValidation.ok();
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String template, @QueryParameter String clone) {
+				@QueryParameter String vm, @QueryParameter String snapshotName) {
 			try {
-				if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
+
+				if (vm.length() == 0 || serverName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 
-				//TODO what if clone name is variable?
-				VirtualMachine cloneVM = vsphere.getVmByName(clone);
-				if (cloneVM != null)
-					return FormValidation.error(Messages.validation_exists("clone"));
+				if (vm.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				if (template.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("template"));
+				if (vsphere.getVmByName(vm) == null)
+					return FormValidation.error(Messages.validation_notFound("VM"));
 
-				VirtualMachine vm = vsphere.getVmByName(template);      
-				if (vm == null)
-					return FormValidation.error(Messages.validation_notFound("template"));
+				if (snapshotName.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("Snapshot"));
 
-				if(!vm.getConfig().template)
-					return FormValidation.error(Messages.validation_notActually("template"));
-
-				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
-				if (snap == null)
-					return FormValidation.error(Messages.validation_noSnapshots());
+				VirtualMachineSnapshot snap = vsphere.getSnapshotInTree(vsphere.getVmByName(vm), snapshotName);
+				if (snap==null){
+					return FormValidation.error(Messages.validation_notFound("Snapshot"));
+				}
 
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {

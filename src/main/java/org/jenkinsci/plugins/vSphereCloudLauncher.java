@@ -139,7 +139,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                     // Revert to a snapshot - always - if one is specified.
                     if (!snapName.isEmpty()) {
-                        VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
+                        VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
                         if (snap == null) {
                             throw new IOException("Virtual Machine snapshot cannot be found");
                         }
@@ -293,7 +293,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                     if (localIdle == MACHINE_ACTION.REVERT) {
                         if (!snapName.isEmpty()) {
-                            VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
+                            VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
                             if (snap == null) {
                                 throw new IOException("Virtual Machine snapshot cannot be found");
                             }

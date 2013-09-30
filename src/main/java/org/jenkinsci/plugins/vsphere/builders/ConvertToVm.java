@@ -55,11 +55,9 @@ public class ConvertToVm extends VSphereBuildStep {
 		boolean changed = false;
 
 		try {
-			//Need to ensure this server still exists.  If it's deleted
-			//and a job is not opened, it will still try to connect
 			changed = convert(build, launcher, listener);
-
-		} catch (VSphereException e) {
+		} 
+		catch (VSphereException e) {
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
@@ -95,22 +93,11 @@ public class ConvertToVm extends VSphereBuildStep {
 			load();
 		}
 
-		/**
-		 * This human readable name is used in the configuration screen.
-		 */
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_MarkTemplateAsVM();
+			return Messages.vm_title_ConvertToVM();
 		}
 
-		/**
-		 * Performs on-the-fly validation of the form field 'name'.
-		 *
-		 * @param value
-		 *      This parameter receives the value that the user has typed.
-		 * @return
-		 *      Indicates the outcome of the validation. This is sent to the browser.
-		 */
 		public FormValidation doCheckTemplate(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)

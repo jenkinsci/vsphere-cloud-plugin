@@ -1,3 +1,17 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
 package org.jenkinsci.plugins.vsphere;
 
 import hudson.DescriptorExtensionList;
@@ -16,17 +30,13 @@ import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
 /**
- * Define a condition that can be used to decide whether to run a BuildStep or not.
- * 
- * A Run condition should not make any changes to the build or the build environment.
- * If the information that is required to make the decision is not available, then the RunCondition should
- * either explicitly throw an exception (or just allow one to be thrown) rather than handling it and trying to decide whether the build
- * should run based on bad data. This allows a user to choose what should happen - which could be different in different contexts.
+ * Define a base class for all vSphere build steps.  All vSphere build steps should extend 
+ * this class, as it contains server information required by all.
  */
 public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>, ExtensionPoint {
 
 	protected VSphere vsphere;
-	
+
 	public VSphere getVsphere() {
 		return vsphere;
 	}
@@ -52,7 +62,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 		protected VSphereBuildStepDescriptor(Class<? extends VSphereBuildStep> clazz) {
 			super(clazz);
 		}
-		
+
 		public static vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
 			if (serverName != null){
 				for (Cloud cloud : Hudson.getInstance().clouds) {
@@ -63,7 +73,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 			}
 			throw new RuntimeException(Messages.validation_instanceNotFound());
 		}
-		
+
 		public static vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
 			for (Cloud cloud : Hudson.getInstance().clouds) {
 				if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getHash()==hash ){

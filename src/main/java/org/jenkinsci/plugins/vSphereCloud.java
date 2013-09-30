@@ -214,33 +214,6 @@ public class vSphereCloud extends Cloud {
             currentOnlineSlaveCount--;
     }
 
-    public VirtualMachineSnapshot getSnapshotInTree(
-            VirtualMachine vm, String snapName) throws Exception {
-        if (vm == null || snapName == null) {
-            return null;
-        }
-
-        VirtualMachineSnapshotInfo info = vm.getSnapshot();
-        if (info != null)
-        {
-            VirtualMachineSnapshotTree[] snapTree = 
-                    info.getRootSnapshotList();
-            if (snapTree != null) {
-                ManagedObjectReference mor = vSphereInstance().findSnapshotInTree(
-                        snapTree, snapName);
-                if (mor != null) {
-                    return new VirtualMachineSnapshot(
-                            vm.getServerConnection(), mor);
-                }
-            }
-        }
-        else
-        {
-            throw new Exception("No snapshots exist or unable to access the snapshot array");
-        }            
-        return null;
-    }
-
     @Override
     public DescriptorImpl getDescriptor() {
         return (DescriptorImpl) super.getDescriptor();

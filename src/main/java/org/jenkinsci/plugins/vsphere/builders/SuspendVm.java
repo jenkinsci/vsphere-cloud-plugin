@@ -33,19 +33,13 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class PowerOff extends VSphereBuildStep {
+public class SuspendVm extends VSphereBuildStep {
 
 	private final String vm;    
-	private final boolean evenIfSuspended;
 
 	@DataBoundConstructor
-	public PowerOff( final String vm, final boolean evenIfSuspended) throws VSphereException {
+	public SuspendVm( final String vm) throws VSphereException {
 		this.vm = vm;
-		this.evenIfSuspended = evenIfSuspended;
-	}
-
-	public boolean isEvenIfSuspended() {
-		return evenIfSuspended;
 	}
 
 	public String getVm() {
@@ -58,7 +52,7 @@ public class PowerOff extends VSphereBuildStep {
 		boolean success=false;
 
 		try{
-			success = powerOff(build, launcher, listener);
+			success = suspend(build, launcher, listener);
 		} 
 		catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
@@ -69,7 +63,7 @@ public class PowerOff extends VSphereBuildStep {
 		return success;
 	}
 
-	private boolean powerOff(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
+	private boolean suspend(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
 		EnvVars env;
 		try {
@@ -81,20 +75,20 @@ public class PowerOff extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
-		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended );
+		VSphereLogger.vsLogger(jLogger, "Suspending VM...");
+		vsphere.suspendVm( vsphere.getVmByName(expandedVm));
 
-		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
+		VSphereLogger.vsLogger(jLogger, "Successfully suspended \""+expandedVm+"\"");
 
 		return true;
 	}
 
 	@Extension
-	public static class PowerOffDescriptor extends VSphereBuildStepDescriptor {
+	public static class SuspendVmDescriptor extends VSphereBuildStepDescriptor {
 
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_PowerOff();
+			return Messages.vm_title_SuspendVM();
 		}
 
 		public FormValidation doCheckVm(@QueryParameter String value)

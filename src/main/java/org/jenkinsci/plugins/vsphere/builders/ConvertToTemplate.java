@@ -39,21 +39,15 @@ public class ConvertToTemplate extends VSphereBuildStep {
 
 	private final String vm;
 	private final boolean force;
-	private final String description;
 
 	@DataBoundConstructor
-	public ConvertToTemplate(String vm, String description, boolean force) throws VSphereException {
+	public ConvertToTemplate(String vm, boolean force) throws VSphereException {
 		this.force = force;
 		this.vm = vm;
-		this.description = description;
 	}
 
 	public String getVm() {
 		return vm;
-	}
-
-	public String getDescription(){
-		return description;
 	}
 
 	public boolean isForce() {
@@ -67,11 +61,9 @@ public class ConvertToTemplate extends VSphereBuildStep {
 		boolean changed = false;
 
 		try {
-			//Need to ensure this server still exists.  If it's deleted
-			//and a job is not opened, it will still try to connect
 			changed = convert(build, launcher, listener);
-
-		} catch (VSphereException e) {
+		} 
+		catch (VSphereException e) {
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
@@ -96,7 +88,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		vsphere.markAsTemplate(expandedVm, df.format(date), env.expand(description), force);
+		vsphere.markAsTemplate(expandedVm, df.format(date), force);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
 
 		return true;
@@ -114,17 +106,9 @@ public class ConvertToTemplate extends VSphereBuildStep {
 		 */
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_MarkVmAsTemplate();
+			return Messages.vm_title_ConvertToTemplate();
 		}
 
-		/**
-		 * Performs on-the-fly validation of the form field 'name'.
-		 *
-		 * @param value
-		 *      This parameter receives the value that the user has typed.
-		 * @return
-		 *      Indicates the outcome of the validation. This is sent to the browser.
-		 */
 		public FormValidation doCheckVm(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
@@ -132,18 +116,11 @@ public class ConvertToTemplate extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckDescription(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the description"));
-			return FormValidation.ok();
-		}
-
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String vm, @QueryParameter String description) {
+				@QueryParameter String vm) {
 			try {
 
-				if (serverName.length() == 0 || vm.length() == 0 || description.length() == 0)
+				if (serverName.length() == 0 || vm.length() == 0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				if (vm.indexOf('$') >= 0)

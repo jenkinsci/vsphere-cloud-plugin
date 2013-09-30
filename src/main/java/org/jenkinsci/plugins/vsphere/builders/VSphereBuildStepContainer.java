@@ -14,8 +14,6 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import java.io.PrintStream;
-
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.Launcher;
@@ -27,6 +25,8 @@ import hudson.slaves.Cloud;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.ListBoxModel;
+
+import java.io.PrintStream;
 
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -57,6 +57,8 @@ public class VSphereBuildStepContainer extends Builder {
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
 		try {
 			startLogs(listener.getLogger());
+
+			//Need to ensure this server is same as one that was previously saved.
 			VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			buildStep.setVsphere(vsphere);
 
@@ -104,5 +106,4 @@ public class VSphereBuildStepContainer extends Builder {
 			return select;
 		}
 	}
-
 }

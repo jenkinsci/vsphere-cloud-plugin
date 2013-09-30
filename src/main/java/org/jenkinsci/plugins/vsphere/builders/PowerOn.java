@@ -55,27 +55,21 @@ public class PowerOn extends VSphereBuildStep {
 		return timeoutInSeconds;
 	}
 
-
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
 		PrintStream jLogger = listener.getLogger();
 		boolean success=false;
 
 		try{
-			//Need to ensure this server still exists.  If it's deleted
-			//and a job is not opened, it will still try to connect
-
 			success = powerOn(build, launcher, listener);
-
-		} catch(VSphereException e){
+		} 
+		catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
 			e.printStackTrace(jLogger);
 		}
 
 		//TODO throw AbortException instead of returning value
 		return success;
-
-
 	}
 
 	private boolean powerOn(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
@@ -105,8 +99,6 @@ public class PowerOn extends VSphereBuildStep {
 		build.addAction(envAction);
 		return true;
 	}
-
-
 
 	@Extension
 	public static class PowerOnDescriptor extends VSphereBuildStepDescriptor {
@@ -158,7 +150,6 @@ public class PowerOn extends VSphereBuildStep {
 				throw new RuntimeException(e);
 			}
 		}
-
 	}
 	/**
 	 * This class is used to inject the IP value into the build environment

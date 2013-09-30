@@ -379,7 +379,7 @@ public class vSphereCloudSlave extends Slave {
                 }
                 
                 if (!snapName.isEmpty()) {
-                    VirtualMachineSnapshot snap = vsC.getSnapshotInTree(vm, snapName);
+                    VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
                     if (snap == null)
                         return FormValidation.error("Virtual Machine snapshot was not found");
                 }
