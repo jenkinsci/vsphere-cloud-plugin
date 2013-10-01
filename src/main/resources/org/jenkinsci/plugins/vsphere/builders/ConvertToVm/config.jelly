@@ -18,6 +18,14 @@ limitations under the License.
 	<f:entry title="${%Template}" field="template">
       <f:textbox  />
     </f:entry>
+		
+	<f:entry title="${%Cluster}" field="cluster">
+      <f:textbox  />
+    </f:entry>
 
-    <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template"/>
+	<f:entry title="${%Resource Pool}" field="resourcePool">
+      <f:textbox  />
+    </f:entry>
+
+	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,resourcePool,cluster"/>
 </j:jelly>

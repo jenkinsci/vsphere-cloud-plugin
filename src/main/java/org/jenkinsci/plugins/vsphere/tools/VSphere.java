@@ -41,15 +41,11 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 public class VSphere {
 	private final URL url;
 	private final String session;
-	private final String resourcePool;
-	private final String cluster;
 
-	private VSphere(String url, String user, String pw, String cluster, String resourcePool) throws VSphereException{
-
-		this.resourcePool = resourcePool;
-		this.cluster = cluster;
+	private VSphere(String url, String user, String pw) throws VSphereException{
 
 		try {
+			//TODO - change ignoreCert to be configurable
 			this.url = new URL(url);
 			this.session = (new ServiceInstance(this.url, user, pw, true)).getServerConnection().getSessionStr();
 		} catch (Exception e) {
@@ -66,11 +62,7 @@ public class VSphere {
 	 * @throws VSphereException 
 	 */
 	public static VSphere connect(String server, String user, String pw) throws VSphereException {
-		return new VSphere(server, user, pw, null, null);
-	}
-
-	public static VSphere connect(String server, String user, String pw, String cluster, String resourcePool) throws VSphereException {
-		return new VSphere(server, user, pw, cluster, resourcePool);
+		return new VSphere(server, user, pw);
 	}
 
 	public static String vSphereOutput(String msg){
@@ -83,9 +75,11 @@ public class VSphere {
 	 * @param cloneName - name of VM to be created
 	 * @param template - vsphere template name to clone
 	 * @param linkedClone - true if you want to re-use disk backings
+	 * @param resourcePool - resource pool to use
+	 * @param cluser - ComputeClusterResource to use
 	 * @throws VSphereException 
 	 */
-	public void cloneVm(String cloneName, String template, boolean linkedClone) throws VSphereException {
+	public void cloneVm(String cloneName, String template, boolean linkedClone, String resourcePool, String cluster) throws VSphereException {
 
 		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
 		try{
@@ -99,7 +93,6 @@ public class VSphere {
 				throw new VSphereException("VM " + cloneName + " already exists");
 			}
 
-			System.out.println("with \""+ cluster + "\" and  \""+resourcePool+"\"");
 			VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 
 			if(linkedClone){
@@ -149,7 +142,7 @@ public class VSphere {
 
 			if(vm.getConfig().template)
 				throw new VSphereException("VM represents a template!");
-			
+
 			Task task = vm.powerOnVM_Task(null);
 
 			for (int i=0, j=3; i<j; i++){
@@ -278,7 +271,7 @@ public class VSphere {
 		throw new VSphereException("Error: Could not mark as Template. Check it's power state or select \"force.\"");
 	}
 
-	public void markAsVm(String name) throws VSphereException{
+	public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException{
 		try{
 			VirtualMachine vm = getVmByName(name);
 			if(vm.getConfig().template){
@@ -443,10 +436,10 @@ public class VSphere {
 	}
 
 	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
-		
+
 		if(vm.getConfig().template)
 			throw new VSphereException("VM represents a template!");
-		
+
 		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
 			String status;
 			try {

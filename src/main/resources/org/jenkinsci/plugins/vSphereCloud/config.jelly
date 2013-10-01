@@ -16,12 +16,6 @@
         <f:entry title="${%Max number of slaves online}" field="maxOnlineSlaves">
             <f:textbox clazz="required number" />
         </f:entry>
-        <f:entry title="${%Resource Pool}" field="resourcePool">
-            <f:textbox />
-        </f:entry>
-		<f:entry title="${%Cluster}" field="cluster">
-            <f:textbox />
-        </f:entry>
     </f:advanced>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>
 </j:jelly>

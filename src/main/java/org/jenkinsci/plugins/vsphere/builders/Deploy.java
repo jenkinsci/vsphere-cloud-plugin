@@ -41,13 +41,17 @@ public class Deploy extends VSphereBuildStep {
 	private final String template;
 	private final String clone;
 	private final boolean linkedClone;
+	private final String resourcePool;
+	private final String cluster;
 
 	@DataBoundConstructor
-	public Deploy(String template, String clone, 
-			boolean linkedClone) throws VSphereException {
+	public Deploy(String template, String clone, boolean linkedClone,
+			String resourcePool, String cluster) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
+		this.resourcePool=resourcePool;
+		this.cluster=cluster;
 	}
 
 	public String getTemplate() {
@@ -60,6 +64,14 @@ public class Deploy extends VSphereBuildStep {
 
 	public boolean isLinkedClone() {
 		return linkedClone;
+	}
+
+	public String getCluster() {
+		return cluster;
+	}
+
+	public String getResourcePool() {
+		return resourcePool;
 	}
 
 	@Override
@@ -94,7 +106,7 @@ public class Deploy extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
 
-		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone);
+		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePool, cluster);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
@@ -126,10 +138,26 @@ public class Deploy extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
+		public FormValidation doCheckResourcePool(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the resource pool"));
+			return FormValidation.ok();
+		}
+
+		public FormValidation doCheckCluster(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the cluster"));
+			return FormValidation.ok();
+		}
+
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String template, @QueryParameter String clone) {
+				@QueryParameter String template, @QueryParameter String clone,
+				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
-				if (template.length() == 0 || clone.length()==0 || serverName.length()==0)
+				if (template.length() == 0 || clone.length()==0 || serverName.length()==0
+						||resourcePool.length()==0 || cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();

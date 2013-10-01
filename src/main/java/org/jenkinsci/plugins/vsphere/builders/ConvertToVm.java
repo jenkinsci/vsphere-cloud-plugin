@@ -38,14 +38,26 @@ import com.vmware.vim25.mo.VirtualMachine;
 public class ConvertToVm extends VSphereBuildStep {
 
 	private final String template;
+	private final String resourcePool;
+	private final String cluster;
 
 	@DataBoundConstructor
-	public ConvertToVm(String template) throws VSphereException {
+	public ConvertToVm(String template, String resourcePool, String cluster) throws VSphereException {
 		this.template = template;
+		this.resourcePool = resourcePool;
+		this.cluster = cluster;
 	}
 
 	public String getTemplate() {
 		return template;
+	}
+
+	public String getCluster() {
+		return cluster;
+	}
+
+	public String getResourcePool() {
+		return resourcePool;
 	}
 
 	@Override
@@ -80,7 +92,7 @@ public class ConvertToVm extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axis..
 		String expandedTemplate = env.expand(template);
 
-		vsphere.markAsVm(expandedTemplate);
+		vsphere.markAsVm(expandedTemplate, resourcePool, cluster);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
 
 		return true;
@@ -105,11 +117,27 @@ public class ConvertToVm extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
+		public FormValidation doCheckResourcePool(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the resource pool"));
+			return FormValidation.ok();
+		}
+
+		public FormValidation doCheckCluster(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the cluster"));
+			return FormValidation.ok();
+		}
+
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String template) {
+				@QueryParameter String template, @QueryParameter String resourcePool,
+				@QueryParameter String cluster) {
 			try {
 
-				if (serverName.length() == 0 || template.length() == 0)
+				if (serverName.length() == 0 || template.length() == 0 
+						|| resourcePool.length() == 0 || cluster.length() == 0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				if (template.indexOf('$') >= 0)
