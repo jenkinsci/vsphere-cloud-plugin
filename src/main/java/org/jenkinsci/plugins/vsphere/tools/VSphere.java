@@ -147,6 +147,9 @@ public class VSphere {
 			if(isPoweredOn(vm))
 				return;
 
+			if(vm.getConfig().template)
+				throw new VSphereException("VM represents a template!");
+			
 			Task task = vm.powerOnVM_Task(null);
 
 			for (int i=0, j=3; i<j; i++){
@@ -265,7 +268,6 @@ public class VSphere {
 
 			if(isPoweredOff(vm) || force){
 				powerOffVm(vm, force);
-				//takeSnapshot(vmName, snapName, desc);
 				vm.markAsTemplate();
 				return;
 			}
@@ -441,6 +443,10 @@ public class VSphere {
 	}
 
 	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
+		
+		if(vm.getConfig().template)
+			throw new VSphereException("VM represents a template!");
+		
 		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
 			String status;
 			try {

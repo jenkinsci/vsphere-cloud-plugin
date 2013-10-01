@@ -119,7 +119,7 @@ public class RevertToSnapshot extends VSphereBuildStep {
 				@QueryParameter String vm, @QueryParameter String snapshotName) {
 			try {
 
-				if (vm.length() == 0 || serverName.length()==0)
+				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();

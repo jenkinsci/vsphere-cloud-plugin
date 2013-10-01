@@ -33,6 +33,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import com.vmware.vim25.mo.VirtualMachine;
+
 public class Delete extends VSphereBuildStep {
 
 	private final String vm;
@@ -123,9 +125,13 @@ public class Delete extends VSphereBuildStep {
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				if (vsphere.getVmByName(vm) == null)
+				VirtualMachine vmObj = vsphere.getVmByName(vm);
+				if (vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
-
+				
+				if (vmObj.getConfig().template)
+					return FormValidation.error(Messages.validation_notActually("VM"));
+				
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);

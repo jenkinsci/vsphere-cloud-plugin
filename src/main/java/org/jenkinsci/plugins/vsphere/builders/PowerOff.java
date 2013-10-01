@@ -33,6 +33,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import com.vmware.vim25.mo.VirtualMachine;
+
 public class PowerOff extends VSphereBuildStep {
 
 	private final String vm;    
@@ -116,8 +118,12 @@ public class PowerOff extends VSphereBuildStep {
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
-				if (vsphere.getVmByName(vm) == null)
+				VirtualMachine vmObj = vsphere.getVmByName(vm);
+				if ( vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
+				
+				if (vmObj.getConfig().template)
+					return FormValidation.error(Messages.validation_notActually("VM"));
 
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {

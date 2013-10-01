@@ -41,11 +41,11 @@ public class TakeSnapshot extends VSphereBuildStep {
 	private final boolean includeMemory;
 
 	@DataBoundConstructor
-	public TakeSnapshot(final String vm, final String snapshotName, final String description, final boolean memory) throws VSphereException {
+	public TakeSnapshot(final String vm, final String snapshotName, final String description, final boolean includeMemory) throws VSphereException {
 		this.vm = vm;
 		this.snapshotName = snapshotName;
 		this.description = description;
-		this.includeMemory = memory;
+		this.includeMemory = includeMemory;
 	}
 
 	public String getVm() {
@@ -132,10 +132,10 @@ public class TakeSnapshot extends VSphereBuildStep {
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String vm) {
+				@QueryParameter String vm, @QueryParameter String snapshotName) {
 			try {
 
-				if (vm.length() == 0 || serverName.length()==0)
+				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();

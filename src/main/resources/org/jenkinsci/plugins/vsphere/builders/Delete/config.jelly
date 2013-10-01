@@ -19,11 +19,9 @@ limitations under the License.
       <f:textbox  />
     </f:entry>
     
-    <f:advanced>
-    	<f:entry title="${%Fail on null?}" field="failOnNoExist">
-      		<f:checkbox  />
-    	</f:entry>
-    </f:advanced>
+   	<f:entry title="${%Fail on null?}" field="failOnNoExist">
+  	  <f:checkbox  />
+  	</f:entry>
     
-    <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm"/>
+	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm"/>
 </j:jelly>

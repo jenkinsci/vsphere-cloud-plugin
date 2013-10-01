@@ -28,7 +28,7 @@ limitations under the License.
 	</f:entry>
 	
 	<f:entry title="${%Include Memory?}" field="includeMemory">
-      		<f:checkbox  />
+      <f:checkbox  />
     </f:entry>
 	
 	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm,snapshotName"/>
