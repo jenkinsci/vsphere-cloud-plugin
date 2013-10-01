@@ -59,6 +59,7 @@ public class VSphereBuildStepContainer extends Builder {
 			startLogs(listener.getLogger());
 
 			//Need to ensure this server is same as one that was previously saved.
+			//TODO - also need to improve logging here.
 			VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			buildStep.setVsphere(vsphere);
 
@@ -97,10 +98,15 @@ public class VSphereBuildStepContainer extends Builder {
 		public ListBoxModel doFillServerNameItems(){
 			ListBoxModel select = new ListBoxModel();
 
-			for (Cloud cloud : Hudson.getInstance().clouds) {
-				if (cloud instanceof vSphereCloud ){
-					select.add( ((vSphereCloud) cloud).getVsDescription()  );
+			//adding try block to prevent page from not loading
+			try{
+				for (Cloud cloud : Hudson.getInstance().clouds) {
+					if (cloud instanceof vSphereCloud ){
+						select.add( ((vSphereCloud) cloud).getVsDescription()  );
+					}
 				}
+			}catch(Exception e){
+				e.printStackTrace();
 			}
 
 			return select;

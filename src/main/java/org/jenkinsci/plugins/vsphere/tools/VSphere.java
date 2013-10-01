@@ -126,7 +126,7 @@ public class VSphere {
 			throw new VSphereException(e);
 		}
 
-		throw new VSphereException("Error cloning \""+template+"!\" Does \""+cloneName+"\" already exist?");
+		throw new VSphereException("Couldn't clone \""+template+"!\" Does \""+cloneName+"\" already exist?");
 	}	  
 
 	/**
@@ -231,7 +231,7 @@ public class VSphere {
 		try{
 			Task task = snap.revertToSnapshot_Task(null);
 			if (!task.waitForTask().equals(Task.SUCCESS)) {
-				throw new VSphereException("Error while reverting to virtual machine snapshot");
+				throw new VSphereException("Could not revert to snapshot");
 			}
 		}catch(Exception e){
 			throw new VSphereException(e);
@@ -265,10 +265,10 @@ public class VSphere {
 				return;
 			}
 		}catch(Exception e){
-			throw new VSphereException("Error: Could not convert to Template", e);
+			throw new VSphereException("Could not convert to Template", e);
 		}
 
-		throw new VSphereException("Error: Could not mark as Template. Check it's power state or select \"force.\"");
+		throw new VSphereException("Could not mark as Template. Check it's power state or select \"force.\"");
 	}
 
 	public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException{
@@ -281,7 +281,7 @@ public class VSphere {
 						);
 			}
 		}catch(Exception e){
-			throw new VSphereException("Error: Could not convert to VM", e);
+			throw new VSphereException("Could not convert to VM", e);
 		}
 	}
 
@@ -295,7 +295,7 @@ public class VSphere {
 	public String getIp(VirtualMachine vm, int timeout) throws VSphereException {
 
 		if (vm==null)
-			throw new VSphereException("vm is null");
+			throw new VSphereException("VM is null");
 
 		//Determine how many attempts will be made to fetch the IP address
 		final int waitSeconds = 5;
@@ -405,7 +405,7 @@ public class VSphere {
 			}
 
 			if(vm.getConfig().template)
-				throw new VSphereException("Error: Specified name represents a template, not a VM.");
+				throw new VSphereException("Specified name represents a template, not a VM.");
 
 			powerOffVm(vm, true);
 
@@ -420,7 +420,7 @@ public class VSphere {
 			throw new VSphereException(e.getMessage());
 		}
 
-		throw new VSphereException("Error destroying VM");
+		throw new VSphereException("Could not delete VM!");
 	}
 
 	private boolean isSuspended(VirtualMachine vm){

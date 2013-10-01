@@ -56,7 +56,6 @@ public class SuspendVm extends VSphereBuildStep {
 		} 
 		catch(VSphereException e){
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
-			e.printStackTrace(jLogger);
 		}
 
 		//TODO throw AbortException instead of returning value

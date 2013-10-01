@@ -68,7 +68,6 @@ public class Delete extends VSphereBuildStep {
 		} 
 		catch (VSphereException e) {
 			VSphereLogger.vsLogger(jLogger, e.getMessage());
-			e.printStackTrace(jLogger);
 		}
 
 		return killed;
