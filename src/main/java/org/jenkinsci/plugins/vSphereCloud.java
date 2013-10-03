@@ -32,12 +32,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
 /**
  *
  * @author Admin
@@ -48,8 +42,6 @@ public class vSphereCloud extends Cloud {
     private final String vsDescription;
     private final String username;
     private final String password;
-	private final String resourcePool;
-	private final String cluster;
     private final int maxOnlineSlaves;    
     private transient int currentOnlineSlaveCount = 0;
     private transient Hashtable<String, String> currentOnline;
@@ -95,18 +87,15 @@ public class vSphereCloud extends Cloud {
 
     @DataBoundConstructor
     public vSphereCloud(String vsHost, String vsDescription,
-            String username, String password, String resourcePool, 
-            String cluster, int maxOnlineSlaves) {
+            String username, String password, int maxOnlineSlaves) {
         super("vSphereCloud");
         this.vsHost = vsHost;
         this.vsDescription = vsDescription;
         this.username = username;
         this.password = Scrambler.scramble(Util.fixEmptyAndTrim(password));
         this.maxOnlineSlaves = maxOnlineSlaves;
-		this.resourcePool = resourcePool;
-		this.cluster = cluster;
         
-        Log("STARTTING VSPHERE CLOUD");
+        Log("STARTING VSPHERE CLOUD");
     }
     
     protected void EnsureLists() {
@@ -133,14 +122,6 @@ public class vSphereCloud extends Cloud {
     public String getVsHost() {
         return vsHost;
     }
-    
-	public String getResourcePool(){
-		return resourcePool;
-	}
-	
-	public String getCluster(){
-		return cluster;
-	}
 	
 	public final int getHash() {
 		return new HashCodeBuilder(67, 89).
@@ -150,7 +131,7 @@ public class vSphereCloud extends Cloud {
 	}
     
     public VSphere vSphereInstance() throws VSphereException{
-    	return VSphere.connect(vsHost + "/sdk", username, getPassword(), cluster, resourcePool);
+    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
     }
     
     @Override
@@ -212,33 +193,6 @@ public class vSphereCloud extends Cloud {
         EnsureLists();
         if (currentOnline.remove(slaveName) != null)
             currentOnlineSlaveCount--;
-    }
-
-    public VirtualMachineSnapshot getSnapshotInTree(
-            VirtualMachine vm, String snapName) throws Exception {
-        if (vm == null || snapName == null) {
-            return null;
-        }
-
-        VirtualMachineSnapshotInfo info = vm.getSnapshot();
-        if (info != null)
-        {
-            VirtualMachineSnapshotTree[] snapTree = 
-                    info.getRootSnapshotList();
-            if (snapTree != null) {
-                ManagedObjectReference mor = vSphereInstance().findSnapshotInTree(
-                        snapTree, snapName);
-                if (mor != null) {
-                    return new VirtualMachineSnapshot(
-                            vm.getServerConnection(), mor);
-                }
-            }
-        }
-        else
-        {
-            throw new Exception("No snapshots exist or unable to access the snapshot array");
-        }            
-        return null;
     }
 
     @Override

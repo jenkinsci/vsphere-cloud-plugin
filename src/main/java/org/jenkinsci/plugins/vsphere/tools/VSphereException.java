@@ -18,17 +18,16 @@ public class VSphereException extends Exception {
 
 	private static final long serialVersionUID = -6133908887091288919L;
 
-
 	public VSphereException() { 
 		super(); 
 	}
 
 	public VSphereException(String message) {
-		super(message); 
+		super("vSphere Error: " + message); 
 	}
 
 	public VSphereException(String message, Throwable cause) {
-		super(message, cause); 
+		super("vSphere Error: " + message, cause); 
 	}
 
 	public VSphereException(Throwable cause) {
