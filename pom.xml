@@ -3,11 +3,11 @@
     <parent>
     <groupId>org.jenkins-ci.plugins</groupId>
     <artifactId>plugin</artifactId>
-        <version>1.509.3</version><!-- which version of Jenkins is this plugin built against? -->
+        <version>1.504</version><!-- which version of Jenkins is this plugin built against? -->
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
-    <version>1.0.3-SNAPSHOT</version>
+    <version>1.1.0-SNAPSHOT</version>
     <packaging>hpi</packaging>
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
