@@ -54,23 +54,14 @@ public class Delete extends VSphereBuildStep {
 		return failOnNoExist;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
 
-		PrintStream jLogger = listener.getLogger();
-		boolean killed = false;
+		if(allowDelete())
+			return killVm(build, launcher, listener);
+		else
+			VSphereLogger.vsLogger(listener.getLogger(), "Deletion is disabled!");
 
-		try {
-			if(allowDelete())
-				killed = killVm(build, launcher, listener);
-			else
-				VSphereLogger.vsLogger(jLogger, "Deletion is disabled!");
-		} 
-		catch (VSphereException e) {
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
-		return killed;
+		return false;
 	}
 
 	private boolean killVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
@@ -127,10 +118,10 @@ public class Delete extends VSphereBuildStep {
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if (vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
-				
+
 				if (vmObj.getConfig().template)
 					return FormValidation.error(Messages.validation_notActually("VM"));
-				
+
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);

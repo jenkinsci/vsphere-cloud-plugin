@@ -60,20 +60,8 @@ public class ConvertToVm extends VSphereBuildStep {
 		return resourcePool;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-
-		PrintStream jLogger = listener.getLogger();
-		boolean changed = false;
-
-		try {
-			changed = convert(build, launcher, listener);
-		} 
-		catch (VSphereException e) {
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
-		return changed;
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+		return convert(build, launcher, listener);
 	}
 
 	private boolean convert(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
