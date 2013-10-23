@@ -74,21 +74,9 @@ public class Deploy extends VSphereBuildStep {
 		return resourcePool;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-
-		PrintStream jLogger = listener.getLogger();
-		boolean success=false;
-
-		try{
-			success = deployFromTemplate(build, launcher, listener);
-		} 
-		catch(VSphereException e){
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+		return deployFromTemplate(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
-		return success;
 	}
 
 	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
