@@ -74,6 +74,7 @@ public class Deploy extends VSphereBuildStep {
 		return resourcePool;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return deployFromTemplate(build, launcher, listener);
 		//TODO throw AbortException instead of returning value

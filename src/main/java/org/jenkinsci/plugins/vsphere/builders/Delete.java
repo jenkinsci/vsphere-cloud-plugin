@@ -54,6 +54,7 @@ public class Delete extends VSphereBuildStep {
 		return failOnNoExist;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
 
 		if(allowDelete())

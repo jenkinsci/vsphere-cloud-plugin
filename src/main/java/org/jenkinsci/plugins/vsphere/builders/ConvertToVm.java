@@ -60,6 +60,7 @@ public class ConvertToVm extends VSphereBuildStep {
 		return resourcePool;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return convert(build, launcher, listener);
 	}

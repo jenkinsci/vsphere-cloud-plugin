@@ -54,6 +54,7 @@ public class RevertToSnapshot extends VSphereBuildStep {
 		return snapshotName;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
 		return revertToSnapshot(build, launcher, listener);
 		//TODO throw AbortException instead of returning value

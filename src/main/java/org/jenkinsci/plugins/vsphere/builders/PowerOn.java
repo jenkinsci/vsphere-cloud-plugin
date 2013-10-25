@@ -57,6 +57,7 @@ public class PowerOn extends VSphereBuildStep {
 		return timeoutInSeconds;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
 		return powerOn(build, launcher, listener);
 		//TODO throw AbortException instead of returning value

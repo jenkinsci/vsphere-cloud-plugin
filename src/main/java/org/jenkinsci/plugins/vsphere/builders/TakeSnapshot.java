@@ -64,6 +64,7 @@ public class TakeSnapshot extends VSphereBuildStep {
 		return includeMemory;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
 		return takeSnapshot(build, launcher, listener);
 		//TODO throw AbortException instead of returning value

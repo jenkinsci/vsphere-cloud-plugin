@@ -46,6 +46,7 @@ public class SuspendVm extends VSphereBuildStep {
 		return vm;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
 		return suspend(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
