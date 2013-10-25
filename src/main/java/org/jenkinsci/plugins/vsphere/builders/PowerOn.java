@@ -58,19 +58,9 @@ public class PowerOn extends VSphereBuildStep {
 	}
 
 	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-		PrintStream jLogger = listener.getLogger();
-		boolean success=false;
-
-		try{
-			success = powerOn(build, launcher, listener);
-		} 
-		catch(VSphereException e){
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
+		return powerOn(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
-		return success;
 	}
 
 	private boolean powerOn(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
@@ -146,7 +136,7 @@ public class PowerOn extends VSphereBuildStep {
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if ( vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
-				
+
 				if (vmObj.getConfig().template)
 					return FormValidation.error(Messages.validation_notActually("VM"));
 
