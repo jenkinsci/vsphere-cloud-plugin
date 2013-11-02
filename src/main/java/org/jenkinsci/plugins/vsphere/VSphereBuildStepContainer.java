@@ -17,7 +17,10 @@ package org.jenkinsci.plugins.vsphere;
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.Launcher;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
 import hudson.model.BuildListener;
+import hudson.model.Items;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Hudson;
@@ -80,6 +83,14 @@ public class VSphereBuildStepContainer extends Builder {
 
 	@Extension
 	public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
+
+		@Initializer(before=InitMilestone.PLUGINS_STARTED)
+		public static void addAliases() {
+			Items.XSTREAM2.addCompatibilityAlias(
+					"org.jenkinsci.plugins.vsphere.builders.VSphereBuildStepContainer",
+					VSphereBuildStepContainer.class
+					);
+		}
 
 		@Override
 		public String getDisplayName() {
