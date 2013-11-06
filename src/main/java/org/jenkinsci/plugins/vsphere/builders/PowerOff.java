@@ -54,20 +54,9 @@ public class PowerOff extends VSphereBuildStep {
 		return vm;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-		PrintStream jLogger = listener.getLogger();
-		boolean success=false;
-
-		try{
-			success = powerOff(build, launcher, listener);
-		} 
-		catch(VSphereException e){
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
+		return powerOff(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
-		return success;
 	}
 
 	private boolean powerOff(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
@@ -120,7 +109,7 @@ public class PowerOff extends VSphereBuildStep {
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if ( vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
-				
+
 				if (vmObj.getConfig().template)
 					return FormValidation.error(Messages.validation_notActually("VM"));
 

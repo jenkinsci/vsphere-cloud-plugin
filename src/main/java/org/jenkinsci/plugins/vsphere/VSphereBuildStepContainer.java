@@ -12,12 +12,15 @@
  *   See the License for the specific language governing permissions and
  *   limitations under the License.
  */
-package org.jenkinsci.plugins.vsphere.builders;
+package org.jenkinsci.plugins.vsphere;
 
 import hudson.DescriptorExtensionList;
 import hudson.Extension;
 import hudson.Launcher;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
 import hudson.model.BuildListener;
+import hudson.model.Items;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
 import hudson.model.Hudson;
@@ -29,8 +32,8 @@ import hudson.util.ListBoxModel;
 import java.io.PrintStream;
 
 import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep.VSphereBuildStepDescriptor;
+import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
@@ -65,7 +68,7 @@ public class VSphereBuildStepContainer extends Builder {
 
 			return buildStep.perform(build, launcher, listener);
 		} catch (Exception e) {
-			e.printStackTrace();
+			VSphereLogger.vsLogger(listener.getLogger(), e.getMessage());
 		}
 		return false;	
 	}
@@ -80,6 +83,14 @@ public class VSphereBuildStepContainer extends Builder {
 
 	@Extension
 	public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
+
+		@Initializer(before=InitMilestone.PLUGINS_STARTED)
+		public static void addAliases() {
+			Items.XSTREAM2.addCompatibilityAlias(
+					"org.jenkinsci.plugins.vsphere.builders.VSphereBuildStepContainer",
+					VSphereBuildStepContainer.class
+					);
+		}
 
 		@Override
 		public String getDisplayName() {

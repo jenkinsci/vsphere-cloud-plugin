@@ -54,20 +54,9 @@ public class RevertToSnapshot extends VSphereBuildStep {
 		return snapshotName;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-		PrintStream jLogger = listener.getLogger();
-		boolean success=false;
-
-		try{
-			success = revertToSnapshot(build, launcher, listener);
-		} 
-		catch(VSphereException e){
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
+		return revertToSnapshot(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
-		return success;
 	}
 
 	private boolean revertToSnapshot(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
