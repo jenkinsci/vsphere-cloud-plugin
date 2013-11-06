@@ -46,20 +46,9 @@ public class SuspendVm extends VSphereBuildStep {
 		return vm;
 	}
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-		PrintStream jLogger = listener.getLogger();
-		boolean success=false;
-
-		try{
-			success = suspend(build, launcher, listener);
-		} 
-		catch(VSphereException e){
-			VSphereLogger.vsLogger(jLogger, e.getMessage());
-		}
-
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
+		return suspend(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
-		return success;
 	}
 
 	private boolean suspend(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
