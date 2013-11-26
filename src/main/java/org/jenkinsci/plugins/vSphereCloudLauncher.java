@@ -217,6 +217,11 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer,
             TaskListener taskListener) {
+        if (isStarting == Boolean.TRUE) {
+            vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
+            return;
+        }
+        
         if (isDisconnecting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
             return;
