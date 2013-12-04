@@ -107,12 +107,6 @@ public class VSphere {
 			cloneSpec.setLocation(rel);
 			cloneSpec.setTemplate(false);
 
-			//TODO add config to allow state of VM or snapshot
-			if(sourceVm.getCurrentSnapShot()==null){
-				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
-			}
-			cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
-
 			Task task = sourceVm.cloneVM_Task((Folder) sourceVm.getParent(), 
 					cloneName, cloneSpec);
 			System.out.println("Cloning VM. Please wait ...");
