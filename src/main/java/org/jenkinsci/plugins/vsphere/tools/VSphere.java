@@ -302,9 +302,7 @@ public class VSphere {
 		for(int count=0; count<maxTries; count++){
 
 			//get IP
-            Object o = vm.getGuest();
-            String xxx = vm.getGuest().getIpAddress();
-  			if(vm.getGuest().getIpAddress()!=null){
+			if(vm.getGuest().getIpAddress()!=null){
 				return vm.getGuest().getIpAddress();
 			}
 
