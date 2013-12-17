@@ -237,6 +237,26 @@ public class VSphere {
 			throw new VSphereException(e);
 		}
 	}
+	
+	public void deleteSnapshot(String vmName, String snapName, boolean consolidate) throws VSphereException{
+
+		VirtualMachine vm = getVmByName(vmName);
+		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
+
+		if (snap == null) {
+			throw new VSphereException("Virtual Machine snapshot cannot be found");
+		}
+
+		try{
+			//does not delete subtree
+			Task task = snap.removeSnapshot_Task(false, consolidate);
+			if (!task.waitForTask().equals(Task.SUCCESS)) {
+				throw new VSphereException("Could not delete snapshot");
+			}
+		}catch(Exception e){
+			throw new VSphereException(e);
+		}
+	}
 
 	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
 
