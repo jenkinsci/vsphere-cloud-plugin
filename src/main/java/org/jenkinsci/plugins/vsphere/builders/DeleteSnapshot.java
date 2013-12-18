@@ -40,12 +40,14 @@ public class DeleteSnapshot extends VSphereBuildStep {
 	private final String vm;    
 	private final String snapshotName;
 	private final boolean consolidate;
+	private final boolean failOnNoExist;
 
 	@DataBoundConstructor
-	public DeleteSnapshot(final String vm, final String snapshotName, final boolean consolidate) throws VSphereException {
+	public DeleteSnapshot(final String vm, final String snapshotName, final boolean consolidate, final boolean failOnNoExist) throws VSphereException {
 		this.vm = vm;
 		this.snapshotName = snapshotName;
 		this.consolidate = consolidate;
+		this.failOnNoExist = failOnNoExist;
 	}
 
 	public String getVm() {
@@ -58,6 +60,10 @@ public class DeleteSnapshot extends VSphereBuildStep {
 
 	public boolean isConsolidate() {
 		return consolidate;
+	}
+
+	public boolean isFailOnNoExist() {
+		return failOnNoExist;
 	}
 
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
@@ -79,7 +85,7 @@ public class DeleteSnapshot extends VSphereBuildStep {
 		String expandedVm = env.expand(vm);
 
 		VSphereLogger.vsLogger(jLogger, "Deleting snapshot \""+expandedSnap+"\" of VM "+expandedVm+"...");
-		vsphere.deleteSnapshot(expandedVm, expandedSnap, consolidate);
+		vsphere.deleteSnapshot(expandedVm, expandedSnap, consolidate, failOnNoExist);
 		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;
