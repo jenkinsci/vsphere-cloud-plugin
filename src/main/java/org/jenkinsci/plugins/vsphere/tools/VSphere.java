@@ -242,16 +242,26 @@ public class VSphere {
 
 		VirtualMachine vm = getVmByName(vmName);
 		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
-
+		
 		if (snap == null) {
 			throw new VSphereException("Virtual Machine snapshot cannot be found");
 		}
 
 		try{
-			//does not delete subtree
-			Task task = snap.removeSnapshot_Task(false, consolidate);
+			//Does not delete subtree; Implicitly consolidates disk
+			Task task = snap.removeSnapshot_Task(false);
 			if (!task.waitForTask().equals(Task.SUCCESS)) {
 				throw new VSphereException("Could not delete snapshot");
+			}
+			
+			if(!consolidate)
+				return;
+			
+			//This might be redundant, but I think it consolidates all disks,
+			//where as the removeSnapshot only consolidates the individual disk
+			task = vm.consolidateVMDisks_Task();
+			if (!task.waitForTask().equals(Task.SUCCESS)) {
+				throw new VSphereException("Could not consolidate VM disks");
 			}
 		}catch(Exception e){
 			throw new VSphereException(e);

@@ -23,7 +23,7 @@ limitations under the License.
 	  <f:textbox />
 	</f:entry>
 	
-	<f:entry title="${%Consolidate}" field="consolidate">
+	<f:entry title="${%Consolidate disks?}" field="consolidate">
 	  <f:checkbox />
 	</f:entry>
 	
