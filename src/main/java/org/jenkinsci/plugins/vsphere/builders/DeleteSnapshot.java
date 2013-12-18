@@ -56,7 +56,7 @@ public class DeleteSnapshot extends VSphereBuildStep {
 		return snapshotName;
 	}
 
-	public boolean getConsolidate() {
+	public boolean isConsolidate() {
 		return consolidate;
 	}
 
