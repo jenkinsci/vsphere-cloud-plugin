@@ -193,7 +193,7 @@ public class VSphere {
 	}
 
 	public VirtualMachineSnapshot getSnapshotInTree(
-			VirtualMachine vm, String snapName) throws VSphereException {
+			VirtualMachine vm, String snapName) {
 		if (vm == null || snapName == null) {
 			return null;
 		}
@@ -212,10 +212,7 @@ public class VSphere {
 				}
 			}
 		}
-		else
-		{
-			throw new VSphereException("No snapshots exist or unable to access the snapshot array");
-		}            
+
 		return null;
 	}
 
