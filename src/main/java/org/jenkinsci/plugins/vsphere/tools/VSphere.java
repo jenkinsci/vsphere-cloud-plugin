@@ -193,7 +193,7 @@ public class VSphere {
 	}
 
 	public VirtualMachineSnapshot getSnapshotInTree(
-			VirtualMachine vm, String snapName) throws VSphereException {
+			VirtualMachine vm, String snapName) {
 		if (vm == null || snapName == null) {
 			return null;
 		}
@@ -212,10 +212,7 @@ public class VSphere {
 				}
 			}
 		}
-		else
-		{
-			throw new VSphereException("No snapshots exist or unable to access the snapshot array");
-		}            
+
 		return null;
 	}
 
@@ -232,6 +229,40 @@ public class VSphere {
 			Task task = snap.revertToSnapshot_Task(null);
 			if (!task.waitForTask().equals(Task.SUCCESS)) {
 				throw new VSphereException("Could not revert to snapshot");
+			}
+		}catch(Exception e){
+			throw new VSphereException(e);
+		}
+	}
+
+	public void deleteSnapshot(String vmName, String snapName, boolean consolidate, boolean failOnNoExist) throws VSphereException{
+
+		VirtualMachine vm = getVmByName(vmName);
+		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
+
+		if (snap == null && failOnNoExist) {
+			throw new VSphereException("Virtual Machine snapshot cannot be found");
+		}
+
+		try{
+
+			Task task;
+			if (snap!=null){
+				//Does not delete subtree; Implicitly consolidates disk
+				task = snap.removeSnapshot_Task(false);
+				if (!task.waitForTask().equals(Task.SUCCESS)) {
+					throw new VSphereException("Could not delete snapshot");
+				}
+			}
+
+			if(!consolidate)
+				return;
+
+			//This might be redundant, but I think it consolidates all disks,
+			//where as the removeSnapshot only consolidates the individual disk
+			task = vm.consolidateVMDisks_Task();
+			if (!task.waitForTask().equals(Task.SUCCESS)) {
+				throw new VSphereException("Could not consolidate VM disks");
 			}
 		}catch(Exception e){
 			throw new VSphereException(e);
