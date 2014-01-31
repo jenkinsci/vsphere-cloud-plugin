@@ -52,6 +52,10 @@ public class VSphereBuildStepContainer extends Builder {
 		this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName).getHash();
 	}
 
+	public String getServerName(){
+		return serverName;
+	}
+	
 	public VSphereBuildStep getBuildStep() {
 		return buildStep;
 	}
