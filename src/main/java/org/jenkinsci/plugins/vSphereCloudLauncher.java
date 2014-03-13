@@ -36,8 +36,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     private String vmName;
     private Boolean waitForVMTools;
     private String snapName;
-    private Boolean isStarting = Boolean.FALSE;
-    private Boolean isDisconnecting;
     private int launchDelay;
     private MACHINE_ACTION idleAction;
     private int LimitedTestRunCount = 0;
@@ -64,7 +62,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         this.vmName = vmName;
         this.waitForVMTools = waitForVMTools;
         this.snapName = snapName;
-        this.isStarting = Boolean.FALSE;
         this.launchDelay = Util.tryParseNumber(launchDelay, 60).intValue();
         if ("Shutdown".equals(idleOption)) {
             idleAction = MACHINE_ACTION.SHUTDOWN;
@@ -109,7 +106,14 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                 // Slaves that take a while to start up make get multiple launch
                 // requests from Jenkins.  
-                if (isStarting == Boolean.TRUE) {
+                if (vsSlave.isStarting == Boolean.TRUE) {
+                    vSphereCloud.Log(slaveComputer, taskListener, "Ignoring additional attempt to start the slave; it's already being started"); 
+                    return;
+                }
+                
+                // If a slave is disconnecting, don't try to start it up
+                if (vsSlave.isDisconnecting == Boolean.TRUE) {
+                    vSphereCloud.Log(slaveComputer, taskListener, "Ignoring connect attempt to start the slave; it's being shutdown"); 
                     return;
                 }
 
@@ -123,7 +127,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 //}
                     
                 vSphereCloud vsC = findOurVsInstance();
-                isStarting = Boolean.TRUE;
+                vsSlave.isStarting = Boolean.TRUE;
                 try {
                     vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
                     
@@ -202,11 +206,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         }
                     }
                 } catch (Exception e) {
+                    vSphereCloud.Log(slaveComputer, taskListener, "EXCEPTION while starting VM");
+                    vSphereCloud.Log(slaveComputer, taskListener, e.getMessage());
                     vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
                     throw new RuntimeException(e);
                 } finally {
                     vSphereCloudSlave.RemoveProbableLaunch(vsSlave);
-                    isStarting = Boolean.FALSE;                    
+                    vsSlave.isStarting = Boolean.FALSE;
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -217,12 +223,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer,
             TaskListener taskListener) {
-        if (isStarting == Boolean.TRUE) {
+        vSphereCloudSlave vsSlave = (vSphereCloudSlave)slaveComputer.getNode();
+        if (vsSlave.isStarting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
             return;
         }
         
-        if (isDisconnecting == Boolean.TRUE) {
+        if (vsSlave.isDisconnecting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
             return;
         }
@@ -232,8 +239,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
            return;
         }
             
+        vsSlave.isDisconnecting = Boolean.TRUE;
         try {
-            isDisconnecting = Boolean.TRUE;
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             delegate.afterDisconnect(slaveComputer, taskListener);
             vSphereCloud.Log(slaveComputer, taskListener, "Shutting down Virtual Machine...");
@@ -328,7 +335,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud.Log(slaveComputer, taskListener, "Printed exception");
             taskListener.fatalError(t.getMessage(), t);
         } finally {
-            isDisconnecting = Boolean.FALSE;
+            vsSlave.isDisconnecting = Boolean.FALSE;
         }
     }
 

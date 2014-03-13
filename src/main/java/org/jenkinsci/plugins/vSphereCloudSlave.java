@@ -59,6 +59,9 @@ public class vSphereCloudSlave extends Slave {
     private static Hashtable<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
     private static final Boolean ProbableLaunchLock = true;
 
+    public Boolean isStarting = Boolean.FALSE;
+    public Boolean isDisconnecting = Boolean.FALSE;
+
     @DataBoundConstructor
     public vSphereCloudSlave(String name, String nodeDescription,
             String remoteFS, String numExecutors, Mode mode,

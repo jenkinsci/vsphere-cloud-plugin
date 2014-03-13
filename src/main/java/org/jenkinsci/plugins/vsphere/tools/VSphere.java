@@ -145,7 +145,7 @@ public class VSphere {
 
 			Task task = vm.powerOnVM_Task(null);
 
-			for (int i=0, j=3; i<j; i++){
+			for (int i=0, j=12; i<j; i++){
 
 				if(task.getTaskInfo().getState()==TaskInfoState.success){
 					System.out.println("VM was powered up successfully.");
