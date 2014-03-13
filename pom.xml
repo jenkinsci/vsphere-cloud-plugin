@@ -7,7 +7,7 @@
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
-    <version>1.1.5-SNAPSHOT</version>
+    <version>1.1.5</version>
     <packaging>hpi</packaging>
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
