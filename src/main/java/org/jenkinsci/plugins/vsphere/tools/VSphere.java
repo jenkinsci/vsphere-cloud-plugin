@@ -18,16 +18,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.TaskInfoState;
-import com.vmware.vim25.VirtualMachineCloneSpec;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineQuestionInfo;
-import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
+import com.vmware.vim25.*;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
@@ -73,20 +64,18 @@ public class VSphere {
 	 * Creates a new VM from a given template with a given name.
 	 * 
 	 * @param cloneName - name of VM to be created
-	 * @param template - vsphere template name to clone
-	 * @param linkedClone - true if you want to re-use disk backings
-	 * @param resourcePool - resource pool to use
-	 * @param cluser - ComputeClusterResource to use
-	 * @throws VSphereException 
+	 * @param sourceName - name of VM or template to be cloned
+     * @param linkedClone - true if you want to re-use disk backings
+     * @param resourcePool - resource pool to use   @throws VSphereException
 	 */
-	public void cloneVm(String cloneName, String template, boolean linkedClone, String resourcePool, String cluster) throws VSphereException {
+	public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePool, String cluster) throws VSphereException {
 
-		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
+		System.out.println("Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
 		try{
-			VirtualMachine sourceVm = getVmByName(template);
+			VirtualMachine sourceVm = getVmByName(sourceName);
 
 			if(sourceVm==null) {
-				throw new VSphereException("No template " + template + " found");
+				throw new VSphereException("No VM or template " + sourceName + " found");
 			}
 
 			if(getVmByName(cloneName)!=null){
@@ -109,7 +98,7 @@ public class VSphere {
 
 			//TODO add config to allow state of VM or snapshot
 			if(sourceVm.getCurrentSnapShot()==null){
-				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
+				throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
 			}
 			cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
 
@@ -126,8 +115,27 @@ public class VSphere {
 			throw new VSphereException(e);
 		}
 
-		throw new VSphereException("Couldn't clone \""+template+"!\" Does \""+cloneName+"\" already exist?");
-	}	  
+		throw new VSphereException("Couldn't clone \""+ sourceName +"\"! Does \""+cloneName+"\" already exist?");
+	}
+
+    public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
+        VirtualMachine vm = getVmByName(name);
+
+        if(vm==null) {
+            throw new VSphereException("No VM or template " + name + " found");
+        }
+        System.out.println("Reconfiguring VM. Please wait ...");
+        try {
+            Task task = vm.reconfigVM_Task(spec);
+            String status = task.waitForTask();
+            if(status.equals(TaskInfoState.success.toString())) {
+                return;
+            }
+        } catch(Exception e){
+            throw new VSphereException("VM cannot be reconfigured:" + e.getMessage(), e);
+        }
+        throw new VSphereException("Couldn't reconfigure \""+ name +"\"!");
+    }
 
 	/**
 	 * @param name - Name of VM to start
@@ -435,10 +443,9 @@ public class VSphere {
 				return;
 			}
 
-			if(vm.getConfig().template)
-				throw new VSphereException("Specified name represents a template, not a VM.");
-
-			powerOffVm(vm, true);
+			if(!vm.getConfig().template) {
+                powerOffVm(vm, true);
+            }
 
 			String status = vm.destroy_Task().waitForTask();
 			if(status==Task.SUCCESS)
