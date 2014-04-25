@@ -374,6 +374,8 @@ public class vSphereCloudSlave extends Slave {
             List<String> options = new ArrayList<String>();
             options.add("Shutdown");
             options.add("Shutdown and Revert");
+            options.add("Revert and Restart");
+            options.add("Revert and Reset");
             options.add("Suspend");
             options.add("Reset");
             options.add("Nothing");
