@@ -18,20 +18,11 @@ import hudson.model.Hudson;
 import hudson.model.Run;
 import hudson.model.Slave;
 import hudson.model.queue.CauseOfBlockage;
-import hudson.slaves.Cloud;
-import hudson.slaves.ComputerListener;
-import hudson.slaves.NodeProperty;
-import hudson.slaves.ComputerLauncher;
-import hudson.slaves.RetentionStrategy;
-import hudson.slaves.SlaveComputer;
+import hudson.slaves.*;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Hashtable;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.Map.Entry;
 
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -201,8 +192,18 @@ public class vSphereCloudSlave extends Slave {
 
     @Override
     public CauseOfBlockage canTake(BuildableItem item) {
+        if (isDisconnecting || isStarting) {
+            return new CauseOfBlockage.BecauseNodeIsBusy(this);
+        }
+
+        CheckLimitedTestRunValues();
+        if ((LimitedTestRunCount > 0) && (NumberOfLimitedTestRuns >= LimitedTestRunCount)) {
+            return new CauseOfBlockage.BecauseNodeIsBusy(this);
+        }
+
         CauseOfBlockage b = super.canTake(item);
         if (b == null) {
+
             return b;
 
             // Normal slave handling says that this item can be handled.
@@ -247,6 +248,8 @@ public class vSphereCloudSlave extends Slave {
         }
     }
 
+    static private Hashtable<Run, Computer> RunToSlaveMapper = new Hashtable<Run, Computer>();
+    static private String tempDisable = "vSphere Plugin has temporarily off-lined this node due to limited test runs";
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
         boolean DoUpdates = false;
@@ -264,6 +267,13 @@ public class vSphereCloudSlave extends Slave {
             if (ret) {
                 NumberOfLimitedTestRuns++;
                 vSphereCloud.Log(listener, "Starting limited count build: %d", NumberOfLimitedTestRuns);
+                Computer slave = r.getExecutor().getOwner();
+                RunToSlaveMapper.put(r, slave);
+
+                // If this is the last run in a limited test run, then flag the node as offline.
+                if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
+                    r.getExecutor().getOwner().setTemporarilyOffline(true, new OfflineCause.ByCLI(tempDisable));
+                }
             } else {
                 vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
                 r.getExecutor().interrupt(Result.ABORTED);
@@ -275,15 +285,33 @@ public class vSphereCloudSlave extends Slave {
 
     public boolean EndLimitedTestRun(Run r) {
         boolean ret = true;
+
+        // See if the run maps to an existing computer; remove if found.
+        Computer slave = RunToSlaveMapper.get(r);
+        if (slave != null) {
+            RunToSlaveMapper.remove(r);
+        }
+
         CheckLimitedTestRunValues();
         if (LimitedTestRunCount > 0) {
             if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
                 ret = false;
                 NumberOfLimitedTestRuns = 0;
                 try {
-                    String Node = r.getExecutor().getOwner().getName();
-                    r.getExecutor().getOwner().getChannel().close();
-                    vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", Node);
+                    if (slave != null) {
+                        String msg = slave.getOfflineCauseReason();
+                        if (msg == tempDisable) {
+                            vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+                            slave.getChannel().close();
+                            slave.setTemporarilyOffline(false, null);
+                        }
+                        else {
+                            vSphereCloud.Log("Would disconnect slave due to reaching limited build threshold, but offline status message has been changed.");
+                        }
+                    }
+                    else {
+                        vSphereCloud.Log("Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
+                    }
                 } catch (IOException ex) {
                     vSphereCloud.Log("IO Exception thrown while attempting to disconnect the slave agent: %s", ex.getMessage());
                 } catch (NullPointerException ex) {
