@@ -12,6 +12,7 @@ import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.listeners.RunListener;
 
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -59,8 +60,6 @@ public final class vSphereCloudRunListener extends RunListener<Run> {
             }                    
         }
     }
-    
-    
 }
 
 

@@ -45,13 +45,14 @@ public class vSphereCloudSlave extends Slave {
     private final String idleOption;
     private Integer LimitedTestRunCount = 0; // If limited test runs enabled, the number of tests to limit the slave too.
     private transient Integer NumberOfLimitedTestRuns = 0;
+    public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
     // The list of slaves that MIGHT be launched.
     private static Hashtable<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
     private static final Boolean ProbableLaunchLock = true;
 
-    public Boolean isStarting = Boolean.FALSE;
-    public Boolean isDisconnecting = Boolean.FALSE;
+    public transient Boolean slaveIsStarting = Boolean.FALSE;
+    public transient Boolean slaveIsDisconnecting = Boolean.FALSE;
 
     @DataBoundConstructor
     public vSphereCloudSlave(String name, String nodeDescription,
@@ -192,12 +193,11 @@ public class vSphereCloudSlave extends Slave {
 
     @Override
     public CauseOfBlockage canTake(BuildableItem item) {
-        if (isDisconnecting || isStarting) {
+        if (slaveIsDisconnecting == Boolean.TRUE || slaveIsStarting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
 
-        CheckLimitedTestRunValues();
-        if ((LimitedTestRunCount > 0) && (NumberOfLimitedTestRuns >= LimitedTestRunCount)) {
+        if (doingLastInLimitedTestRun == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
 
@@ -249,7 +249,7 @@ public class vSphereCloudSlave extends Slave {
     }
 
     static private Hashtable<Run, Computer> RunToSlaveMapper = new Hashtable<Run, Computer>();
-    static private String tempDisable = "vSphere Plugin has temporarily off-lined this node due to limited test runs";
+
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
         boolean DoUpdates = false;
@@ -272,7 +272,7 @@ public class vSphereCloudSlave extends Slave {
 
                 // If this is the last run in a limited test run, then flag the node as offline.
                 if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                    r.getExecutor().getOwner().setTemporarilyOffline(true, new OfflineCause.ByCLI(tempDisable));
+                    doingLastInLimitedTestRun = Boolean.FALSE;
                 }
             } else {
                 vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
@@ -299,21 +299,12 @@ public class vSphereCloudSlave extends Slave {
                 NumberOfLimitedTestRuns = 0;
                 try {
                     if (slave != null) {
-                        String msg = slave.getOfflineCauseReason();
-                        if (msg == tempDisable) {
-                            vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
-                            slave.getChannel().close();
-                            slave.setTemporarilyOffline(false, null);
-                        }
-                        else {
-                            vSphereCloud.Log("Would disconnect slave due to reaching limited build threshold, but offline status message has been changed.");
-                        }
+                        vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+                        slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave due to reaching limited build threshold"));
                     }
                     else {
                         vSphereCloud.Log("Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
                     }
-                } catch (IOException ex) {
-                    vSphereCloud.Log("IO Exception thrown while attempting to disconnect the slave agent: %s", ex.getMessage());
                 } catch (NullPointerException ex) {
                     vSphereCloud.Log("NullPointerException thrown while retrieving the slave agent: %s", ex.getMessage());
                 }
@@ -323,6 +314,8 @@ public class vSphereCloudSlave extends Slave {
         }
         return ret;
     }
+
+
 
     /**
      * For UI.

@@ -114,13 +114,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                 // Slaves that take a while to start up make get multiple launch
                 // requests from Jenkins.  
-                if (vsSlave.isStarting == Boolean.TRUE) {
+                if (vsSlave.slaveIsStarting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring additional attempt to start the slave; it's already being started");
                     return;
                 }
 
                 // If a slave is disconnecting, don't try to start it up
-                if (vsSlave.isDisconnecting == Boolean.TRUE) {
+                if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring connect attempt to start the slave; it's being shutdown");
                     return;
                 }
@@ -135,7 +135,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 //}
 
                 vSphereCloud vsC = findOurVsInstance();
-                vsSlave.isStarting = Boolean.TRUE;
+                vsSlave.slaveIsStarting = Boolean.TRUE;
                 try {
                     vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
 
@@ -218,7 +218,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     throw new RuntimeException(e);
                 } finally {
                     vSphereCloudSlave.RemoveProbableLaunch(vsSlave);
-                    vsSlave.isStarting = Boolean.FALSE;
+                    vsSlave.slaveIsStarting = Boolean.FALSE;
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -231,12 +231,12 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             TaskListener taskListener) {
 
         vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
-        if (vsSlave.isStarting == Boolean.TRUE) {
+        if (vsSlave.slaveIsStarting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
             return;
         }
 
-        if (vsSlave.isDisconnecting == Boolean.TRUE) {
+        if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
             return;
         }
@@ -246,7 +246,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             return;
         }
 
-        vsSlave.isDisconnecting = Boolean.TRUE;
+        vsSlave.slaveIsDisconnecting = Boolean.TRUE;
 
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
@@ -316,7 +316,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud.Log(slaveComputer, taskListener, "Printed exception");
             taskListener.fatalError(t.getMessage(), t);
         } finally {
-            vsSlave.isDisconnecting = Boolean.FALSE;
+            vsSlave.slaveIsDisconnecting = Boolean.FALSE;
+            vsSlave.doingLastInLimitedTestRun = Boolean.FALSE;
+            vsSlave.slaveIsStarting = Boolean.FALSE;
         }
     }
 
