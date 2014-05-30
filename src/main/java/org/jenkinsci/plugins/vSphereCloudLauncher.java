@@ -274,20 +274,11 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         case REVERT_AND_RESTART:
                             shutdownVM(vm, slaveComputer, taskListener);
                             break;
-
                         case SUSPEND:
-                            vSphereCloud.Log(slaveComputer, taskListener, "Suspending the VM");
-                            Task task = vm.suspendVM_Task();
-                            if (!task.waitForTask().equals(Task.SUCCESS)) {
-                                vSphereCloud.Log(slaveComputer, taskListener, "Unable to susped the VM");
-                            }
+                            suspendVM(vm, slaveComputer, taskListener);
                             break;
                         case RESET:
-                            vSphereCloud.Log(slaveComputer, taskListener, "Resetting the VM");
-                            Task taskReset = vm.resetVM_Task();
-                            if (!taskReset.waitForTask().equals(Task.SUCCESS)) {
-                                vSphereCloud.Log(slaveComputer, taskListener, "Unable to reset the VM");
-                            }
+                            resetVM(vm, slaveComputer, taskListener);
                             break;
                     }
 
@@ -297,7 +288,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         revertVM(vm, vsC, slaveComputer, taskListener);
                         if (power == VirtualMachinePowerState.poweredOn) {
                             /* Some time is needed for the VMWare Tools to reactivate 
-                            after a revert */
+                             after a revert */
                             Thread.sleep(60000);
                             shutdownVM(vm, slaveComputer, taskListener);
                         }
@@ -453,6 +444,14 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         Task taskReset = vm.resetVM_Task();
         if (!taskReset.waitForTask().equals(Task.SUCCESS)) {
             vSphereCloud.Log(slaveComputer, taskListener, "Unable to reset the VM");
+        }
+    }
+
+    private void suspendVM(VirtualMachine vm, SlaveComputer slaveComputer, TaskListener taskListener) throws RemoteException, InterruptedException {
+        vSphereCloud.Log(slaveComputer, taskListener, "Suspending the VM");
+        Task task = vm.suspendVM_Task();
+        if (!task.waitForTask().equals(Task.SUCCESS)) {
+            vSphereCloud.Log(slaveComputer, taskListener, "Unable to susped the VM");
         }
     }
 }
