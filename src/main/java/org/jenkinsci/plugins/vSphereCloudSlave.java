@@ -301,6 +301,8 @@ public class vSphereCloudSlave extends Slave {
                     if (slave != null) {
                         vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
                         slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave due to reaching limited build threshold"));
+                        vSphereCloudLauncher vSphereLauncher = (vSphereCloudLauncher) getLauncher();
+                        vSphereLauncher.postDisconnectVSphereActions();
                     }
                     else {
                         vSphereCloud.Log("Attempting to shutdown slave due to limited build threshold, but cannot determine slave");

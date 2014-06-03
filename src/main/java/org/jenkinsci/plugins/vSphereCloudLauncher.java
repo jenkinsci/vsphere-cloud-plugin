@@ -42,6 +42,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     private MACHINE_ACTION idleAction;
     private int LimitedTestRunCount = 0;
 
+    private TaskListener postDisconnectTaskListener;
+    private SlaveComputer postDisconnectSlaveComputer;
+
     public enum MACHINE_ACTION {
 
         SHUTDOWN,
@@ -227,31 +230,32 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     }
 
     @Override
-    public synchronized void afterDisconnect(SlaveComputer slaveComputer,
-            TaskListener taskListener) {
+    public void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
+        vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
+        delegate.afterDisconnect(slaveComputer, taskListener);
+    }
 
-        vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
+    public void postDisconnectVSphereActions() {
+        vSphereCloudSlave vsSlave = (vSphereCloudSlave) postDisconnectSlaveComputer.getNode();
         if (vsSlave.slaveIsStarting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
             return;
         }
 
         if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Already disconnecting on a separate thread");
             return;
         }
 
-        if (slaveComputer.isTemporarilyOffline()) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
+        if (postDisconnectSlaveComputer.isTemporarilyOffline()) {
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Not disconnecting VM because it's not accepting tasks");
             return;
         }
 
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
 
         try {
-            vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
-            delegate.afterDisconnect(slaveComputer, taskListener);
-            vSphereCloud.Log(slaveComputer, taskListener, "Shutting down Virtual Machine...");
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Shutting down Virtual Machine...");
 
             MACHINE_ACTION localIdle = idleAction;
             if (localIdle == null) {
@@ -259,7 +263,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             }
 
             vSphereCloud vsC = findOurVsInstance();
-            vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
+            vsC.markVMOffline(postDisconnectSlaveComputer.getDisplayName(), vmName);
 
             VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
 
@@ -272,40 +276,40 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         case REVERT:
                         case REVERT_AND_RESET:
                         case REVERT_AND_RESTART:
-                            shutdownVM(vm, slaveComputer, taskListener);
+                            shutdownVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                             break;
                         case SUSPEND:
-                            suspendVM(vm, slaveComputer, taskListener);
+                            suspendVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                             break;
                         case RESET:
-                            resetVM(vm, slaveComputer, taskListener);
+                            resetVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                             break;
                     }
 
                     if (localIdle == MACHINE_ACTION.REVERT) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
+                        revertVM(vm, vsC, postDisconnectSlaveComputer, postDisconnectTaskListener);
                     } else if (localIdle == MACHINE_ACTION.REVERT_AND_RESTART) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
+                        revertVM(vm, vsC, postDisconnectSlaveComputer, postDisconnectTaskListener);
                         if (power == VirtualMachinePowerState.poweredOn) {
                             /* Some time is needed for the VMWare Tools to reactivate 
                              after a revert */
                             Thread.sleep(60000);
-                            shutdownVM(vm, slaveComputer, taskListener);
+                            shutdownVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                         }
-                        powerOnVM(vm, slaveComputer, taskListener);
+                        powerOnVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                     } else if (localIdle == MACHINE_ACTION.REVERT_AND_RESET) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
-                        resetVM(vm, slaveComputer, taskListener);
+                        revertVM(vm, vsC, postDisconnectSlaveComputer, postDisconnectTaskListener);
+                        resetVM(vm, postDisconnectSlaveComputer, postDisconnectTaskListener);
                     }
                 } else {
                     // VM is already powered down.
                 }
             }
         } catch (Throwable t) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Got an exception");
-            vSphereCloud.Log(slaveComputer, taskListener, t.toString());
-            vSphereCloud.Log(slaveComputer, taskListener, "Printed exception");
-            taskListener.fatalError(t.getMessage(), t);
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Got an exception");
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, t.toString());
+            vSphereCloud.Log(postDisconnectSlaveComputer, postDisconnectTaskListener, "Printed exception");
+            postDisconnectTaskListener.fatalError(t.getMessage(), t);
         } finally {
             vsSlave.slaveIsDisconnecting = Boolean.FALSE;
             vsSlave.doingLastInLimitedTestRun = Boolean.FALSE;
@@ -361,6 +365,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public void beforeDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         delegate.beforeDisconnect(slaveComputer, taskListener);
+
+        postDisconnectTaskListener = taskListener;
+        postDisconnectSlaveComputer = slaveComputer;
     }
 
     @Override
