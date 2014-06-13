@@ -30,6 +30,7 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import javax.servlet.ServletException;
 
 /**
  *
@@ -300,13 +301,21 @@ public class vSphereCloudSlave extends Slave {
                 try {
                     if (slave != null) {
                         vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
-                        slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave due to reaching limited build threshold"));
+                        
+                        slave.setTemporarilyOffline(true, new OfflineCause.ByCLI("vSphere Plugin marking the slave as offline due to reaching limited build threshold"));
+                        slave.waitUntilOffline();
+                        vSphereCloudLauncher vSphereLauncher = (vSphereCloudLauncher) getLauncher();
+                        vSphereLauncher.postDisconnectVSphereActions((SlaveComputer)slave, null);
+                        slave.setTemporarilyOffline(false, new OfflineCause.ByCLI("vSphere Plugin marking the slave as online after completing post-disconnect actions."));
+                        
                     }
                     else {
                         vSphereCloud.Log("Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
                     }
                 } catch (NullPointerException ex) {
                     vSphereCloud.Log("NullPointerException thrown while retrieving the slave agent: %s", ex.getMessage());
+                } catch (InterruptedException ex) {
+                    vSphereCloud.Log("InterruptedException thrown while marking the slave as online or offline: %s", ex.getMessage());
                 }
             }
         } else {
