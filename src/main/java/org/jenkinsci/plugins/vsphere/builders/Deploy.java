@@ -43,15 +43,17 @@ public class Deploy extends VSphereBuildStep {
 	private final boolean linkedClone;
 	private final String resourcePool;
 	private final String cluster;
+    private final String datastore;
 
 	@DataBoundConstructor
 	public Deploy(String template, String clone, boolean linkedClone,
-			String resourcePool, String cluster) throws VSphereException {
+			String resourcePool, String cluster, String datastore) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
+        this.datastore=datastore;
 	}
 
 	public String getTemplate() {
@@ -74,6 +76,10 @@ public class Deploy extends VSphereBuildStep {
 		return resourcePool;
 	}
 
+    public String getDatastore() {
+        return datastore;
+    }
+
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return deployFromTemplate(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
@@ -93,7 +99,7 @@ public class Deploy extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
 
-		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePool, cluster);
+		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePool, cluster, datastore);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
