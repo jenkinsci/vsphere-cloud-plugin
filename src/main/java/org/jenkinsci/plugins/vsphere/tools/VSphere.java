@@ -18,16 +18,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.TaskInfoState;
-import com.vmware.vim25.VirtualMachineCloneSpec;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineQuestionInfo;
-import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
+import com.vmware.vim25.*;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
@@ -76,7 +67,7 @@ public class VSphere {
 	 * @param template - vsphere template name to clone
 	 * @param linkedClone - true if you want to re-use disk backings
 	 * @param resourcePool - resource pool to use
-	 * @param cluser - ComputeClusterResource to use
+	 * @param cluster - ComputeClusterResource to use
 	 * @throws VSphereException 
 	 */
 	public void cloneVm(String cloneName, String template, boolean linkedClone, String resourcePool, String cluster) throws VSphereException {
@@ -291,7 +282,7 @@ public class VSphere {
 				return;
 
 			if(isPoweredOff(vm) || force){
-				powerOffVm(vm, force);
+				powerOffVm(vm, force, false);
 				vm.markAsTemplate();
 				return;
 			}
@@ -438,7 +429,7 @@ public class VSphere {
 			if(vm.getConfig().template)
 				throw new VSphereException("Specified name represents a template, not a VM.");
 
-			powerOffVm(vm, true);
+			powerOffVm(vm, true, false);
 
 			String status = vm.destroy_Task().waitForTask();
 			if(status==Task.SUCCESS)
@@ -466,24 +457,47 @@ public class VSphere {
 		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
 	}
 
-	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended) throws VSphereException{
+    public boolean vmToolIsEnabled(VirtualMachine vm) {
+        VirtualMachineToolsStatus status = vm.getGuest().toolsStatus;
+        return ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld));
+    }
+
+	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, boolean shutdownGracefully) throws VSphereException{
 
 		if(vm.getConfig().template)
 			throw new VSphereException("VM represents a template!");
 
 		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
-			String status;
+            boolean doHardShutdown = true;
+
+            String status;
 			try {
-				//TODO is this better?
-				//vm.shutdownGuest()
-				status = vm.powerOffVM_Task().waitForTask();
+                if (!isSuspended(vm) && shutdownGracefully && vmToolIsEnabled(vm)) {
+                    System.out.println("Requesting guest shutdown");
+                    vm.shutdownGuest();
+
+                    // Wait for up to 180 seconds for a shutdown - then shutdown hard.
+                    for (int i = 0; i <= 180; i++) {
+                        Thread.sleep(1000);
+                        if (isPoweredOff(vm)) {
+                            doHardShutdown = false;
+                            System.out.println("VM gracefully powered down successfully.");
+                            return;
+                        }
+                    }
+                }
+
+                if (doHardShutdown) {
+                    System.out.println("Powering off the VM");
+                    status = vm.powerOffVM_Task().waitForTask();
+
+                    if(status==Task.SUCCESS) {
+                        System.out.println("VM was powered down successfully.");
+                        return;
+                    }
+                }
 			} catch (Exception e) {
 				throw new VSphereException(e);
-			}
-
-			if(status==Task.SUCCESS) {
-				System.out.println("VM was powered down successfully.");
-				return;
 			}
 		}
 		else if (isPoweredOff(vm)){

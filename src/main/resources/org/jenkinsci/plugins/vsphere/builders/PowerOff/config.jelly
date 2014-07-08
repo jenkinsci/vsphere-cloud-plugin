@@ -22,6 +22,9 @@ limitations under the License.
 	<f:entry title="${%If suspended?}" field="evenIfSuspended">
 	    <f:checkbox  />
 	</f:entry>
-	
+	<f:entry title="${%Shutdown gracefully?}" field="shutdownGracefully">
+	    <f:checkbox  />
+	</f:entry>
+
 	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm"/>
 </j:jelly>
