@@ -4,33 +4,32 @@
  */
 package org.jenkinsci.plugins;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Functions;
 import hudson.Util;
-import hudson.model.Queue.BuildableItem;
-import hudson.model.Result;
-import hudson.model.TaskListener;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Hudson;
+import hudson.model.Queue.BuildableItem;
+import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.Slave;
+import hudson.model.TaskListener;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.slaves.*;
+import hudson.slaves.RetentionStrategy.Always;
+import hudson.slaves.RetentionStrategy.Demand;
 import hudson.util.FormValidation;
-
 import java.io.IOException;
 import java.util.*;
 import java.util.Map.Entry;
-
+import javax.servlet.ServletException;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
-
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-import javax.servlet.ServletException;
 
 /**
  *
@@ -66,11 +65,15 @@ public class vSphereCloudSlave extends Slave {
             String snapName, String launchDelay, String idleOption,
             String LimitedTestRunCount)
             throws FormException, IOException {
+        
         super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
                 new vSphereCloudLauncher(delegateLauncher, vsDescription, vmName,
                         launchSupportForced, waitForVMTools, snapName, launchDelay,
                         idleOption, LimitedTestRunCount),
                 retentionStrategy, nodeProperties);
+        
+        setVSphereRetentionStrategy(retentionStrategy);
+        
         this.vsDescription = vsDescription;
         this.vmName = vmName;
         this.snapName = snapName;
@@ -80,6 +83,18 @@ public class vSphereCloudSlave extends Slave {
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
         this.NumberOfLimitedTestRuns = 0;
     }
+    
+    private void setVSphereRetentionStrategy(RetentionStrategy retentionStrategy) {
+        if(retentionStrategy instanceof Always) {
+            retentionStrategy = new vSphereAlwaysRetentionStrategy();
+        } else if (retentionStrategy instanceof Demand) {
+            Demand demand = (Demand) retentionStrategy;
+            retentionStrategy = new vSphereDemandRetentionStrategy(demand.getInDemandDelay(), demand.getIdleDelay());
+        }
+        
+        setRetentionStrategy(retentionStrategy);
+    }
+            
 
     public String getVmName() {
         return vmName;
@@ -115,6 +130,14 @@ public class vSphereCloudSlave extends Slave {
 
     public void setLaunchSupportForced(boolean slaveLaunchesOnBootup) {
         ((vSphereCloudLauncher) getLauncher()).setOverrideLaunchSupported(slaveLaunchesOnBootup ? Boolean.TRUE : null);
+    }
+    
+    public static List<Descriptor<RetentionStrategy<?>>> getRetentionStrategyDescriptors()
+    {
+       List<Descriptor<RetentionStrategy<?>>> descriptors = new ArrayList<Descriptor<RetentionStrategy<?>>>();
+       
+       
+       return descriptors;
     }
 
     private static class ProbableLaunchData {
