@@ -131,6 +131,14 @@ public class vSphereCloudSlave extends Slave {
     public void setLaunchSupportForced(boolean slaveLaunchesOnBootup) {
         ((vSphereCloudLauncher) getLauncher()).setOverrideLaunchSupported(slaveLaunchesOnBootup ? Boolean.TRUE : null);
     }
+    
+    public static List<Descriptor<RetentionStrategy<?>>> getRetentionStrategyDescriptors()
+    {
+       List<Descriptor<RetentionStrategy<?>>> descriptors = new ArrayList<Descriptor<RetentionStrategy<?>>>();
+       
+       
+       return descriptors;
+    }
 
     private static class ProbableLaunchData {
 
