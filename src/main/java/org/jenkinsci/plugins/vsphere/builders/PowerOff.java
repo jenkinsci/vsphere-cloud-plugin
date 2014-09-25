@@ -39,16 +39,20 @@ public class PowerOff extends VSphereBuildStep {
 
 	private final String vm;    
 	private final boolean evenIfSuspended;
+    private final boolean shutdownGracefully;
 
 	@DataBoundConstructor
-	public PowerOff( final String vm, final boolean evenIfSuspended) throws VSphereException {
+	public PowerOff( final String vm, final boolean evenIfSuspended, final boolean shutdownGracefully) throws VSphereException {
 		this.vm = vm;
 		this.evenIfSuspended = evenIfSuspended;
+        this.shutdownGracefully = shutdownGracefully;
 	}
 
 	public boolean isEvenIfSuspended() {
 		return evenIfSuspended;
 	}
+
+    public boolean isShutdownGracefully() {return shutdownGracefully; }
 
 	public String getVm() {
 		return vm;
@@ -72,7 +76,7 @@ public class PowerOff extends VSphereBuildStep {
 		String expandedVm = env.expand(vm);
 
 		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
-		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended );
+		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended, shutdownGracefully);
 
 		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
 

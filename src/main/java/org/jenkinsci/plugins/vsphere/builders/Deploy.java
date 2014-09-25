@@ -99,7 +99,14 @@ public class Deploy extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
 
-		vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePool, cluster, datastore);
+        String resourcePoolName = resourcePool;
+        if (resourcePool.length() == 0) {
+            // Not all installations are using resource pools. But there is always a hidden "Resources" resource
+            // pool, even if not visible in the vSphere Client.
+            resourcePoolName = "Resources";
+        }
+
+        vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, cluster, datastore);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
@@ -133,8 +140,6 @@ public class Deploy extends VSphereBuildStep {
 
 		public FormValidation doCheckResourcePool(@QueryParameter String value)
 				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the resource pool"));
 			return FormValidation.ok();
 		}
 
@@ -150,7 +155,7 @@ public class Deploy extends VSphereBuildStep {
 				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
 				if (template.length() == 0 || clone.length()==0 || serverName.length()==0
-						||resourcePool.length()==0 || cluster.length()==0 )
+						|| cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
