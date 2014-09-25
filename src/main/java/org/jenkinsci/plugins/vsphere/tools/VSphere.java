@@ -277,7 +277,7 @@ public class VSphere {
 	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
 
 		try {
-			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, false);
+			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
 			if (task.waitForTask()==Task.SUCCESS) {
 				return;
 			}
@@ -467,6 +467,33 @@ public class VSphere {
 
 
     /**
+     * Renames a VM Snapshot
+     * @param oldName the current name of the vm
+     * @param newName the new name of the vm
+     * @param newDescription the new description of the vm
+     * @throws VSphereException
+     */
+    public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription) throws VSphereException{
+        try{
+            VirtualMachine vm = getVmByName(vmName);
+            if(vm==null){
+                throw new VSphereException("VM does not exist");
+            }
+
+            VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
+
+            snapshot.renameSnapshot(newName, newDescription);
+
+            System.out.println("VM Snapshot was renamed successfully.");
+            return;
+
+        }catch(Exception e){
+            throw new VSphereException(e.getMessage());
+        }
+    }
+
+
+    /**
      * Renames the VM vSphere
      * @param oldName the current name of the vm
      * @param newName the new name of the vm
@@ -482,7 +509,7 @@ public class VSphere {
             String status = vm.rename_Task(newName).waitForTask();
             if(status.equals(Task.SUCCESS))
             {
-                System.out.println("VM was deleted successfully.");
+                System.out.println("VM was renamed successfully.");
                 return;
             }
 
