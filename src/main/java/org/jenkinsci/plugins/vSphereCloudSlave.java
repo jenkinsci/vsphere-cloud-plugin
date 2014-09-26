@@ -304,8 +304,7 @@ public class vSphereCloudSlave extends Slave {
                         
                         slave.setTemporarilyOffline(true, new OfflineCause.ByCLI("vSphere Plugin marking the slave as offline due to reaching limited build threshold"));
                         slave.waitUntilOffline();
-                        vSphereCloudLauncher vSphereLauncher = (vSphereCloudLauncher) getLauncher();
-                        vSphereLauncher.postDisconnectVSphereActions((SlaveComputer)slave, null);
+                        slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave as offline due to reaching limited build threshold"));
                         slave.setTemporarilyOffline(false, new OfflineCause.ByCLI("vSphere Plugin marking the slave as online after completing post-disconnect actions."));
                         
                     }
