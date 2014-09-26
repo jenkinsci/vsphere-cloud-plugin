@@ -14,18 +14,14 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
+import hudson.model.BuildListener;
 import hudson.util.FormValidation;
-
-import java.io.IOException;
-import java.io.PrintStream;
-
-import javax.servlet.ServletException;
-
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -33,12 +29,13 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import javax.servlet.ServletException;
+import java.io.IOException;
+import java.io.PrintStream;
 
-public class Deploy extends VSphereBuildStep {
+public class Clone extends VSphereBuildStep {
 
-	private final String template;
+	private final String sourceName;
 	private final String clone;
 	private final boolean linkedClone;
 	private final String resourcePool;
@@ -46,9 +43,9 @@ public class Deploy extends VSphereBuildStep {
     private final String datastore;
 
 	@DataBoundConstructor
-	public Deploy(String template, String clone, boolean linkedClone,
-			String resourcePool, String cluster, String datastore) throws VSphereException {
-		this.template = template;
+	public Clone(String sourceName, String clone, boolean linkedClone,
+                 String resourcePool, String cluster, String datastore) throws VSphereException {
+		this.sourceName = sourceName;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
@@ -56,8 +53,8 @@ public class Deploy extends VSphereBuildStep {
         this.datastore=datastore;
 	}
 
-	public String getTemplate() {
-		return template;
+	public String getSourceName() {
+		return sourceName;
 	}
 
 	public String getClone() {
@@ -81,11 +78,11 @@ public class Deploy extends VSphereBuildStep {
     }
 
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
-		return deployFromTemplate(build, launcher, listener);
+		return cloneFromSource(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
 	}
 
-	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+	private boolean cloneFromSource(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
 		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
 
@@ -97,37 +94,30 @@ public class Deploy extends VSphereBuildStep {
 		}
 
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
+		String expandedClone = env.expand(clone), expandedSource = env.expand(sourceName);
 
-        String resourcePoolName = resourcePool;
-        if (resourcePool.length() == 0) {
-            // Not all installations are using resource pools. But there is always a hidden "Resources" resource
-            // pool, even if not visible in the vSphere Client.
-            resourcePoolName = "Resources";
-        }
-
-        vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, cluster, datastore);
-		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
+		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, resourcePool, cluster, datastore);
+		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
 		return true;
 	}
 
 	@Extension
-	public static final class DeployDescriptor extends VSphereBuildStepDescriptor {
+	public static final class CloneDescriptor extends VSphereBuildStepDescriptor {
 
-		public DeployDescriptor() {
+		public CloneDescriptor() {
 			load();
 		}
 
 		@Override
 		public String getDisplayName() {
-			return Messages.vm_title_Deploy();
+			return Messages.vm_title_Clone();
 		}
 
-		public FormValidation doCheckTemplate(@QueryParameter String value)
+		public FormValidation doCheckSource(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
-				return FormValidation.error("Please enter the template name");
+				return FormValidation.error("Please enter the sourceName name");
 			return FormValidation.ok();
 		}
 
@@ -140,6 +130,8 @@ public class Deploy extends VSphereBuildStep {
 
 		public FormValidation doCheckResourcePool(@QueryParameter String value)
 				throws IOException, ServletException {
+			if (value.length() == 0)
+				return FormValidation.error(Messages.validation_required("the resource pool"));
 			return FormValidation.ok();
 		}
 
@@ -151,11 +143,11 @@ public class Deploy extends VSphereBuildStep {
 		}
 
 		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String template, @QueryParameter String clone,
+				@QueryParameter String sourceName, @QueryParameter String clone,
 				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
-				if (template.length() == 0 || clone.length()==0 || serverName.length()==0
-						|| cluster.length()==0 )
+				if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
+						||resourcePool.length()==0 || cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
@@ -165,15 +157,12 @@ public class Deploy extends VSphereBuildStep {
 				if (cloneVM != null)
 					return FormValidation.error(Messages.validation_exists("clone"));
 
-				if (template.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("template"));
+				if (sourceName.indexOf('$') >= 0)
+					return FormValidation.warning(Messages.validation_buildParameter("sourceName"));
 
-				VirtualMachine vm = vsphere.getVmByName(template);      
+				VirtualMachine vm = vsphere.getVmByName(sourceName);
 				if (vm == null)
-					return FormValidation.error(Messages.validation_notFound("template"));
-
-				if(!vm.getConfig().template)
-					return FormValidation.error(Messages.validation_notActually("template"));
+					return FormValidation.error(Messages.validation_notFound("sourceName"));
 
 				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
 				if (snap == null)

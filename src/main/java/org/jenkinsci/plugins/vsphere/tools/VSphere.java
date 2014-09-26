@@ -19,6 +19,7 @@ import java.net.URL;
 import java.rmi.RemoteException;
 
 import com.vmware.vim25.*;
+import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
@@ -64,20 +65,21 @@ public class VSphere {
 	 * Creates a new VM from a given template with a given name.
 	 * 
 	 * @param cloneName - name of VM to be created
-	 * @param template - vsphere template name to clone
-	 * @param linkedClone - true if you want to re-use disk backings
-	 * @param resourcePool - resource pool to use
-	 * @param cluster - ComputeClusterResource to use
-	 * @throws VSphereException 
+	 * @param sourceName - name of VM or template to be cloned
+     * @param linkedClone - true if you want to re-use disk backings
+     * @param resourcePool - resource pool to use
+     * @param cluster - ComputeClusterResource to use
+     * @param datastoreName - Datastore to use
+     * @throws VSphereException
 	 */
-	public void cloneVm(String cloneName, String template, boolean linkedClone, String resourcePool, String cluster) throws VSphereException {
+	public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePool, String cluster, String datastoreName) throws VSphereException {
 
-		System.out.println("Creating a shallow clone of \""+ template + "\" to \""+cloneName+"\"");
+		System.out.println("Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
 		try{
-			VirtualMachine sourceVm = getVmByName(template);
+			VirtualMachine sourceVm = getVmByName(sourceName);
 
 			if(sourceVm==null) {
-				throw new VSphereException("No template " + template + " found");
+				throw new VSphereException("No VM or template " + sourceName + " found");
 			}
 
 			if(getVmByName(cloneName)!=null){
@@ -92,15 +94,19 @@ public class VSphere {
 				rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
 			}
 
-			rel.setPool(getResourcePoolByName(resourcePool, getClusterByName(cluster)).getMOR());
+            ClusterComputeResource clusterResource = getClusterByName(cluster);
+			rel.setPool(getResourcePoolByName(resourcePool, clusterResource).getMOR());
 
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
 			cloneSpec.setTemplate(false);
+            if (datastoreName != null && !datastoreName.isEmpty()) {
+                rel.setDatastore(getDatastoreByName(datastoreName, clusterResource).getMOR());
+            }
 
 			//TODO add config to allow state of VM or snapshot
 			if(sourceVm.getCurrentSnapShot()==null){
-				throw new VSphereException("Template \"" + template + "\" requires at least one snapshot!");
+				throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
 			}
 			cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
 
@@ -117,8 +123,27 @@ public class VSphere {
 			throw new VSphereException(e);
 		}
 
-		throw new VSphereException("Couldn't clone \""+template+"!\" Does \""+cloneName+"\" already exist?");
-	}	  
+		throw new VSphereException("Couldn't clone \""+ sourceName +"\"! Does \""+cloneName+"\" already exist?");
+	}
+
+    public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
+        VirtualMachine vm = getVmByName(name);
+
+        if(vm==null) {
+            throw new VSphereException("No VM or template " + name + " found");
+        }
+        System.out.println("Reconfiguring VM. Please wait ...");
+        try {
+            Task task = vm.reconfigVM_Task(spec);
+            String status = task.waitForTask();
+            if(status.equals(TaskInfoState.success.toString())) {
+                return;
+            }
+        } catch(Exception e){
+            throw new VSphereException("VM cannot be reconfigured:" + e.getMessage(), e);
+        }
+        throw new VSphereException("Couldn't reconfigure \""+ name +"\"!");
+    }
 
 	/**
 	 * @param name - Name of VM to start
@@ -263,7 +288,7 @@ public class VSphere {
 	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
 
 		try {
-			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, false);
+			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
 			if (task.waitForTask()==Task.SUCCESS) {
 				return;
 			}
@@ -310,7 +335,7 @@ public class VSphere {
 	/**
 	 * Shortcut
 	 * 
-	 * @param name - VirtualMachine name of which IP is returned
+	 * @param vm - VirtualMachine name of which IP is returned
 	 * @return - String containing IP address
 	 * @throws VSphereException 
 	 */
@@ -363,6 +388,13 @@ public class VSphere {
 		} 
 	}
 
+
+    private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
+        if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
+
+        return (Datastore) new InventoryNavigator(rootEntity).searchManagedEntity("Datastore", datastoreName);
+    }
+
 	/**
 	 * @param poolName - Name of pool to use
 	 * @return - ResourcePool obect
@@ -413,7 +445,7 @@ public class VSphere {
 
 	/**
 	 * Detroys the VM in vSphere
-	 * @param vm - VM object to destroy
+	 * @param name - VM object to destroy
 	 * @throws VSphereException 
 	 */
 	public void destroyVm(String name, boolean failOnNoExist) throws VSphereException{
@@ -426,10 +458,10 @@ public class VSphere {
 				return;
 			}
 
-			if(vm.getConfig().template)
-				throw new VSphereException("Specified name represents a template, not a VM.");
 
-			powerOffVm(vm, true, false);
+			if(!vm.getConfig().template) {
+                powerOffVm(vm, true, false);
+            }
 
 			String status = vm.destroy_Task().waitForTask();
 			if(status==Task.SUCCESS)
@@ -444,6 +476,61 @@ public class VSphere {
 
 		throw new VSphereException("Could not delete VM!");
 	}
+
+
+    /**
+     * Renames a VM Snapshot
+     * @param oldName the current name of the vm
+     * @param newName the new name of the vm
+     * @param newDescription the new description of the vm
+     * @throws VSphereException
+     */
+    public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription) throws VSphereException{
+        try{
+            VirtualMachine vm = getVmByName(vmName);
+            if(vm==null){
+                throw new VSphereException("VM does not exist");
+            }
+
+            VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
+
+            snapshot.renameSnapshot(newName, newDescription);
+
+            System.out.println("VM Snapshot was renamed successfully.");
+            return;
+
+        }catch(Exception e){
+            throw new VSphereException(e.getMessage());
+        }
+    }
+
+
+    /**
+     * Renames the VM vSphere
+     * @param oldName the current name of the vm
+     * @param newName the new name of the vm
+     * @throws VSphereException
+     */
+    public void renameVm(String oldName, String newName) throws VSphereException{
+        try{
+            VirtualMachine vm = getVmByName(oldName);
+            if(vm==null){
+                throw new VSphereException("VM does not exist");
+            }
+
+            String status = vm.rename_Task(newName).waitForTask();
+            if(status.equals(Task.SUCCESS))
+            {
+                System.out.println("VM was renamed successfully.");
+                return;
+            }
+
+        }catch(Exception e){
+            throw new VSphereException(e.getMessage());
+        }
+
+        throw new VSphereException("Could not rename VM!");
+    }
 
 	private boolean isSuspended(VirtualMachine vm){
 		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.suspended);

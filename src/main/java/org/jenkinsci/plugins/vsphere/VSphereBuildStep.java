@@ -46,7 +46,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 	}
 
 	public static DescriptorExtensionList<VSphereBuildStep, VSphereBuildStepDescriptor> all() {
-		return Hudson.getInstance().<VSphereBuildStep, VSphereBuildStepDescriptor>getDescriptorList(VSphereBuildStep.class);
+		return Hudson.getInstance().getDescriptorList(VSphereBuildStep.class);
 	}
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws Exception;
