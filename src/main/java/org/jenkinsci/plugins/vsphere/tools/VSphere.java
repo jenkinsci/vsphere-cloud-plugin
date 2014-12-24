@@ -100,9 +100,14 @@ public class VSphere {
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
 			cloneSpec.setTemplate(false);
-            if (datastoreName != null && !datastoreName.isEmpty()) {
-                rel.setDatastore(getDatastoreByName(datastoreName, clusterResource).getMOR());
-            }
+			if (datastoreName != null && !datastoreName.isEmpty()) {
+			    Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
+			    if (datastore==null){
+				System.out.println("Datastore not found!");
+				throw new VSphereException("Datastore not found!");
+			    }
+			    rel.setDatastore(datastore.getMOR());
+			}
 
 			//TODO add config to allow state of VM or snapshot
 			if(sourceVm.getCurrentSnapShot()==null){
