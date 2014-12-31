@@ -404,13 +404,31 @@ public class VSphere {
     }
 
 	/**
-	 * @param poolName - Name of pool to use
-	 * @return - ResourcePool obect
+	 * @return - ManagedEntity array of Datastore
 	 * @throws InvalidProperty
 	 * @throws RuntimeFault
 	 * @throws RemoteException
-	 * @throws MalformedURLException 
-	 * @throws VSphereException 
+	 * @throws MalformedURLException
+	 * @throws VSphereException
+	 */
+	public ManagedEntity[] getDatastores() throws VSphereException {
+		try {
+			return new InventoryNavigator(
+					getServiceInstance().getRootFolder()).searchManagedEntities(
+							"Datastore");
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+	}
+
+	/**
+	 * @param poolName - Name of pool to use
+	 * @return - ResourcePool object
+	 * @throws InvalidProperty
+	 * @throws RuntimeFault
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws VSphereException
 	 */
 	private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
 		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
