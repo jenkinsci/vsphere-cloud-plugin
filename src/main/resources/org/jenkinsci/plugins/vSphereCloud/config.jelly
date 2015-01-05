@@ -11,5 +11,5 @@
             <f:textbox clazz="required number" />
         </f:entry>
     </f:advanced>
-    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
 </j:jelly>
