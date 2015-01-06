@@ -29,12 +29,14 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 
 public class VSphere {
 	private final URL url;
 	private final String session;
 
-	private VSphere(String url, String user, String pw) throws VSphereException{
+	private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException{
 
 		try {
 			//TODO - change ignoreCert to be configurable
@@ -51,9 +53,10 @@ public class VSphere {
 
 	/**
 	 * Initiates Connection to vSphere Server
+         * @param server Server URL
 	 * @throws VSphereException 
 	 */
-	public static VSphere connect(String server, String user, String pw) throws VSphereException {
+	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
 		return new VSphere(server, user, pw);
 	}
 
