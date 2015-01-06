@@ -153,7 +153,7 @@ public class vSphereCloud extends Cloud {
 	}
     
     public VSphere vSphereInstance() throws VSphereException{
-    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
+    	return VSphere.connect(getVsHost() + "/sdk", getUsername(), getPassword());
     }
     
     @Override
@@ -170,7 +170,7 @@ public class vSphereCloud extends Cloud {
     public String toString() {
         final StringBuilder sb = new StringBuilder();
         sb.append("vSphereCloud");
-        sb.append("{Host='").append(vsHost).append('\'');
+        sb.append("{Host='").append(getVsHost()).append('\'');
         sb.append(", Description='").append(vsDescription).append('\'');
         sb.append('}');
         return sb.toString();
