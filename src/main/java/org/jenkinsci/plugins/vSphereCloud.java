@@ -50,7 +50,7 @@ public class vSphereCloud extends Cloud {
     @Deprecated
     private transient String password;
     private final int maxOnlineSlaves;    
-    private VSphereConnectionConfig vsConnectionConfig;
+    private @CheckForNull VSphereConnectionConfig vsConnectionConfig;
    
     private transient int currentOnlineSlaveCount = 0;
     private transient Hashtable<String, String> currentOnline;
@@ -137,11 +137,11 @@ public class vSphereCloud extends Cloud {
         return vsDescription;
     }
 
-    public String getVsHost() {
+    public @CheckForNull String getVsHost() {
         return vsConnectionConfig != null ? vsConnectionConfig.getVsHost(): null; 
     }
 
-    public VSphereConnectionConfig getVsConnectionConfig() {
+    public @CheckForNull VSphereConnectionConfig getVsConnectionConfig() {
         return vsConnectionConfig;
     }
 	
@@ -153,7 +153,17 @@ public class vSphereCloud extends Cloud {
 	}
     
     public VSphere vSphereInstance() throws VSphereException{
-    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
+        // TODO: validate configs
+        final String effectiveVsHost = getVsHost();
+        if (effectiveVsHost == null) {
+            throw new VSphereException("vSphere host is not specified");
+        }
+        final String effectiveUserName = getUsername();
+        if (effectiveUserName == null) {
+            throw new VSphereException("vSphere username is not specified");
+        }
+        
+    	return VSphere.connect(effectiveVsHost + "/sdk", effectiveUserName, getPassword());
     }
     
     @Override
@@ -170,7 +180,7 @@ public class vSphereCloud extends Cloud {
     public String toString() {
         final StringBuilder sb = new StringBuilder();
         sb.append("vSphereCloud");
-        sb.append("{Host='").append(vsHost).append('\'');
+        sb.append("{Host='").append(getVsHost()).append('\'');
         sb.append(", Description='").append(vsDescription).append('\'');
         sb.append('}');
         return sb.toString();
@@ -269,18 +279,18 @@ public class vSphereCloud extends Cloud {
                 }
                 
                 final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
-                final String username = config.getUsername();
-                final String password = config.getPassword();
+                final String effectiveUsername = config.getUsername();
+                final String effectivePassword = config.getPassword();
                 
-                if (StringUtils.isEmpty(username)) {
+                if (StringUtils.isEmpty(effectiveUsername)) {
                     return FormValidation.error("Username is not specified");
                 }
 
-                if (StringUtils.isEmpty(password)) {
+                if (StringUtils.isEmpty(effectivePassword)) {
                     return FormValidation.error("Password is not specified");
                 }
 
-                VSphere.connect(vsHost + "/sdk", username, password);
+                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword);
                 
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {
