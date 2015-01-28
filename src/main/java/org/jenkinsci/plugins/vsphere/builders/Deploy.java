@@ -87,7 +87,6 @@ public class Deploy extends VSphereBuildStep {
 
 	private boolean deployFromTemplate(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
 
 		EnvVars env;
 		try {
@@ -97,16 +96,19 @@ public class Deploy extends VSphereBuildStep {
 		}
 
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template);
+		String expandedClone = env.expand(clone), expandedTemplate = env.expand(template),
+                expandedCluster = env.expand(cluster), expandedDatastore = env.expand(datastore);
 
-        String resourcePoolName = resourcePool;
+        String resourcePoolName;
         if (resourcePool.length() == 0) {
             // Not all installations are using resource pools. But there is always a hidden "Resources" resource
             // pool, even if not visible in the vSphere Client.
             resourcePoolName = "Resources";
+        } else {
+            resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, cluster, datastore);
+        vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
