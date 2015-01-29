@@ -84,7 +84,10 @@ public class PowerOn extends VSphereBuildStep {
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+vmIP);
-		VSphereEnvAction envAction = new VSphereEnvAction();
+
+        // useful to tell user about the environment variable
+        VSphereLogger.vsLogger(jLogger, "Exposing " + vmIP + " as environment variable VSPHERE_IP");
+        VSphereEnvAction envAction = new VSphereEnvAction();
 		envAction.add("VSPHERE_IP", vmIP);
 		build.addAction(envAction);
 		return true;
