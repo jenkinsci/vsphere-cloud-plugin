@@ -78,19 +78,40 @@ public class VSphere {
 	}
 
     /**
-     * Clones a new VM from a given template with a given name.
+     * Deploys a new VM from a given template with a given name.
      *
      * @param cloneName - name of VM to be created
      * @param sourceName - name of VM or template to be cloned
      * @param linkedClone - true if you want to re-use disk backings
-     * @param resourcePool - resource pool to use
+     * @param resourcePoolName - resource pool to use
+     * @param cluster - ComputeClusterResource to use
+     * @param datastoreName - Datastore to use
+     * @throws VSphereException
+     */
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+        boolean DO_NOT_USE_SNAPSHOTS = false;
+        logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_NOT_USE_SNAPSHOTS, jLogger);
+    }
+
+    /**
+     * Clones a new VM from a given vm or template with a given name.
+     *
+     * @param cloneName - name of VM to be created
+     * @param sourceName - name of VM or template to be cloned
+     * @param linkedClone - true if you want to re-use disk backings
+     * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
      * @throws VSphereException
      */
     public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
-
+        boolean DO_USE_SNAPSHOTS = true;
         logMessage(jLogger, "Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_USE_SNAPSHOTS, jLogger);
+    }
+
+    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useSnapshot, PrintStream jLogger) throws VSphereException {
         try{
             VirtualMachine sourceVm = getVmByName(sourceName);
 
@@ -102,44 +123,18 @@ public class VSphere {
                 throw new VSphereException("VM \"" + cloneName + "\" already exists");
             }
 
-            VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
+            VirtualMachineRelocateSpec rel = createRelocateSpec(linkedClone, resourcePoolName, cluster, datastoreName);
 
-            if(linkedClone){
-                rel.setDiskMoveType("createNewChildDiskBacking");
-            }else{
-                rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
-            }
-
-            ClusterComputeResource clusterResource = getClusterByName(cluster);
-
-            if (clusterResource == null) {
-                throw new VSphereException("Cluster \"" + cluster + "\" not found");
-            }
-
-            ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
-
-            if (resourcePool == null) {
-                throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
-            }
-
-            rel.setPool(resourcePool.getMOR());
-
-            VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
-            cloneSpec.setLocation(rel);
+            VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
             cloneSpec.setTemplate(false);
-            if (datastoreName != null && !datastoreName.isEmpty()) {
-                Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
-                if (datastore==null){
-                    throw new VSphereException("Datastore \"" + datastoreName + "\" not found!");
-                }
-                rel.setDatastore(datastore.getMOR());
-            }
 
-            //TODO add config to allow state of VM or snapshot
-            if(sourceVm.getCurrentSnapShot()==null){
-                throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
+            if (useSnapshot) {
+                //TODO add config to allow state of VM or snapshot
+                if(sourceVm.getCurrentSnapShot()==null){
+                    throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
+                }
+                cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
             }
-            cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
 
             Task task = sourceVm.cloneVM_Task((Folder) sourceVm.getParent(),
                     cloneName, cloneSpec);
@@ -155,6 +150,48 @@ public class VSphere {
             throw new VSphereException(e);
         }
 
+    }
+
+    private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
+        VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
+        cloneSpec.setLocation(rel);
+        cloneSpec.setTemplate(false);
+        cloneSpec.setPowerOn(true);
+        return cloneSpec;
+    }
+
+    private VirtualMachineRelocateSpec createRelocateSpec(boolean linkedClone, String resourcePoolName,
+                                                          String cluster, String datastoreName) throws RemoteException, MalformedURLException, VSphereException {
+        VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
+
+        if(linkedClone){
+            rel.setDiskMoveType("createNewChildDiskBacking");
+        }else{
+            rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
+        }
+
+        ClusterComputeResource clusterResource = getClusterByName(cluster);
+
+        if (clusterResource == null) {
+            throw new VSphereException("Cluster \"" + cluster + "\" not found");
+        }
+
+        ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
+
+        if (resourcePool == null) {
+            throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
+        }
+
+        rel.setPool(resourcePool.getMOR());
+
+        if (datastoreName != null && !datastoreName.isEmpty()) {
+            Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
+            if (datastore==null){
+                throw new VSphereException("Datastore \"" + datastoreName + "\" not found!");
+            }
+            rel.setDatastore(datastore.getMOR());
+        }
+        return rel;
     }
 
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {

@@ -108,7 +108,7 @@ public class Deploy extends VSphereBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.cloneVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
