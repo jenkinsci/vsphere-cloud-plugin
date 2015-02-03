@@ -15,6 +15,7 @@
 package org.jenkinsci.plugins.vsphere;
 
 import hudson.DescriptorExtensionList;
+import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
 import hudson.init.InitMilestone;
@@ -41,15 +42,21 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 public class VSphereBuildStepContainer extends Builder {
 
+    public static final String SELECTABLE_SERVER_NAME = "${VSPHERE_CLOUD_NAME}";
+
 	private final VSphereBuildStep buildStep;
 	private final String serverName;
-	private final int serverHash;
+    private final Integer serverHash;
 
 	@DataBoundConstructor
 	public VSphereBuildStepContainer(final VSphereBuildStep buildStep, final String serverName) throws VSphereException {
 		this.buildStep = buildStep;
 		this.serverName = serverName;
-		this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName).getHash();
+        if (!(SELECTABLE_SERVER_NAME.equals(serverName))) {
+            this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName).getHash();
+        } else {
+            this.serverHash = null;
+        }
 	}
 
 	public String getServerName(){
@@ -63,11 +70,21 @@ public class VSphereBuildStepContainer extends Builder {
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
 		try {
-			startLogs(listener.getLogger());
+            EnvVars env = build.getEnvironment(listener);
+            env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
+            String expandedServerName = env.expand(serverName);
 
+            startLogs(listener.getLogger(), expandedServerName);
 			//Need to ensure this server is same as one that was previously saved.
 			//TODO - also need to improve logging here.
-			VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
+			VSphere vsphere;
+            // select by hash if we have one
+            if (serverHash != null) {
+                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash).vSphereInstance();
+            } else {
+                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName).vSphereInstance();
+            }
+
 			buildStep.setVsphere(vsphere);
 
 			return buildStep.perform(build, launcher, listener);
@@ -77,7 +94,7 @@ public class VSphereBuildStepContainer extends Builder {
 		return false;	
 	}
 
-	private void startLogs(PrintStream logger){
+	private void startLogs(PrintStream logger, String serverName){
 		VSphereLogger.vsLogger(logger,"");
 		VSphereLogger.vsLogger(logger,
 				Messages.console_buildStepStart(buildStep.getDescriptor().getDisplayName()));
@@ -115,11 +132,16 @@ public class VSphereBuildStepContainer extends Builder {
 
 			//adding try block to prevent page from not loading
 			try{
-				for (Cloud cloud : Hudson.getInstance().clouds) {
-					if (cloud instanceof vSphereCloud ){
+				boolean hasVsphereClouds = false;
+                for (Cloud cloud : Hudson.getInstance().clouds) {
+					if (cloud instanceof vSphereCloud ) {
+                        hasVsphereClouds = true;
 						select.add( ((vSphereCloud) cloud).getVsDescription()  );
 					}
 				}
+                if (hasVsphereClouds) {
+                    select.add(SELECTABLE_SERVER_NAME);
+                }
 			}catch(Exception e){
 				e.printStackTrace();
 			}

@@ -71,7 +71,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 					}
 				}
 			}
-			throw new RuntimeException(Messages.validation_instanceNotFound());
+			throw new RuntimeException(Messages.validation_instanceNotFound(serverName));
 		}
 
 		public static vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
