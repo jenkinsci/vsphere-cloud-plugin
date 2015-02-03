@@ -77,9 +77,10 @@ public class ConvertToVm extends VSphereBuildStep {
 
 		//TODO:  take in a comma delimited list and convert all
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axis..
-		String expandedTemplate = env.expand(template);
+		String expandedTemplate = env.expand(template), expandedCluster = env.expand(cluster),
+                expandedResourcePool = env.expand(resourcePool);
 
-		vsphere.markAsVm(expandedTemplate, resourcePool, cluster);
+		vsphere.markAsVm(expandedTemplate, expandedResourcePool, expandedCluster);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedTemplate+"\" is a VM!");
 
 		return true;

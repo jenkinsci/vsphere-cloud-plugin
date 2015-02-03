@@ -84,7 +84,6 @@ public class Clone extends VSphereBuildStep {
 
 	private boolean cloneFromSource(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Cloning VM. Please wait ...");
 
 		EnvVars env;
 		try {
@@ -94,9 +93,13 @@ public class Clone extends VSphereBuildStep {
 		}
 
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedClone = env.expand(clone), expandedSource = env.expand(sourceName);
 
-		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, resourcePool, cluster, datastore);
+        String expandedClone = env.expand(clone), expandedSource = env.expand(sourceName),
+                expandedCluster = env.expand(cluster), expandedDatastore = env.expand(datastore),
+                expandedResourcePool = env.expand(resourcePool);
+
+		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
+                expandedDatastore, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
 		return true;
