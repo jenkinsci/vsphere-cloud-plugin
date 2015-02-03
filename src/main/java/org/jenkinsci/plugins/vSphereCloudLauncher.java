@@ -152,7 +152,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                     // Revert to a snapshot - always - if one is specified.
                     if (!snapName.isEmpty()) {
-                        VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
+                        VirtualMachineSnapshot snap = v.getSnapshotInTree(vm, snapName);
                         if (snap == null) {
                             throw new IOException("Virtual Machine snapshot cannot be found");
                         }
