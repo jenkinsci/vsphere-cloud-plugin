@@ -1,15 +1,9 @@
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <f:entry title="${%vSphere Host}" field="vsHost">
-        <f:textbox />
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">    
+    <f:entry>
+        <f:property field="vsConnectionConfig"/>
     </f:entry>
     <f:entry title="${%Name to use for this vSphere Cloud}" field="vsDescription">
         <f:textbox />
-    </f:entry>
-    <f:entry title="${%Username}" field="username">
-        <f:textbox />
-    </f:entry>
-    <f:entry title="${%Password}" field="password">
-        <f:password />
     </f:entry>
  
     <f:advanced>
@@ -17,5 +11,5 @@
             <f:textbox clazz="required number" />
         </f:entry>
     </f:advanced>
-    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,username,password"/>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
 </j:jelly>

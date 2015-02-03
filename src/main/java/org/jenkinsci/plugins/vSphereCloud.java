@@ -4,6 +4,7 @@
  */
 package org.jenkinsci.plugins;
 
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.TaskListener;
@@ -15,6 +16,7 @@ import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.slaves.SlaveComputer;
 import hudson.util.FormValidation;
 import hudson.util.Scrambler;
+import java.io.IOException;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -22,8 +24,10 @@ import java.util.Hashtable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
+import javax.annotation.CheckForNull;
 
 import net.sf.json.JSONObject;
+import org.apache.commons.lang.StringUtils;
 
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -38,11 +42,16 @@ import org.kohsuke.stapler.StaplerRequest;
  */
 public class vSphereCloud extends Cloud {
 
-    private final String vsHost;
+    @Deprecated
+    private transient String vsHost;
     private final String vsDescription;
-    private final String username;
-    private final String password;
+    @Deprecated
+    private transient String username;
+    @Deprecated
+    private transient String password;
     private final int maxOnlineSlaves;    
+    private @CheckForNull VSphereConnectionConfig vsConnectionConfig;
+   
     private transient int currentOnlineSlaveCount = 0;
     private transient Hashtable<String, String> currentOnline;
     
@@ -85,17 +94,26 @@ public class vSphereCloud extends Cloud {
         InternalLog(null, slave, listener, format, args);
     }
 
-    @DataBoundConstructor
+    @Deprecated
     public vSphereCloud(String vsHost, String vsDescription,
             String username, String password, int maxOnlineSlaves) {
+        this(null , vsDescription, maxOnlineSlaves);
+    }
+    
+    @DataBoundConstructor
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves) {
         super("vSphereCloud");
-        this.vsHost = vsHost;
         this.vsDescription = vsDescription;
-        this.username = username;
-        this.password = Scrambler.scramble(Util.fixEmptyAndTrim(password));
         this.maxOnlineSlaves = maxOnlineSlaves;
-        
+        this.vsConnectionConfig = vsConnectionConfig;
         Log("STARTING VSPHERE CLOUD");
+    }
+    
+    public Object readResolve() throws IOException {
+        if (vsConnectionConfig == null) {
+            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null);
+        }
+        return this;
     }
     
     protected void EnsureLists() {
@@ -107,20 +125,24 @@ public class vSphereCloud extends Cloud {
         return maxOnlineSlaves;
     }
 
-    public String getPassword() {
-        return Scrambler.descramble(password);
+    public @CheckForNull String getPassword() {
+        return vsConnectionConfig != null ? vsConnectionConfig.getPassword() : null; 
     }
     
-    public String getUsername() {
-        return username;
+    public @CheckForNull String getUsername() {
+        return vsConnectionConfig != null ? vsConnectionConfig.getUsername() : null; 
     }
 
     public String getVsDescription() {
         return vsDescription;
     }
 
-    public String getVsHost() {
-        return vsHost;
+    public @CheckForNull String getVsHost() {
+        return vsConnectionConfig != null ? vsConnectionConfig.getVsHost(): null; 
+    }
+
+    public @CheckForNull VSphereConnectionConfig getVsConnectionConfig() {
+        return vsConnectionConfig;
     }
 	
 	public final int getHash() {
@@ -131,7 +153,17 @@ public class vSphereCloud extends Cloud {
 	}
     
     public VSphere vSphereInstance() throws VSphereException{
-    	return VSphere.connect(vsHost + "/sdk", username, getPassword());
+        // TODO: validate configs
+        final String effectiveVsHost = getVsHost();
+        if (effectiveVsHost == null) {
+            throw new VSphereException("vSphere host is not specified");
+        }
+        final String effectiveUserName = getUsername();
+        if (effectiveUserName == null) {
+            throw new VSphereException("vSphere username is not specified");
+        }
+        
+    	return VSphere.connect(effectiveVsHost + "/sdk", effectiveUserName, getPassword());
     }
     
     @Override
@@ -148,7 +180,7 @@ public class vSphereCloud extends Cloud {
     public String toString() {
         final StringBuilder sb = new StringBuilder();
         sb.append("vSphereCloud");
-        sb.append("{Host='").append(vsHost).append('\'');
+        sb.append("{Host='").append(getVsHost()).append('\'');
         sb.append(", Description='").append(vsDescription).append('\'');
         sb.append('}');
         return sb.toString();
@@ -203,11 +235,11 @@ public class vSphereCloud extends Cloud {
     @Extension
     public static final class DescriptorImpl extends Descriptor<Cloud> {
 
-        public final ConcurrentMap<String, vSphereCloud> hypervisors = new ConcurrentHashMap<String, vSphereCloud>();
-        private String vsHost;
-        private String username;
-        private String password;
-        private int maxOnlineSlaves;
+        public final @Deprecated ConcurrentMap<String, vSphereCloud> hypervisors = new ConcurrentHashMap<String, vSphereCloud>();
+        private @Deprecated String vsHost;
+        private @Deprecated String username;
+        private @Deprecated String password;
+        private @Deprecated int maxOnlineSlaves;
 
         @Override
         public String getDisplayName() {
@@ -230,8 +262,7 @@ public class vSphereCloud extends Cloud {
          */
         public FormValidation doTestConnection(@QueryParameter String vsHost,
                 @QueryParameter String vsDescription,
-                @QueryParameter String username,
-                @QueryParameter String password,
+                @QueryParameter String credentialsId,
                 @QueryParameter int maxOnlineSlaves) {
             try {
                 /* We know that these objects are not null */
@@ -246,16 +277,20 @@ public class vSphereCloud extends Cloud {
                         return FormValidation.error("vSphere host name must NOT end with a trailing slash");
                     }
                 }
-
-                if (username.length() == 0) {
+                
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
+                final String effectiveUsername = config.getUsername();
+                final String effectivePassword = config.getPassword();
+                
+                if (StringUtils.isEmpty(effectiveUsername)) {
                     return FormValidation.error("Username is not specified");
                 }
 
-                if (password.length() == 0) {
+                if (StringUtils.isEmpty(effectivePassword)) {
                     return FormValidation.error("Password is not specified");
                 }
 
-                VSphere.connect(vsHost + "/sdk", username, password);
+                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword);
                 
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {

@@ -29,12 +29,14 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
 
 public class VSphere {
 	private final URL url;
 	private final String session;
 
-	private VSphere(String url, String user, String pw) throws VSphereException{
+	private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException{
 
 		try {
 			//TODO - change ignoreCert to be configurable
@@ -51,9 +53,10 @@ public class VSphere {
 
 	/**
 	 * Initiates Connection to vSphere Server
+         * @param server Server URL
 	 * @throws VSphereException 
 	 */
-	public static VSphere connect(String server, String user, String pw) throws VSphereException {
+	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
 		return new VSphere(server, user, pw);
 	}
 
@@ -100,9 +103,14 @@ public class VSphere {
 			VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
 			cloneSpec.setLocation(rel);
 			cloneSpec.setTemplate(false);
-            if (datastoreName != null && !datastoreName.isEmpty()) {
-                rel.setDatastore(getDatastoreByName(datastoreName, clusterResource).getMOR());
-            }
+			if (datastoreName != null && !datastoreName.isEmpty()) {
+			    Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
+			    if (datastore==null){
+				System.out.println("Datastore not found!");
+				throw new VSphereException("Datastore not found!");
+			    }
+			    rel.setDatastore(datastore.getMOR());
+			}
 
 			//TODO add config to allow state of VM or snapshot
 			if(sourceVm.getCurrentSnapShot()==null){
@@ -396,13 +404,31 @@ public class VSphere {
     }
 
 	/**
-	 * @param poolName - Name of pool to use
-	 * @return - ResourcePool obect
+	 * @return - ManagedEntity array of Datastore
 	 * @throws InvalidProperty
 	 * @throws RuntimeFault
 	 * @throws RemoteException
-	 * @throws MalformedURLException 
-	 * @throws VSphereException 
+	 * @throws MalformedURLException
+	 * @throws VSphereException
+	 */
+	public ManagedEntity[] getDatastores() throws VSphereException {
+		try {
+			return new InventoryNavigator(
+					getServiceInstance().getRootFolder()).searchManagedEntities(
+							"Datastore");
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+	}
+
+	/**
+	 * @param poolName - Name of pool to use
+	 * @return - ResourcePool object
+	 * @throws InvalidProperty
+	 * @throws RuntimeFault
+	 * @throws RemoteException
+	 * @throws MalformedURLException
+	 * @throws VSphereException
 	 */
 	private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
 		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
