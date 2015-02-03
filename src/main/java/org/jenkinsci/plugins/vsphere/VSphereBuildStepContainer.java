@@ -69,8 +69,11 @@ public class VSphereBuildStepContainer extends Builder {
 			//TODO - also need to improve logging here.
 			VSphere vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(this.serverHash).vSphereInstance(); 
 			buildStep.setVsphere(vsphere);
+                        
+                        Boolean buildStepResult = buildStep.perform(build, launcher, listener);
+                        vsphere.disconnect();
 
-			return buildStep.perform(build, launcher, listener);
+			return buildStepResult;
 		} catch (Exception e) {
 			VSphereLogger.vsLogger(listener.getLogger(), e.getMessage());
 		}

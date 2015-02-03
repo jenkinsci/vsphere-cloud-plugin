@@ -59,6 +59,17 @@ public class VSphere {
 	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
 		return new VSphere(server, user, pw);
 	}
+        
+        /**
+         * Disconnect from vSphere server
+         */
+        public void disconnect() {
+            try {
+                this.getServiceInstance().getServerConnection().logout();
+            } catch (Exception e) {
+                System.out.println("Caught exception when trying to disconnect vSphere." + String.format("%n") + e);
+            }
+        }
 
 	public static String vSphereOutput(String msg){
 		return (Messages.VSphereLogger_title()+": ").concat(msg);

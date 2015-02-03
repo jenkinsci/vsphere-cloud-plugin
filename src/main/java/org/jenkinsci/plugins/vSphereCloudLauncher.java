@@ -137,6 +137,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                 vSphereCloud vsC = findOurVsInstance();
                 vsSlave.slaveIsStarting = Boolean.TRUE;
+                VSphere v = null;
                 try {
                     vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
 
@@ -144,7 +145,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     cal.add(Calendar.MINUTE, 5);
                     vSphereCloudSlave.AddProbableLaunch(vsSlave, cal.getTime());
 
-                    VSphere v = vsC.vSphereInstance();
+                    v = vsC.vSphereInstance();
                     VirtualMachine vm = v.getVmByName(vmName);
                     if (vm == null) {
                         throw new IOException("Virtual Machine could not be found");
@@ -220,6 +221,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 } finally {
                     vSphereCloudSlave.RemoveProbableLaunch(vsSlave);
                     vsSlave.slaveIsStarting = Boolean.FALSE;
+                    if (v != null)
+                        v.disconnect();
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
