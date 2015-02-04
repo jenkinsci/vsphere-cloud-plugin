@@ -290,7 +290,7 @@ public class vSphereCloud extends Cloud {
                     return FormValidation.error("Password is not specified");
                 }
 
-                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword);
+                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
                 
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {
