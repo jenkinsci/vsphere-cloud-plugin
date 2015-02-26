@@ -86,8 +86,11 @@ public class VSphereBuildStepContainer extends Builder {
             }
 
 			buildStep.setVsphere(vsphere);
+                        
+                        Boolean buildStepResult = buildStep.perform(build, launcher, listener);
+                        vsphere.disconnect();
 
-			return buildStep.perform(build, launcher, listener);
+			return buildStepResult;
 		} catch (Exception e) {
 			VSphereLogger.vsLogger(listener.getLogger(), e.getMessage());
 		}

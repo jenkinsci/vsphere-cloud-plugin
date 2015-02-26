@@ -137,6 +137,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
                 vSphereCloud vsC = findOurVsInstance();
                 vsSlave.slaveIsStarting = Boolean.TRUE;
+                VSphere v = null;
                 try {
                     vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
 
@@ -144,7 +145,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     cal.add(Calendar.MINUTE, 5);
                     vSphereCloudSlave.AddProbableLaunch(vsSlave, cal.getTime());
 
-                    VSphere v = vsC.vSphereInstance();
+                    v = vsC.vSphereInstance();
                     VirtualMachine vm = v.getVmByName(vmName);
                     if (vm == null) {
                         throw new IOException("Virtual Machine could not be found");
@@ -220,6 +221,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 } finally {
                     vSphereCloudSlave.RemoveProbableLaunch(vsSlave);
                     vsSlave.slaveIsStarting = Boolean.FALSE;
+                    if (v != null)
+                        v.disconnect();
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -242,7 +245,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
             return;
         }
+        
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
+        VSphere v = null;
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             delegate.afterDisconnect(slaveComputer, taskListener);
@@ -253,7 +258,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             }
             vSphereCloud vsC = findOurVsInstance();
             vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
-            VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
+            v = vsC.vSphereInstance();
+            VirtualMachine vm = v.getVmByName(vmName);
             if ((vm != null) && (localIdle != MACHINE_ACTION.NOTHING)) {
                 //VirtualMachinePowerState power = vm.getRuntime().getPowerState();
                 VirtualMachinePowerState power = vm.getSummary().getRuntime().powerState;
@@ -290,6 +296,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         // VM is already powered down.
                 }
             }
+            if (v != null)
+                v.disconnect();
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, "Got an exception");
             vSphereCloud.Log(slaveComputer, taskListener, t.toString());
