@@ -87,11 +87,9 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
-            vSphereCloud vs = null;
-            for (Cloud cloud : Hudson.getInstance().clouds) {
-                if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getVsDescription().equals(vsDescription)) {
-                    vs = (vSphereCloud) cloud;
-                    return vs;
+            for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
+                if (cloud.getVsDescription().equals(vsDescription)) {
+                    return cloud;
                 }
             }
         }

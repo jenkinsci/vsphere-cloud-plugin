@@ -4,6 +4,7 @@
  */
 package org.jenkinsci.plugins;
 
+import hudson.model.Hudson;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import hudson.Extension;
 import hudson.Util;
@@ -18,9 +19,11 @@ import hudson.util.FormValidation;
 import hudson.util.Scrambler;
 import java.io.IOException;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
@@ -225,6 +228,24 @@ public class vSphereCloud extends Cloud {
         EnsureLists();
         if (currentOnline.remove(slaveName) != null)
             currentOnlineSlaveCount--;
+    }
+
+    public static List<vSphereCloud> findAllVsphereClouds() {
+        List<vSphereCloud> vSphereClouds = new ArrayList<vSphereCloud>();
+        for (Cloud cloud : Hudson.getInstance().clouds) {
+            if (cloud instanceof vSphereCloud) {
+                vSphereClouds.add((vSphereCloud) cloud);
+            }
+        }
+        return vSphereClouds;
+    }
+
+    public static List<String> finaAllVsphereCloudNames() {
+        List<String> cloudNames = new ArrayList<String>();
+        for (vSphereCloud vSphereCloud : findAllVsphereClouds()) {
+            cloudNames.add(vSphereCloud.getVsDescription());
+        }
+        return cloudNames;
     }
 
     @Override
