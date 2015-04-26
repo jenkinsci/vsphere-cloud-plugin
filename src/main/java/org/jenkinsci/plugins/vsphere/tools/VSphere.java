@@ -37,6 +37,8 @@ import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
+import org.apache.commons.lang.StringUtils;
+
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
@@ -134,7 +136,7 @@ public class VSphere {
                 throw new VSphereException("VM \"" + cloneName + "\" already exists");
             }
 
-            VirtualMachineRelocateSpec rel = createRelocateSpec(linkedClone, resourcePoolName, cluster, datastoreName);
+            VirtualMachineRelocateSpec rel = createRelocateSpec(jLogger, linkedClone, resourcePoolName, cluster, datastoreName);
 
             VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
             cloneSpec.setTemplate(false);
@@ -171,7 +173,7 @@ public class VSphere {
         return cloneSpec;
     }
 
-    private VirtualMachineRelocateSpec createRelocateSpec(boolean linkedClone, String resourcePoolName,
+    private VirtualMachineRelocateSpec createRelocateSpec(PrintStream jLogger, boolean linkedClone, String resourcePoolName,
                                                           String cluster, String datastoreName) throws RemoteException, MalformedURLException, VSphereException {
         VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 
@@ -183,8 +185,9 @@ public class VSphere {
 
         ClusterComputeResource clusterResource = getClusterByName(cluster);
 
-        if (clusterResource == null) {
-            throw new VSphereException("Cluster \"" + cluster + "\" not found");
+        // probably only of interest if someone actually entered a cluster name
+        if (clusterResource == null && StringUtils.isNotBlank(cluster)) {
+            logMessage(jLogger, "Cluster resource " + cluster + " does not exist, root folder will be used for getting resource pool and datastore");
         }
 
         ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
@@ -468,7 +471,23 @@ public class VSphere {
 	}
 
 
-    private Datastore getDatastoreByName(final String datastoreName, ClusterComputeResource clusterResource) throws RemoteException, MalformedURLException {
+    private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
+        if (rootEntity == null) {
+            rootEntity = getServiceInstance().getRootFolder();
+        }
+
+        Datastore datastore = (Datastore) new InventoryNavigator(rootEntity).searchManagedEntity("Datastore", datastoreName);
+        if (datastore != null) {
+            return datastore;
+        }
+
+        if (rootEntity == null || !(rootEntity instanceof ClusterComputeResource)) {
+            return null;
+        }
+
+        // try to fetch data store directly from cluster if above approach doesn't work
+        ClusterComputeResource clusterResource = (ClusterComputeResource) rootEntity;
+
         for (Datastore dataStore : clusterResource.getDatastores()) {
             if (dataStore.getName().equals(datastoreName)) {
                 return dataStore;
