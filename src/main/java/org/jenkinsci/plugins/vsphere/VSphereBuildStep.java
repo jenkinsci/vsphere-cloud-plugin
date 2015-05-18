@@ -65,9 +65,9 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 
 		public static vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
 			if (serverName != null){
-				for (Cloud cloud : Hudson.getInstance().clouds) {
-					if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getVsDescription().equals(serverName)) {
-						return (vSphereCloud) cloud;
+				for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
+					if (cloud.getVsDescription().equals(serverName)) {
+						return cloud;
 					}
 				}
 			}
@@ -75,9 +75,9 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 		}
 
 		public static vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
-			for (Cloud cloud : Hudson.getInstance().clouds) {
-				if (cloud instanceof vSphereCloud && ((vSphereCloud) cloud).getHash()==hash ){
-					return (vSphereCloud) cloud;
+			for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
+				if (cloud.getHash()==hash ){
+					return cloud;
 				}
 			}
 			throw new RuntimeException(Messages.validation_serverExistence());
