@@ -23,12 +23,23 @@ public class VSphereLogger {
 	 * checks the verboseOutput flag and writes to the logger as appropriate.
 	 * 
 	 * @param logger - logger that should receive the information
-	 * @param log - string to be sent to the stream
-	 * @param force - forces the output the stream, overwriting the verboseOutput flag.
 	 */
 	public static void vsLogger(PrintStream logger, String str){
 		if(logger!=null){
 			logger.println("["+Messages.VSphereLogger_title()+"] "+str);
 		}
 	}
+
+    public static void vsLogger(PrintStream logger, Exception e){
+        if(logger ==null) {
+            return;
+        }
+
+        if (e.getMessage() != null) {
+            logger.println("["+Messages.VSphereLogger_title()+"] Exception: " + e.getMessage());
+        } else {
+            logger.println("["+Messages.VSphereLogger_title()+"] Exception message was null, stack trace");
+            e.printStackTrace(logger);
+        }
+    }
 }
