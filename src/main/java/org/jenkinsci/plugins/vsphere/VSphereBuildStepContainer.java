@@ -69,7 +69,8 @@ public class VSphereBuildStepContainer extends Builder {
 
 	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-		try {
+        VSphere vsphere = null;
+        try {
             EnvVars env = build.getEnvironment(listener);
             env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
             String expandedServerName = env.expand(serverName);
@@ -77,7 +78,7 @@ public class VSphereBuildStepContainer extends Builder {
             startLogs(listener.getLogger(), expandedServerName);
 			//Need to ensure this server is same as one that was previously saved.
 			//TODO - also need to improve logging here.
-			VSphere vsphere;
+
             // select by hash if we have one
             if (serverHash != null) {
                 vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash).vSphereInstance();
@@ -86,15 +87,16 @@ public class VSphereBuildStepContainer extends Builder {
             }
 
 			buildStep.setVsphere(vsphere);
-                        
-                        Boolean buildStepResult = buildStep.perform(build, launcher, listener);
-                        vsphere.disconnect();
 
-			return buildStepResult;
+            return buildStep.perform(build, launcher, listener);
 		} catch (Exception e) {
-			VSphereLogger.vsLogger(listener.getLogger(), e.getMessage());
-		}
-		return false;	
+			VSphereLogger.vsLogger(listener.getLogger(), e);
+		} finally {
+            if (vsphere != null) {
+                vsphere.disconnect();
+            }
+        }
+        return false;
 	}
 
 	private void startLogs(PrintStream logger, String serverName){
