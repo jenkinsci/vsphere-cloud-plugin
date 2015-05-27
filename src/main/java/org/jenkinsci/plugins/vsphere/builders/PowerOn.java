@@ -14,6 +14,7 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import com.google.common.base.Stopwatch;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
@@ -26,6 +27,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import javax.servlet.ServletException;
 
@@ -74,16 +76,26 @@ public class PowerOn extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Waiting for IP (VM may be restarted during this time)");
-		vsphere.startVm(expandedVm);
-		String vmIP = vsphere.getIp(vsphere.getVmByName(expandedVm), getTimeoutInSeconds());
+		VSphereLogger.vsLogger(jLogger, "Waiting for VM " + expandedVm + " to start (VM may be restarted during this time)");
+        VSphereLogger.vsLogger(jLogger, "Timeout set to " + timeoutInSeconds + " seconds");
+
+        Stopwatch stopwatch = new Stopwatch().start();
+        vsphere.startVm(expandedVm, timeoutInSeconds);
+        long elapsedTime = stopwatch.elapsedTime(TimeUnit.SECONDS);
+        VSphereLogger.vsLogger(jLogger, "VM started in " + elapsedTime  + " seconds");
+
+        int secondsToWaitForIp = (int) (timeoutInSeconds - elapsedTime);
+
+		String vmIP = vsphere.getIp(vsphere.getVmByName(expandedVm), secondsToWaitForIp);
 
 		if(vmIP==null){
-			VSphereLogger.vsLogger(jLogger, "Error: Could not get IP for \""+expandedVm+"\" ");
+			VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for \""+expandedVm+"\" ");
 			return false;
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+vmIP);
+        VSphereLogger.vsLogger(jLogger, "Complete startup took " + stopwatch.elapsedTime(TimeUnit.SECONDS) + " seconds");
+        stopwatch.stop();
 
         // useful to tell user about the environment variable
         VSphereLogger.vsLogger(jLogger, "Exposing " + vmIP + " as environment variable VSPHERE_IP");

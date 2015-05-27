@@ -172,7 +172,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                         case suspended:
                             // Power the VM up.
                             vSphereCloud.Log(slaveComputer, taskListener, "Powering on VM");
-                            v.startVm(vmName);
+                            v.startVm(vmName, 60);
                             break;
                     }
 

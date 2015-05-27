@@ -231,10 +231,13 @@ public class VSphere {
 	 * @param name - Name of VM to start
 	 * @throws VSphereException 
 	 */
-	public void startVm(String name) throws VSphereException {
+	public void startVm(String name, int timeoutInSeconds) throws VSphereException {
 
 		try{
 			VirtualMachine vm = getVmByName(name);
+            if (vm == null) {
+                throw new VSphereException("Vm " + name + " was not found");
+            }
 			if(isPoweredOn(vm))
 				return;
 
@@ -243,11 +246,16 @@ public class VSphere {
 
 			Task task = vm.powerOnVM_Task(null);
 
-			for (int i=0, j=12; i<j; i++){
+            int timesToCheck = timeoutInSeconds / 5;
+            // add one extra time for remainder
+            timesToCheck++;
+            System.out.println("Checking " + timesToCheck + " times for vm to be powered on");
+
+			for (int i=0; i<timesToCheck; i++){
 
 				if(task.getTaskInfo().getState()==TaskInfoState.success){
 					System.out.println("VM was powered up successfully.");
-					return;
+                    return;
 				}
 
 				if (task.getTaskInfo().getState()==TaskInfoState.running ||
@@ -259,7 +267,7 @@ public class VSphere {
 				VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
 				if(q!=null && q.getId().equals("_vmx1")){
 					vm.answerVM(q.getId(), q.getChoice().getDefaultIndex().toString());
-					return;
+                    return;
 				}
 			}
 		}catch(Exception e){
@@ -660,7 +668,7 @@ public class VSphere {
 	}
 
 	private boolean isPoweredOff(VirtualMachine vm){
-		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
+		return (vm.getRuntime() != null && vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
 	}
 
     public boolean vmToolIsEnabled(VirtualMachine vm) {
