@@ -75,8 +75,12 @@ public class PowerOff extends VSphereBuildStep {
 		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
 		String expandedVm = env.expand(vm);
 
-		VSphereLogger.vsLogger(jLogger, "Shutting Down VM...");
-		vsphere.powerOffVm( vsphere.getVmByName(expandedVm), evenIfSuspended, shutdownGracefully);
+		VSphereLogger.vsLogger(jLogger, "Shutting Down VM " + expandedVm + "...");
+        VirtualMachine vsphereVm = vsphere.getVmByName(expandedVm);
+        if (vsphereVm == null) {
+            throw new RuntimeException(Messages.validation_notFound("vm " + expandedVm));
+        }
+		vsphere.powerOffVm( vsphereVm, evenIfSuspended, shutdownGracefully);
 
 		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
 

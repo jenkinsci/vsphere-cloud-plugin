@@ -35,10 +35,10 @@ public class VSphereLogger {
             return;
         }
 
-        if (e.getMessage() != null) {
-            logger.println("["+Messages.VSphereLogger_title()+"] Exception: " + e.getMessage());
+        if (e.getMessage() != null && (!(e instanceof RuntimeException) && e.getCause() == null)) {
+            logger.println("["+Messages.VSphereLogger_title()+"] " + e.getMessage());
         } else {
-            logger.println("["+Messages.VSphereLogger_title()+"] Exception message was null, stack trace");
+            logger.println("["+Messages.VSphereLogger_title()+"] Exception");
             e.printStackTrace(logger);
         }
     }

@@ -14,9 +14,15 @@
  */
 package org.jenkinsci.plugins.vsphere.tools;
 
+import com.vmware.vim25.FileFault;
+import com.vmware.vim25.GuestInfo;
+import com.vmware.vim25.InvalidName;
 import com.vmware.vim25.InvalidProperty;
+import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.RuntimeFault;
+import com.vmware.vim25.SnapshotFault;
+import com.vmware.vim25.TaskInProgress;
 import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigSpec;
@@ -26,6 +32,7 @@ import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.VirtualMachineToolsStatus;
+import com.vmware.vim25.VmConfigFault;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
@@ -263,7 +270,7 @@ public class VSphere {
 				}
 			}
 		}catch(Exception e){
-			throw new VSphereException("VM cannot be started:", e);
+			throw new VSphereException("VM cannot be started: " + e.getMessage(), e);
 		}
 
 		throw new VSphereException("VM cannot be started");
@@ -369,16 +376,20 @@ public class VSphere {
 
 	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
 
-		try {
-			Task task = getVmByName(vmName).createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
+            VirtualMachine vmToSnapshot = getVmByName(vmName);
+            if (vmToSnapshot == null) {
+                throw new VSphereException("Vm " + vmName + " was not found");
+            }
+        try {
+			Task task = vmToSnapshot.createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
 			if (task.waitForTask().equals(Task.SUCCESS)) {
 				return;
 			}
 		} catch (Exception e) {
-			throw new VSphereException("Could not take snapshot", e);
-		}
+            throw new VSphereException(e);
+        }
 
-		throw new VSphereException("Could not take snapshot");
+        throw new VSphereException("Could not take snapshot");
 	}
 
 	public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
@@ -436,9 +447,11 @@ public class VSphere {
 
 		for(int count=0; count<maxTries; count++){
 
-			//get IP
-			if(vm.getGuest().getIpAddress()!=null){
-				return vm.getGuest().getIpAddress();
+            GuestInfo guestInfo = vm.getGuest();
+
+            // guest info can be null sometimes
+			if (guestInfo != null && guestInfo.getIpAddress() != null){
+				return guestInfo.getIpAddress();
 			}
 
 			try {

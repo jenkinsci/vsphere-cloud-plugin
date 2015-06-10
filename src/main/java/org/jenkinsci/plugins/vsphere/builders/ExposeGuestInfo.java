@@ -67,6 +67,9 @@ public class ExposeGuestInfo extends VSphereBuildStep {
         VSphereLogger.vsLogger(jLogger, "Exposing guest info for VM \"" + vmName + "\" as environment variables");
 
         VirtualMachine vsphereVm = vsphere.getVmByName(vmName);
+        if (vsphereVm == null) {
+            throw new RuntimeException(Messages.validation_notFound("vm " + vmName));
+        }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
         build.addAction(envAction);
 
