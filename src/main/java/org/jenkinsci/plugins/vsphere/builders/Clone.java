@@ -14,14 +14,18 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.AbstractBuild;
 import hudson.util.FormValidation;
+
+import java.io.IOException;
+import java.io.PrintStream;
+
+import javax.servlet.ServletException;
+
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -29,9 +33,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import javax.servlet.ServletException;
-import java.io.IOException;
-import java.io.PrintStream;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
@@ -128,13 +131,6 @@ public class Clone extends VSphereBuildStep {
 				throws IOException, ServletException {
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the clone name"));
-			return FormValidation.ok();
-		}
-
-		public FormValidation doCheckResourcePool(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the resource pool"));
 			return FormValidation.ok();
 		}
 
