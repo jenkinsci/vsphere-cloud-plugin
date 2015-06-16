@@ -14,14 +14,18 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.AbstractBuild;
 import hudson.util.FormValidation;
+
+import java.io.IOException;
+import java.io.PrintStream;
+
+import javax.servlet.ServletException;
+
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -29,9 +33,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import javax.servlet.ServletException;
-import java.io.IOException;
-import java.io.PrintStream;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
@@ -41,16 +44,19 @@ public class Clone extends VSphereBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+	private final String host;
 
 	@DataBoundConstructor
 	public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore) throws VSphereException {
+                 String resourcePool, String cluster, String datastore,
+                 String host) throws VSphereException {
 		this.sourceName = sourceName;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
         this.datastore=datastore;
+		this.host=host;
 	}
 
 	public String getSourceName() {
@@ -77,7 +83,11 @@ public class Clone extends VSphereBuildStep {
         return datastore;
     }
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+    public String getHost() {
+    	return host;
+    }
+
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return cloneFromSource(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
 	}
@@ -96,10 +106,10 @@ public class Clone extends VSphereBuildStep {
 
         String expandedClone = env.expand(clone), expandedSource = env.expand(sourceName),
                 expandedCluster = env.expand(cluster), expandedDatastore = env.expand(datastore),
-                expandedResourcePool = env.expand(resourcePool);
+                expandedResourcePool = env.expand(resourcePool), exanpdedHostName = env.expand(getHost());
 
 		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, jLogger);
+                expandedDatastore, jLogger, exanpdedHostName);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
 		return true;
@@ -131,13 +141,6 @@ public class Clone extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckResourcePool(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the resource pool"));
-			return FormValidation.ok();
-		}
-
 		public FormValidation doCheckCluster(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
@@ -150,7 +153,7 @@ public class Clone extends VSphereBuildStep {
 				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
 				if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
-						||resourcePool.length()==0 || cluster.length()==0 )
+						 || cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();

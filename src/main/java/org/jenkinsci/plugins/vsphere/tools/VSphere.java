@@ -14,15 +14,20 @@
  */
 package org.jenkinsci.plugins.vsphere.tools;
 
-import com.vmware.vim25.FileFault;
+import java.io.PrintStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.rmi.RemoteException;
+
+import javax.annotation.CheckForNull;
+import javax.annotation.Nonnull;
+
+import org.apache.commons.lang.StringUtils;
+
 import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.InvalidName;
 import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.InvalidState;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.SnapshotFault;
-import com.vmware.vim25.TaskInProgress;
 import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigSpec;
@@ -32,10 +37,10 @@ import com.vmware.vim25.VirtualMachineRelocateSpec;
 import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.VirtualMachineToolsStatus;
-import com.vmware.vim25.VmConfigFault;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
+import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ResourcePool;
@@ -43,16 +48,6 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
-import org.apache.commons.lang.StringUtils;
-
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
-
-import java.io.PrintStream;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.rmi.RemoteException;
 
 public class VSphere {
 	private final URL url;
@@ -111,7 +106,7 @@ public class VSphere {
     public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
         boolean DO_NOT_USE_SNAPSHOTS = false;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_NOT_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_NOT_USE_SNAPSHOTS, jLogger, null);
     }
 
     /**
@@ -123,15 +118,16 @@ public class VSphere {
      * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
+     * @param hostName 
      * @throws VSphereException
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger, String hostName) throws VSphereException {
         boolean DO_USE_SNAPSHOTS = true;
         logMessage(jLogger, "Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_USE_SNAPSHOTS, jLogger, hostName);
     }
 
-    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useSnapshot, PrintStream jLogger) throws VSphereException {
+    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useSnapshot, PrintStream jLogger, String hostName) throws VSphereException {
         try{
             VirtualMachine sourceVm = getVmByName(sourceName);
 
@@ -143,7 +139,8 @@ public class VSphere {
                 throw new VSphereException("VM \"" + cloneName + "\" already exists");
             }
 
-            VirtualMachineRelocateSpec rel = createRelocateSpec(jLogger, linkedClone, resourcePoolName, cluster, datastoreName);
+            VirtualMachineRelocateSpec rel = createRelocateSpec(jLogger, linkedClone, resourcePoolName, 
+            		cluster, datastoreName, sourceVm.getConfig().template, hostName);
 
             VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
             cloneSpec.setTemplate(false);
@@ -181,7 +178,7 @@ public class VSphere {
     }
 
     private VirtualMachineRelocateSpec createRelocateSpec(PrintStream jLogger, boolean linkedClone, String resourcePoolName,
-                                                          String cluster, String datastoreName) throws RemoteException, MalformedURLException, VSphereException {
+                                                          String cluster, String datastoreName, boolean isResourcePoolRequired, String hostName) throws RemoteException, MalformedURLException, VSphereException {
         VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 
         if(linkedClone){
@@ -197,13 +194,27 @@ public class VSphere {
             logMessage(jLogger, "Cluster resource " + cluster + " does not exist, root folder will be used for getting resource pool and datastore");
         }
 
-        ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
+        if (hostName != null && !hostName.isEmpty()) {
+        	HostSystem hostSystem = getHostSystemByName(hostName,  clusterResource);
 
-        if (resourcePool == null) {
-            throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
+        	if (hostSystem == null) {
+        		throw new VSphereException("Host System specified \"" + hostName + "\" not found");
+        	}
+        	
+        	rel.setHost(hostSystem.getMOR());
         }
+        
+        if (resourcePoolName != null && !resourcePoolName.isEmpty()) {
+        	ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
 
-        rel.setPool(resourcePool.getMOR());
+        	if (resourcePool == null) {
+        		throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
+        	}
+        	
+        	rel.setPool(resourcePool.getMOR());
+        } else if (isResourcePoolRequired) {
+    		throw new VSphereException("You must specify a resource  pool  when using a template");        	
+        }
 
         if (datastoreName != null && !datastoreName.isEmpty()) {
             Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
@@ -212,7 +223,8 @@ public class VSphere {
             }
             rel.setDatastore(datastore.getMOR());
         }
-        return rel;
+
+       return rel;
     }
 
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
@@ -491,7 +503,31 @@ public class VSphere {
 		} 
 	}
 
+	private HostSystem getHostSystemByName(final String hostName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException{
+        if (rootEntity == null) {
+            rootEntity = getServiceInstance().getRootFolder();
+        }
+        HostSystem hostsystem = (HostSystem) new InventoryNavigator(rootEntity).searchManagedEntity("HostSystem", hostName);
+        if (hostsystem != null) {
+            return hostsystem;
+        }
 
+        if (rootEntity == null || !(rootEntity instanceof ClusterComputeResource)) {
+            return null;
+        }
+
+        // try to fetch host system directly from cluster if above approach doesn't work
+        ClusterComputeResource clusterResource = (ClusterComputeResource) rootEntity;
+
+        for (HostSystem hostSystem : clusterResource.getHosts()) {
+            if (hostSystem.getName().equals(hostName)) {
+                return hostSystem;
+            }
+        }
+        return null;
+	}
+	
+	
     private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
         if (rootEntity == null) {
             rootEntity = getServiceInstance().getRootFolder();
