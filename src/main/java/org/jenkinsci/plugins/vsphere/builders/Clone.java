@@ -44,16 +44,19 @@ public class Clone extends VSphereBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+	private final String host;
 
 	@DataBoundConstructor
 	public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore) throws VSphereException {
+                 String resourcePool, String cluster, String datastore,
+                 String host) throws VSphereException {
 		this.sourceName = sourceName;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
         this.datastore=datastore;
+		this.host=host;
 	}
 
 	public String getSourceName() {
@@ -80,7 +83,11 @@ public class Clone extends VSphereBuildStep {
         return datastore;
     }
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+    public String getHost() {
+    	return host;
+    }
+
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return cloneFromSource(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
 	}
@@ -99,10 +106,10 @@ public class Clone extends VSphereBuildStep {
 
         String expandedClone = env.expand(clone), expandedSource = env.expand(sourceName),
                 expandedCluster = env.expand(cluster), expandedDatastore = env.expand(datastore),
-                expandedResourcePool = env.expand(resourcePool);
+                expandedResourcePool = env.expand(resourcePool), exanpdedHostName = env.expand(getHost());
 
 		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, jLogger);
+                expandedDatastore, jLogger, exanpdedHostName);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
 		return true;
@@ -146,7 +153,7 @@ public class Clone extends VSphereBuildStep {
 				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
 				if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
-						||resourcePool.length()==0 || cluster.length()==0 )
+						 || cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();

@@ -39,5 +39,9 @@ limitations under the License.
         <f:textbox  />
     </f:entry>
 		
+    <f:entry title="${%Host}" field="host">
+        <f:textbox  />
+    </f:entry>
+
 	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster"/>
 </j:jelly>
