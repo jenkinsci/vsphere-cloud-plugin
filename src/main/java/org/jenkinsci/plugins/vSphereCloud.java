@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -63,7 +62,7 @@ public class vSphereCloud extends Cloud {
     private final List<? extends vSphereCloudSlaveTemplate> templates;
    
     private transient int currentOnlineSlaveCount = 0;
-    private transient HashMap<String, String> currentOnline;
+    private transient ConcurrentHashMap<String, String> currentOnline;
     
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
     private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, String format, Object... args)
@@ -149,7 +148,7 @@ public class vSphereCloud extends Cloud {
     
     protected void EnsureLists() {
         if (currentOnline == null)
-            currentOnline = new HashMap<String, String>();
+            currentOnline = new ConcurrentHashMap<String, String>();
     }
 
     public int getMaxOnlineSlaves() {
@@ -161,11 +160,7 @@ public class vSphereCloud extends Cloud {
     }
     
     public List<? extends vSphereCloudSlaveTemplate> getTemplates() {
-        if(this.templates == null) {
-            return Collections.EMPTY_LIST;
-        } else {
-            return this.templates;
-        }
+        return this.templates;
     }
     
     public vSphereCloudSlaveTemplate getTemplate(final String template) {

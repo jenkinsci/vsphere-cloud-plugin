@@ -28,18 +28,13 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
-import hudson.model.Label;
-import hudson.model.Queue;
-import hudson.model.Queue.Item;
-import hudson.model.labels.LabelAtom;
 import hudson.util.TimeUnit2;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  *
@@ -58,7 +53,7 @@ public class vSphereCloudSlave extends Slave {
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
     // The list of slaves that MIGHT be launched.
-    private static HashMap<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
+    private static ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
     private static final Boolean ProbableLaunchLock = true;
 
     public transient Boolean slaveIsStarting = Boolean.FALSE;
@@ -174,7 +169,7 @@ public class vSphereCloudSlave extends Slave {
 
     private static void InitProbableLaunch() {
         if (ProbableLaunch == null) {
-            ProbableLaunch = new HashMap<vSphereCloudSlave, ProbableLaunchData>();
+            ProbableLaunch = new ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData>();
         }
     }
 
@@ -241,11 +236,14 @@ public class vSphereCloudSlave extends Slave {
     @Override
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
-        if(acceptableItems.size() < this.getNumExecutors() && !acceptableItems.contains(buildItem)) {
-            acceptableItems.add(buildItem);
-        } else if(!acceptableItems.contains(buildItem) ) {
-            return new CauseOfBlockage.BecauseNodeIsOffline(this);
-        } 
+        final vSphereCloudLauncher launcher = (vSphereCloudLauncher) this.getLauncher();
+        if(launcher != null && launcher.getIsTemplate()) {
+            if(acceptableItems.size() < this.getLimitedTestRunCount() && !acceptableItems.contains(buildItem)) {
+                acceptableItems.add(buildItem);
+            } else if(!acceptableItems.contains(buildItem) ) {
+                return new CauseOfBlockage.BecauseNodeIsOffline(this);
+            } 
+        }
         
         if (slaveIsDisconnecting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
@@ -258,7 +256,7 @@ public class vSphereCloudSlave extends Slave {
         return super.canTake(buildItem);
     }
 
-    static private HashMap<Run, Computer> RunToSlaveMapper = new HashMap<Run, Computer>();
+    static private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
 
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
