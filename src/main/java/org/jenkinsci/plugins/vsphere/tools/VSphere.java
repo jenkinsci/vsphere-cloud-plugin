@@ -14,41 +14,12 @@
  */
 package org.jenkinsci.plugins.vsphere.tools;
 
-import com.vmware.vim25.FileFault;
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.InvalidName;
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.InvalidState;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.SnapshotFault;
-import com.vmware.vim25.TaskInProgress;
-import com.vmware.vim25.TaskInfoState;
-import com.vmware.vim25.VirtualMachineCloneSpec;
-import com.vmware.vim25.VirtualMachineConfigSpec;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineQuestionInfo;
-import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
-import com.vmware.vim25.VirtualMachineToolsStatus;
-import com.vmware.vim25.VmConfigFault;
-import com.vmware.vim25.mo.ClusterComputeResource;
-import com.vmware.vim25.mo.Datastore;
-import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ManagedEntity;
-import com.vmware.vim25.mo.ResourcePool;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.Task;
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
+import com.vmware.vim25.*;
+import com.vmware.vim25.mo.*;
 import org.apache.commons.lang.StringUtils;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
-
 import java.io.PrintStream;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -426,7 +397,7 @@ public class VSphere {
 				vm.markAsVirtualMachine(
 						getResourcePoolByName(resourcePool, getClusterByName(cluster)),
 						null
-						);
+				);
 			}
 		}catch(Exception e){
 			throw new VSphereException("Could not convert to VM", e);
@@ -757,6 +728,99 @@ public class VSphere {
 		}
 
 		throw new VSphereException("Machine could not be suspended!");
+	}
+
+	/**
+	 * Private helper functions that finds the datanceter a VirtualMachine belongs to
+	 * @param managedEntity - VM object
+	 * @return returns Datacenter object
+	 */
+	private Datacenter getDataCenter(ManagedEntity managedEntity)
+	{
+		if (managedEntity != null) {
+			ManagedEntity parent = managedEntity.getParent();
+			if (parent.getMOR().getType().equals("Datacenter")) {
+				return (Datacenter) parent;
+			} else {
+				return getDataCenter(managedEntity.getParent());
+			}
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
+														String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof Network &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
+																			 String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof DistributedVirtualPortgroup &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return (DistributedVirtualPortgroup)network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
+	 * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @return returns DistributedVirtualSwitch object that represents the vDS Switch
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
+			DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException
+	{
+		try
+		{
+			ManagedObjectReference managedObjectReference = new ManagedObjectReference();
+			managedObjectReference.setType("DistributedVirtualSwitch");
+			managedObjectReference.setVal(distributedVirtualPortgroup.getConfig().getDistributedVirtualSwitch().getVal());
+			return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
+		}
+		catch (Exception e)
+		{
+			throw new VSphereException(e);
+		}
 	}
 
     private void logMessage(PrintStream jLogger, String message) {
