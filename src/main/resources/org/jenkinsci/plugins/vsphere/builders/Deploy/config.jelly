@@ -38,6 +38,10 @@ limitations under the License.
     <f:entry title="${%Datastore}" field="datastore">
         <f:textbox  />
     </f:entry>
-		
+
+    <f:entry title="${%Power On}" field="powerOn">
+        <f:checkbox default="true" />
+    </f:entry>
+
 	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster"/>
 </j:jelly>

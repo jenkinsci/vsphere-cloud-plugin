@@ -14,41 +14,12 @@
  */
 package org.jenkinsci.plugins.vsphere.tools;
 
-import com.vmware.vim25.FileFault;
-import com.vmware.vim25.GuestInfo;
-import com.vmware.vim25.InvalidName;
-import com.vmware.vim25.InvalidProperty;
-import com.vmware.vim25.InvalidState;
-import com.vmware.vim25.ManagedObjectReference;
-import com.vmware.vim25.RuntimeFault;
-import com.vmware.vim25.SnapshotFault;
-import com.vmware.vim25.TaskInProgress;
-import com.vmware.vim25.TaskInfoState;
-import com.vmware.vim25.VirtualMachineCloneSpec;
-import com.vmware.vim25.VirtualMachineConfigSpec;
-import com.vmware.vim25.VirtualMachinePowerState;
-import com.vmware.vim25.VirtualMachineQuestionInfo;
-import com.vmware.vim25.VirtualMachineRelocateSpec;
-import com.vmware.vim25.VirtualMachineSnapshotInfo;
-import com.vmware.vim25.VirtualMachineSnapshotTree;
-import com.vmware.vim25.VirtualMachineToolsStatus;
-import com.vmware.vim25.VmConfigFault;
-import com.vmware.vim25.mo.ClusterComputeResource;
-import com.vmware.vim25.mo.Datastore;
-import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.InventoryNavigator;
-import com.vmware.vim25.mo.ManagedEntity;
-import com.vmware.vim25.mo.ResourcePool;
-import com.vmware.vim25.mo.ServiceInstance;
-import com.vmware.vim25.mo.Task;
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
+import com.vmware.vim25.*;
+import com.vmware.vim25.mo.*;
 import org.apache.commons.lang.StringUtils;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
-
 import java.io.PrintStream;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -108,10 +79,12 @@ public class VSphere {
      * @param datastoreName - Datastore to use
      * @throws VSphereException
      */
-    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster,
+						 String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_NOT_USE_SNAPSHOTS = false;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_NOT_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName,
+				DO_NOT_USE_SNAPSHOTS, powerOn, jLogger);
     }
 
     /**
@@ -125,13 +98,17 @@ public class VSphere {
      * @param datastoreName - Datastore to use
      * @throws VSphereException
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster,
+						String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_USE_SNAPSHOTS = true;
         logMessage(jLogger, "Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName,
+				DO_USE_SNAPSHOTS, powerOn, jLogger);
     }
 
-    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useSnapshot, PrintStream jLogger) throws VSphereException {
+    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName,
+								 String cluster, String datastoreName, boolean useSnapshot, boolean powerOn,
+								 PrintStream jLogger) throws VSphereException {
         try{
             VirtualMachine sourceVm = getVmByName(sourceName);
 
@@ -145,19 +122,18 @@ public class VSphere {
 
             VirtualMachineRelocateSpec rel = createRelocateSpec(jLogger, linkedClone, resourcePoolName, cluster, datastoreName);
 
-            VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
-            cloneSpec.setTemplate(false);
+            VirtualMachineCloneSpec virtualMachineCloneSpec = createVirtualMachineCloneSpec(rel, false, powerOn);
 
             if (useSnapshot) {
                 //TODO add config to allow state of VM or snapshot
                 if(sourceVm.getCurrentSnapShot()==null){
                     throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
                 }
-                cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
+				virtualMachineCloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
             }
 
             Task task = sourceVm.cloneVM_Task((Folder) sourceVm.getParent(),
-                    cloneName, cloneSpec);
+                    cloneName, virtualMachineCloneSpec);
             logMessage(jLogger, "Started cloning of VM. Please wait ...");
 
             String status = task.waitForTask();
@@ -172,12 +148,13 @@ public class VSphere {
 
     }
 
-    private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
-        VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
-        cloneSpec.setLocation(rel);
-        cloneSpec.setTemplate(false);
-        cloneSpec.setPowerOn(true);
-        return cloneSpec;
+    private VirtualMachineCloneSpec createVirtualMachineCloneSpec(VirtualMachineRelocateSpec rel,
+																  boolean useTemplate, boolean powerOn) {
+        VirtualMachineCloneSpec virtualMachineCloneSpec = new VirtualMachineCloneSpec();
+		virtualMachineCloneSpec.setLocation(rel);
+		virtualMachineCloneSpec.setTemplate(useTemplate);
+		virtualMachineCloneSpec.setPowerOn(powerOn);
+        return virtualMachineCloneSpec;
     }
 
     private VirtualMachineRelocateSpec createRelocateSpec(PrintStream jLogger, boolean linkedClone, String resourcePoolName,
@@ -426,7 +403,7 @@ public class VSphere {
 				vm.markAsVirtualMachine(
 						getResourcePoolByName(resourcePool, getClusterByName(cluster)),
 						null
-						);
+				);
 			}
 		}catch(Exception e){
 			throw new VSphereException("Could not convert to VM", e);
@@ -757,6 +734,99 @@ public class VSphere {
 		}
 
 		throw new VSphereException("Machine could not be suspended!");
+	}
+
+	/**
+	 * Private helper functions that finds the datanceter a VirtualMachine belongs to
+	 * @param managedEntity - VM object
+	 * @return returns Datacenter object
+	 */
+	private Datacenter getDataCenter(ManagedEntity managedEntity)
+	{
+		if (managedEntity != null) {
+			ManagedEntity parent = managedEntity.getParent();
+			if (parent.getMOR().getType().equals("Datacenter")) {
+				return (Datacenter) parent;
+			} else {
+				return getDataCenter(managedEntity.getParent());
+			}
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
+														String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof Network &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
+																			 String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof DistributedVirtualPortgroup &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return (DistributedVirtualPortgroup)network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
+	 * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @return returns DistributedVirtualSwitch object that represents the vDS Switch
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
+			DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException
+	{
+		try
+		{
+			ManagedObjectReference managedObjectReference = new ManagedObjectReference();
+			managedObjectReference.setType("DistributedVirtualSwitch");
+			managedObjectReference.setVal(distributedVirtualPortgroup.getConfig().getDistributedVirtualSwitch().getVal());
+			return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
+		}
+		catch (Exception e)
+		{
+			throw new VSphereException(e);
+		}
 	}
 
     private void logMessage(PrintStream jLogger, String message) {
