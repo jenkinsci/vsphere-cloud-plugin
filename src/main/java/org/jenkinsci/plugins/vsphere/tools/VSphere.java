@@ -79,10 +79,12 @@ public class VSphere {
      * @param datastoreName - Datastore to use
      * @throws VSphereException
      */
-    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster,
+						 String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_NOT_USE_SNAPSHOTS = false;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_NOT_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName,
+				DO_NOT_USE_SNAPSHOTS, powerOn, jLogger);
     }
 
     /**
@@ -96,13 +98,17 @@ public class VSphere {
      * @param datastoreName - Datastore to use
      * @throws VSphereException
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster,
+						String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_USE_SNAPSHOTS = true;
         logMessage(jLogger, "Creating a shallow clone of \""+ sourceName + "\" to \""+cloneName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, DO_USE_SNAPSHOTS, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName,
+				DO_USE_SNAPSHOTS, powerOn, jLogger);
     }
 
-    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useSnapshot, PrintStream jLogger) throws VSphereException {
+    private void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName,
+								 String cluster, String datastoreName, boolean useSnapshot, boolean powerOn,
+								 PrintStream jLogger) throws VSphereException {
         try{
             VirtualMachine sourceVm = getVmByName(sourceName);
 
@@ -116,19 +122,18 @@ public class VSphere {
 
             VirtualMachineRelocateSpec rel = createRelocateSpec(jLogger, linkedClone, resourcePoolName, cluster, datastoreName);
 
-            VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
-            cloneSpec.setTemplate(false);
+            VirtualMachineCloneSpec virtualMachineCloneSpec = createVirtualMachineCloneSpec(rel, false, powerOn);
 
             if (useSnapshot) {
                 //TODO add config to allow state of VM or snapshot
                 if(sourceVm.getCurrentSnapShot()==null){
                     throw new VSphereException("Source VM or Template \"" + sourceName + "\" requires at least one snapshot!");
                 }
-                cloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
+				virtualMachineCloneSpec.setSnapshot(sourceVm.getCurrentSnapShot().getMOR());
             }
 
             Task task = sourceVm.cloneVM_Task((Folder) sourceVm.getParent(),
-                    cloneName, cloneSpec);
+                    cloneName, virtualMachineCloneSpec);
             logMessage(jLogger, "Started cloning of VM. Please wait ...");
 
             String status = task.waitForTask();
@@ -143,12 +148,13 @@ public class VSphere {
 
     }
 
-    private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
-        VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
-        cloneSpec.setLocation(rel);
-        cloneSpec.setTemplate(false);
-        cloneSpec.setPowerOn(true);
-        return cloneSpec;
+    private VirtualMachineCloneSpec createVirtualMachineCloneSpec(VirtualMachineRelocateSpec rel,
+																  boolean useTemplate, boolean powerOn) {
+        VirtualMachineCloneSpec virtualMachineCloneSpec = new VirtualMachineCloneSpec();
+		virtualMachineCloneSpec.setLocation(rel);
+		virtualMachineCloneSpec.setTemplate(useTemplate);
+		virtualMachineCloneSpec.setPowerOn(powerOn);
+        return virtualMachineCloneSpec;
     }
 
     private VirtualMachineRelocateSpec createRelocateSpec(PrintStream jLogger, boolean linkedClone, String resourcePoolName,

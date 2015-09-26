@@ -14,18 +14,14 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
+import hudson.model.BuildListener;
 import hudson.util.FormValidation;
-
-import java.io.IOException;
-import java.io.PrintStream;
-
-import javax.servlet.ServletException;
-
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -33,8 +29,9 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import javax.servlet.ServletException;
+import java.io.IOException;
+import java.io.PrintStream;
 
 public class Deploy extends VSphereBuildStep {
 
@@ -44,16 +41,18 @@ public class Deploy extends VSphereBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+	private final boolean powerOn;
 
 	@DataBoundConstructor
 	public Deploy(String template, String clone, boolean linkedClone,
-			String resourcePool, String cluster, String datastore) throws VSphereException {
+			String resourcePool, String cluster, String datastore, boolean powerOn) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
         this.datastore=datastore;
+		this.powerOn = powerOn;
 	}
 
 	public String getTemplate() {
@@ -79,6 +78,10 @@ public class Deploy extends VSphereBuildStep {
     public String getDatastore() {
         return datastore;
     }
+
+	public boolean isPowerOn() {
+		return powerOn;
+	}
 
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return deployFromTemplate(build, launcher, listener);
@@ -108,7 +111,8 @@ public class Deploy extends VSphereBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster,
+				expandedDatastore, powerOn, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
