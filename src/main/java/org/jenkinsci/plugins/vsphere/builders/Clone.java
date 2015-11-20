@@ -14,14 +14,18 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.AbstractBuild;
 import hudson.util.FormValidation;
+
+import java.io.IOException;
+import java.io.PrintStream;
+
+import javax.servlet.ServletException;
+
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -29,9 +33,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import javax.servlet.ServletException;
-import java.io.IOException;
-import java.io.PrintStream;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
@@ -131,13 +134,26 @@ public class Clone extends VSphereBuildStep {
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckResourcePool(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the resource pool"));
-			return FormValidation.ok();
-		}
-
+		public FormValidation doCheckResourcePool(@QueryParameter String value,
+				@QueryParameter String serverName,
+				@QueryParameter String sourceName)	
+					throws IOException, ServletException {
+			try {
+				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+	
+				VirtualMachine virtualMachine = vsphere.getVmByName(sourceName);
+				if (virtualMachine == null) {
+					return FormValidation.error("The source VM \""+sourceName+"\"was not found cannot check the configuration.");
+				}
+				if ((virtualMachine.getConfig().template) && (value.length() == 0)) {
+					return FormValidation.error(Messages.validation_required("the resource pool"));						
+				}
+			} catch (VSphereException ve) {
+				return FormValidation.error("Cannot connect to vsphere. "+ve.getMessage());
+			}
+			return FormValidation.ok();		
+		}	
+		
 		public FormValidation doCheckCluster(@QueryParameter String value)
 				throws IOException, ServletException {
 			if (value.length() == 0)
@@ -150,7 +166,7 @@ public class Clone extends VSphereBuildStep {
 				@QueryParameter String resourcePool, @QueryParameter String cluster) {
 			try {
 				if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
-						||resourcePool.length()==0 || cluster.length()==0 )
+						|| cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
 				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
