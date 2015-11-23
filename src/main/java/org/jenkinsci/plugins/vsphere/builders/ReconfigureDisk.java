@@ -45,15 +45,21 @@ import java.util.regex.Pattern;
 public class ReconfigureDisk extends ReconfigureStep {
 
 	private final String diskSize;
+	private final String datastore;
 	private final static Pattern filenamePattern = Pattern.compile("^\\[[^]]*\\] (.*)$");
 
 	@DataBoundConstructor
-	public ReconfigureDisk(String diskSize) throws VSphereException {
+	public ReconfigureDisk(String diskSize, String datastore) throws VSphereException {
 		this.diskSize = diskSize;
+		this.datastore = datastore;
 	}
 
 	public String getDiskSize() {
 		return diskSize;
+	}
+
+	public String getDataStore() {
+		return datastore;
 	}
 
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
@@ -227,6 +233,9 @@ public class ReconfigureDisk extends ReconfigureStep {
 			if (entity instanceof Datastore) {
 				Datastore ds = (Datastore)entity;
 				long fs = ds.getSummary().getFreeSpace();
+				if (this.datastore != null && this.datastore.length() > 0 && !ds.getName().equals(this.datastore)) {
+					continue;
+                                }
 				if (fs > sizeInKB && fs > freeSpace) {
 					datastore = ds;
 					freeSpace = fs;
@@ -257,17 +266,20 @@ public class ReconfigureDisk extends ReconfigureStep {
 			return FormValidation.ok();
 		}
 
+		public FormValidation doCheckDatastore(@QueryParameter String value)
+				throws IOException, ServletException {
+			return FormValidation.ok();
+		}
 		@Override
 		public String getDisplayName() {
 			return Messages.vm_title_ReconfigureDisk();
 		}
 
-		public FormValidation doTestData(@QueryParameter String diskSize) {
+		public FormValidation doTestData(@QueryParameter String diskSize, @QueryParameter String datastore) {
 			try {
 				if (Integer.valueOf(diskSize) < 0) {
 					return FormValidation.error(Messages.validation_positiveInteger(diskSize));
 				}
-
 				return FormValidation.ok();
 
 			} catch (Exception e) {
