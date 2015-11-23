@@ -30,7 +30,28 @@ limitations under the License.
         <f:textbox  />
     </f:entry>
 
-    <f:entry title="${%Network Port Group}" field="portGroup">
-        <f:textbox  />
-    </f:entry>
+    <f:block>
+        <table>
+            <f:optionalBlock name="standardSwitch" title="Configure VMWare Standard Switch"
+                             inline="true" checked="${instance.standardSwitch}">
+                <f:entry title="${%Network Port Group}" field="portGroup">
+                    <f:textbox  />
+                </f:entry>
+            </f:optionalBlock>
+        </table>
+    </f:block>
+
+    <f:block>
+        <table>
+            <f:optionalBlock name="distributedSwitch" title="Configure VMWare Distributed Switch"
+                             inline="true" checked="${instance.distributedSwitch}">
+                <f:entry title="${%Distributed Port Group}" field="distributedPortGroup">
+                    <f:textbox  />
+                </f:entry>
+                <f:entry title="${%Distributed Port ID}" field="distributedPortId">
+                    <f:textbox  />
+                </f:entry>
+            </f:optionalBlock>
+        </table>
+    </f:block>
 </j:jelly>
