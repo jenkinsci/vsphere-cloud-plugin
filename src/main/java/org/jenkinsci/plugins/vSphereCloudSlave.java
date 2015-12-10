@@ -327,7 +327,7 @@ public class vSphereCloudSlave extends Slave {
 
                 // If this is the last run in a limited test run, then flag the node as offline.
                 if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                    doingLastInLimitedTestRun = Boolean.TRUE;
+                    doingLastInLimitedTestRun = Boolean.FALSE;
                 }
             } else {
                 vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
