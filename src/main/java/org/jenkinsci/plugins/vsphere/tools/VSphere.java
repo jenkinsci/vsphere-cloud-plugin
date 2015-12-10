@@ -503,6 +503,7 @@ public class VSphere {
             return count;
         }
 
+<<<<<<< HEAD
         public int countVmsByPrefix(final String prefix) throws VSphereException {
             int count = 0;
             try {
@@ -519,6 +520,8 @@ public class VSphere {
             return count;
         }
 
+=======
+>>>>>>> aa343842fd7ee5a50698c399b9e215e14f5d644f
     private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
         if (rootEntity == null) {
             rootEntity = getServiceInstance().getRootFolder();
