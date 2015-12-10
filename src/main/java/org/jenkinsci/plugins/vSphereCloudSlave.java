@@ -28,11 +28,15 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import hudson.model.Queue;
 import hudson.util.TimeUnit2;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -168,8 +172,10 @@ public class vSphereCloudSlave extends Slave {
     }
 
     private static void InitProbableLaunch() {
-        if (ProbableLaunch == null) {
-            ProbableLaunch = new ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData>();
+        synchronized(ProbableLaunchLock) {
+            if (ProbableLaunch == null) {
+                ProbableLaunch = new ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData>();
+            }
         }
     }
 
@@ -231,29 +237,70 @@ public class vSphereCloudSlave extends Slave {
         return ((vSphereCloudLauncher)this.getLauncher()).getIsTemplate() ? new vSphereCloudSlaveTemplateComputer(this) : new vSphereCloudSlaveComputer(this);
     }
     
-    private List<BuildableItem> acceptableItems = new ArrayList<BuildableItem>();
+    private static Map<Queue.Task,Slave> acceptedItemsMap = new HashMap<Queue.Task,Slave>();
+    private static final Object acceptedItemsLock = new Object();
 
     @Override
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
         final vSphereCloudLauncher launcher = (vSphereCloudLauncher) this.getLauncher();
-        if(launcher != null && launcher.getIsTemplate()) {
-            if(acceptableItems.size() < this.getLimitedTestRunCount() && !acceptableItems.contains(buildItem)) {
-                acceptableItems.add(buildItem);
-            } else if(!acceptableItems.contains(buildItem) ) {
-                return new CauseOfBlockage.BecauseNodeIsOffline(this);
-            } 
+        final Computer computer = this.getComputer();
+        final int busy = computer.countBusy();
+        final int executors = computer.getNumExecutors();
+        
+        if(buildItem.task instanceof Queue.FlyweightTask) {
+            return new CauseOfBlockage() {
+                @Override
+                public String getShortDescription() {
+                    return "Don't run FlyweightTask on vSphere node.";
+                }
+            };
+        }
+        
+        if(slaveIsStarting == Boolean.TRUE || doingLastInLimitedTestRun == Boolean.TRUE) {
+            return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
         
         if (slaveIsDisconnecting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
         
-        if (slaveIsStarting == Boolean.TRUE || doingLastInLimitedTestRun == Boolean.TRUE) {
-            return new CauseOfBlockage.BecauseNodeIsBusy(this);
+        if(launcher != null && launcher.getIsTemplate()) {
+            synchronized(acceptedItemsLock) {
+                if(acceptedItemsMap.containsKey(buildItem.task)) {
+                    Slave acceptedSlave = acceptedItemsMap.get(buildItem.task);
+                    if(!this.equals(acceptedSlave)) {
+                        return new CauseOfBlockage() {
+                            @Override
+                            public String getShortDescription() {
+                                return "This buildItem has already been requested to run on a different slave.";
+                            }
+                        };
+                    }
+                } else {
+                    final Collection<Slave> slaves = acceptedItemsMap.values();
+                    int thisSlaveCount = 0;
+                    for(Slave s : slaves) {
+                        if(this.equals(s)) {
+                            ++thisSlaveCount;
+                        }
+                    }
+                    if(thisSlaveCount + busy < executors) {
+                        acceptedItemsMap.put(buildItem.task,this);
+                    } else {
+                        return new CauseOfBlockage.BecauseNodeIsBusy(this);
+                    }
+                }
+            }
         }
-
+            
         return super.canTake(buildItem);
+    }
+    
+    protected static void removeAcceptedItem(final Queue.Task task) {
+        synchronized(acceptedItemsLock) {
+            final Slave slave = acceptedItemsMap.remove(task);
+        }
     }
 
     static private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
@@ -280,7 +327,7 @@ public class vSphereCloudSlave extends Slave {
 
                 // If this is the last run in a limited test run, then flag the node as offline.
                 if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                    doingLastInLimitedTestRun = Boolean.FALSE;
+                    doingLastInLimitedTestRun = Boolean.TRUE;
                 }
             } else {
                 vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
