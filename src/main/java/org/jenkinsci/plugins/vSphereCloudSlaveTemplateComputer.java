@@ -16,12 +16,9 @@
 
 package org.jenkinsci.plugins;
 
-import edu.umd.cs.findbugs.annotations.OverrideMustInvoke;
-import edu.umd.cs.findbugs.annotations.When;
 import hudson.cli.declarative.CLIMethod;
 import hudson.model.Executor;
 import hudson.model.Queue;
-import hudson.model.Queue.Item;
 import hudson.model.Slave;
 import hudson.slaves.OfflineCause;
 import hudson.slaves.SlaveComputer;
@@ -48,6 +45,15 @@ public class vSphereCloudSlaveTemplateComputer extends SlaveComputer {
     public vSphereCloudSlaveTemplateComputer(Slave slave) {
         super(slave);
         vSlave = (vSphereCloudSlave) slave;
+    }
+    
+    @Override
+    public void taskAccepted(Executor executor, Queue.Task task) {
+        vSphereCloudSlave.removeAcceptedItem(task);
+        if(this.countBusy() + 1 >= this.countExecutors()) {
+            this.setAcceptingTasks(false);
+        }
+        super.taskAccepted(executor,task);
     }
     
     @Override
