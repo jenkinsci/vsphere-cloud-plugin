@@ -1,0 +1,75 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
+    <table wdith="100%">
+        <f:entry title="${%Clone Name Prefix}" field="cloneNamePrefix">
+            <f:textbox/>
+        </f:entry>
+        
+        <f:entry title="${%Master Image Name}" field="masterImageName">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:entry title="${%Snapshot Name}" field="snapshotName">
+            <f:textbox/>
+        </f:entry>
+        
+        <f:entry title="${%Linked Clone}" field="linkedClone">
+            <f:checkbox/>
+        </f:entry>
+    
+        <f:entry title="${%Cluster}" field="cluster">
+            <f:textbox/>
+        </f:entry>
+        
+        <f:entry title="${%Resource Pool}" field="resourcePool">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:entry title="${%Datastore}" field="datastore">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:entry title="${%Description}" field="templateDescription">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:entry title="${%Instance Cap}" field="templateInstanceCap" description="The maximum number of clones to make of this master.  0 = unlimited">
+            <f:textbox clazz="requiered number" default="0"/>
+        </f:entry>
+    
+        <f:entry title="${%# of Executors}" field="numberOfExecutors">
+            <f:textbox clazz="required number" default="1"/>
+        </f:entry>
+    
+        <f:entry title="${%Remote FS Root}" field="remoteFS">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:entry title="${%Labels}" field="labelString">
+            <f:textbox/>
+        </f:entry>
+    
+        <f:slave-mode name="mode" node="${it}"/>
+
+        <f:entry title="${%Force VM Launch}" field="forceVMLaunch" description="${%VMs can always be switched on, even if direct support is missing in the secondary launch option.}">
+            <f:checkbox/>
+        </f:entry>
+    
+        <f:entry title="${%Wait for VMTools}" field="waitForVMTools" description="${%Wait for VMTools in the VM to start up.}">
+            <f:checkbox/>
+        </f:entry>
+    
+        <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as slave.}">
+            <f:textbox clazz="required number" default="60"/>
+        </f:entry>
+
+        <f:entry title="${%Disconnect After Limited Builds}" field="limitedRunCount" description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
+            <f:textbox clazz="requiered number" default="1"/>        
+        </f:entry>
+            
+        <f:entry title="${%Clone's user}" field="credentialsId">
+            <c:select/>
+        </f:entry>
+    
+        <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+    </table>
+</j:jelly>

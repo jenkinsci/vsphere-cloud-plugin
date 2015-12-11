@@ -7,8 +7,6 @@ package org.jenkinsci.plugins;
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.model.Descriptor;
-import hudson.model.Hudson;
-import hudson.slaves.Cloud;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.SlaveComputer;
 
@@ -32,18 +30,19 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
  */
 public class vSphereCloudLauncher extends ComputerLauncher {
 
-    private ComputerLauncher delegate;
-    private Boolean overrideLaunchSupported;
-    private String vsDescription;
-    private String vmName;
-    private Boolean waitForVMTools;
-    private String snapName;
-    private int launchDelay;
-    private MACHINE_ACTION idleAction;
-    private int LimitedTestRunCount = 0;
-
+    private final ComputerLauncher delegate;
+    private final Boolean overrideLaunchSupported;
+    private final String vsDescription;
+    private final String vmName;
+    private final Boolean waitForVMTools;
+    private final String snapName;
+    private final int launchDelay;
+    private final MACHINE_ACTION idleAction;
+    private final int LimitedTestRunCount;
+    private final boolean isTemplate;
+    
+    
     public enum MACHINE_ACTION {
-
         SHUTDOWN,
         REVERT,
         REVERT_AND_RESET,
@@ -58,7 +57,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             String vsDescription, String vmName,
             Boolean overrideLaunchSupported, Boolean waitForVMTools,
             String snapName, String launchDelay, String idleOption,
-            String LimitedTestRunCount) {
+            String LimitedTestRunCount, boolean isTemplate) {
         super();
         this.delegate = delegate;
         this.overrideLaunchSupported = overrideLaunchSupported;
@@ -83,6 +82,13 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             idleAction = MACHINE_ACTION.NOTHING;
         }
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
+        
+        this.isTemplate = isTemplate;
+        readResolve();
+    }
+    
+    public Object readResolve() {
+        return this;
     }
 
     public vSphereCloud findOurVsInstance() throws RuntimeException {
@@ -106,6 +112,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         //synchronized(vSphereCloud.class)
         {
             try {
+
                 if (slaveComputer.isTemporarilyOffline()) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Not launching VM because it's not accepting tasks; temporarily offline");
                     return;
@@ -230,7 +237,20 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
-        vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
+        final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
+        
+//        if(this.limitedTestRunRemaining.decrementAndGet() > 0) {
+//            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it has more limited runs available.");
+//            return;
+//        }
+//        if(MACHINE_ACTION.NOTHING.equals(this.idleAction)) {
+//            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's machine's idle action is NOTHING.");
+//            return;
+//        }
+        if(vsSlave == null) {
+            vSphereCloud.Log(slaveComputer, taskListener, "Slave is null.");
+            return;
+        }
         if (vsSlave.slaveIsStarting == Boolean.TRUE) {
             vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
             return;
@@ -243,6 +263,10 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
             return;
         }
+//        if(slaveComputer.countBusy() > 0) {
+//            vSphereCloud.Log(slaveComputer, taskListener, "Slave currently has executors busy working on jobs.");
+//            return;
+//        }
         
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         VSphere v = null;
@@ -258,7 +282,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
             v = vsC.vSphereInstance();
             VirtualMachine vm = v.getVmByName(vmName);
-            if ((vm != null) && (localIdle != MACHINE_ACTION.NOTHING)) {
+            if (vm != null && !MACHINE_ACTION.NOTHING.equals(localIdle)) {
                 //VirtualMachinePowerState power = vm.getRuntime().getPowerState();
                 VirtualMachinePowerState power = vm.getSummary().getRuntime().powerState;
                 if (power == VirtualMachinePowerState.poweredOn) {
@@ -324,16 +348,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         return idleAction;
     }
 
-    public void setIdleAction(MACHINE_ACTION idleAction) {
-        this.idleAction = idleAction;
-    }
-
     public Boolean getOverrideLaunchSupported() {
         return overrideLaunchSupported;
-    }
-
-    public void setOverrideLaunchSupported(Boolean overrideLaunchSupported) {
-        this.overrideLaunchSupported = overrideLaunchSupported;
     }
 
     public Boolean getWaitForVMTools() {
@@ -343,7 +359,11 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public Integer getLimitedTestRunCount() {
         return LimitedTestRunCount;
     }
-
+    
+    public boolean getIsTemplate() {
+        return isTemplate;
+    }
+    
     @Override
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
@@ -355,7 +375,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
 
     @Override
     public void beforeDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
-        delegate.beforeDisconnect(slaveComputer, taskListener);
+        delegate.beforeDisconnect(slaveComputer, taskListener); //this call does nothing.
     }
 
     @Override

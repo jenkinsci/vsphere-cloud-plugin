@@ -10,6 +10,15 @@
         <f:entry title="${%Max number of slaves online}" field="maxOnlineSlaves">
             <f:textbox clazz="required number" />
         </f:entry>
+        <f:entry title="${%Instance Cap}" field="instanceCap" description="Instance Cap of 0 is the same a unlimited.">
+            <f:textbox clazz="required number" default="0"/>
+        </f:entry>
     </f:advanced>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
+    
+    <f:entry title="${%Slave Templates}"  description="${%List of Master VMs to be cloned as slaves}">
+        <f:repeatable field="templates">
+            <st:include page="config.jelly" class="${descriptor.clazz}"/>
+        </f:repeatable>
+    </f:entry>
 </j:jelly>

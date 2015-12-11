@@ -13,21 +13,11 @@ import java.util.concurrent.Future;
  * @author Admin
  */
 public class vSphereCloudSlaveComputer extends SlaveComputer {
-    private transient vSphereCloudSlave vSlave;
+    private final vSphereCloudSlave vSlave;
 
     public vSphereCloudSlaveComputer(Slave slave) {
         super(slave);
         vSlave = (vSphereCloudSlave)slave;
-    }
-
-    @Override
-    protected Future<?> _connect(boolean forceReconnect) {
-        return super._connect(forceReconnect);
-    }
-
-    @Override
-    public boolean isAcceptingTasks() {
-        return super.isAcceptingTasks();
     }
 
     @Override

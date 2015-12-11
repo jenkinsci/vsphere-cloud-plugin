@@ -4,3 +4,5 @@ work
 .classpath
 .settings
 
+/nb-configuration.xml
+/nbactions.xml

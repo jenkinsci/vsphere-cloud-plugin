@@ -490,6 +490,34 @@ public class VSphere {
 			throw new VSphereException(e);
 		} 
 	}
+        
+        public int countVms() throws VSphereException {
+            int count = 0;
+            try {
+                final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
+                final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+                count = entities.length;
+            } catch (Exception ex) {
+                throw new VSphereException(ex);
+            }
+            return count;
+        }
+
+        public int countVmsByPrefix(final String prefix) throws VSphereException {
+            int count = 0;
+            try {
+                final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
+                final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+                for(final ManagedEntity entity : entities) {
+                    if(entity.getName().startsWith(prefix)) {
+                        ++count;
+                    }
+                }
+            } catch (Exception ex) {
+                throw new VSphereException(ex);
+            }
+            return count;
+        }
 
     private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
         if (rootEntity == null) {
