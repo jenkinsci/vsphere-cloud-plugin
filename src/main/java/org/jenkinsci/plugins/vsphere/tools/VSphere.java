@@ -48,6 +48,10 @@ import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import com.vmware.vim25.mo.Datacenter;
+import com.vmware.vim25.mo.Network;
+import com.vmware.vim25.mo.DistributedVirtualPortgroup;
+import com.vmware.vim25.mo.DistributedVirtualSwitch;
 
 public class VSphere {
 	private final URL url;
@@ -784,6 +788,99 @@ public class VSphere {
 		}
 
 		throw new VSphereException("Machine could not be suspended!");
+	}
+
+	/**
+	 * Private helper functions that finds the datanceter a VirtualMachine belongs to
+	 * @param managedEntity - VM object
+	 * @return returns Datacenter object
+	 */
+	private Datacenter getDataCenter(ManagedEntity managedEntity)
+	{
+		if (managedEntity != null) {
+			ManagedEntity parent = managedEntity.getParent();
+			if (parent.getMOR().getType().equals("Datacenter")) {
+				return (Datacenter) parent;
+			} else {
+				return getDataCenter(managedEntity.getParent());
+			}
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
+														String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof Network &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+	 * @param virtualMachine - VM object
+	 * @param name - the name of the Port Group
+	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
+																			 String name) throws VSphereException
+	{
+		try {
+			Datacenter datacenter = getDataCenter(virtualMachine);
+			for (Network network : datacenter.getNetworks())
+			{
+				if (network instanceof DistributedVirtualPortgroup &&
+						(name.isEmpty() || network.getName().contentEquals(name)))
+				{
+					return (DistributedVirtualPortgroup)network;
+				}
+			}
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
+		return null;
+	}
+
+	/**
+	 * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
+	 * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
+	 * @return returns DistributedVirtualSwitch object that represents the vDS Switch
+	 * @throws VSphereException
+	 */
+	public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
+			DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException
+	{
+		try
+		{
+			ManagedObjectReference managedObjectReference = new ManagedObjectReference();
+			managedObjectReference.setType("DistributedVirtualSwitch");
+			managedObjectReference.setVal(distributedVirtualPortgroup.getConfig().getDistributedVirtualSwitch().getVal());
+			return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
+		}
+		catch (Exception e)
+		{
+			throw new VSphereException(e);
+		}
 	}
 
     private void logMessage(PrintStream jLogger, String message) {
