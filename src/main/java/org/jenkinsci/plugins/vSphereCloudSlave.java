@@ -237,17 +237,9 @@ public class vSphereCloudSlave extends Slave {
         return ((vSphereCloudLauncher)this.getLauncher()).getIsTemplate() ? new vSphereCloudSlaveTemplateComputer(this) : new vSphereCloudSlaveComputer(this);
     }
     
-    private static Map<Queue.Task,Slave> acceptedItemsMap = new HashMap<Queue.Task,Slave>();
-    private static final Object acceptedItemsLock = new Object();
-
     @Override
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
-        final vSphereCloudLauncher launcher = (vSphereCloudLauncher) this.getLauncher();
-        final Computer computer = this.getComputer();
-        final int busy = computer.countBusy();
-        final int executors = computer.getNumExecutors();
-        
         if(buildItem.task instanceof Queue.FlyweightTask) {
             return new CauseOfBlockage() {
                 @Override
@@ -265,42 +257,7 @@ public class vSphereCloudSlave extends Slave {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
         
-        if(launcher != null && launcher.getIsTemplate()) {
-            synchronized(acceptedItemsLock) {
-                if(acceptedItemsMap.containsKey(buildItem.task)) {
-                    Slave acceptedSlave = acceptedItemsMap.get(buildItem.task);
-                    if(!this.equals(acceptedSlave)) {
-                        return new CauseOfBlockage() {
-                            @Override
-                            public String getShortDescription() {
-                                return "This buildItem has already been requested to run on a different slave.";
-                            }
-                        };
-                    }
-                } else {
-                    final Collection<Slave> slaves = acceptedItemsMap.values();
-                    int thisSlaveCount = 0;
-                    for(Slave s : slaves) {
-                        if(this.equals(s)) {
-                            ++thisSlaveCount;
-                        }
-                    }
-                    if(thisSlaveCount + busy < executors) {
-                        acceptedItemsMap.put(buildItem.task,this);
-                    } else {
-                        return new CauseOfBlockage.BecauseNodeIsBusy(this);
-                    }
-                }
-            }
-        }
-            
         return super.canTake(buildItem);
-    }
-    
-    protected static void removeAcceptedItem(final Queue.Task task) {
-        synchronized(acceptedItemsLock) {
-            final Slave slave = acceptedItemsMap.remove(task);
-        }
     }
 
     static private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();

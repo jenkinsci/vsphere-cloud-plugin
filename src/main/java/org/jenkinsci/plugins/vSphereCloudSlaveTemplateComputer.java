@@ -49,7 +49,6 @@ public class vSphereCloudSlaveTemplateComputer extends SlaveComputer {
     
     @Override
     public void taskAccepted(Executor executor, Queue.Task task) {
-        vSphereCloudSlave.removeAcceptedItem(task);
         if(this.countBusy() + 1 >= this.countExecutors()) {
             this.setAcceptingTasks(false);
         }
@@ -83,7 +82,6 @@ public class vSphereCloudSlaveTemplateComputer extends SlaveComputer {
     @Override
     protected void onRemoved() {
         // Destroy instance
-        //super.onRemoved(); // does nothing
         logger.info("onRemoved is being called on a template.");
         unProvision();
     }

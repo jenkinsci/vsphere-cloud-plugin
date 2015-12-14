@@ -272,8 +272,6 @@ public class vSphereCloud extends Cloud {
                 plannedNodes.add(new PlannedNode(template.getCloneNamePrefix(), Computer.threadPoolForRemoting.submit(new Callable<Node>() {
                     public Node call() throws Exception {
                         vSphereCloudSlave slave = template.provision(StreamTaskListener.fromStdout());
-                        Hudson.getInstance().addNode(slave);
-                        slave.toComputer().connect(false).get();
                         return slave;
                     }
                 }), template.getNumberOfExceutors()));
