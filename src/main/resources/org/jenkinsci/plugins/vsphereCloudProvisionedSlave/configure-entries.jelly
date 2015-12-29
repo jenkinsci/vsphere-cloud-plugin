@@ -1,0 +1,116 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
+         xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+             
+    <f:entry title="${%vSphere Cloud Instance}" field="vsDescription">
+        <select class="setting-input" name="vsDescription" value="${it.vsDescription}" >
+            <option>Select a vSphere Cloud instance...</option>
+            <j:forEach var="d" items="${descriptor.getvSphereClouds()}" varStatus="loop">
+                <option selected="${d.vsDescription==it.vsDescription?'true':null}" value="${d.vsDescription}">
+                    ${d.vsDescription}
+                </option>
+            </j:forEach>
+        </select>
+    </f:entry>
+
+    <f:entry title="${%Virtual Machine Name}" field="vmName">
+        <f:textbox />
+    </f:entry>
+    <f:entry title="${%Snapshot Name}" field="snapName">
+        <f:textbox />
+    </f:entry>
+    
+    <f:validateButton title="${%Test VM Connection}" progress="${%Testing...}" method="testConnection" with="vsDescription,vmName,snapName"/>
+
+    <f:entry title="${%Description}" help="/help/system-config/master-slave/description.html">
+        <f:textbox field="nodeDescription"/>
+    </f:entry>
+
+    <f:entry title="${%# of executors}" field="numExecutors">
+        <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Remote FS root}" field="remoteFS">
+        <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Labels}" field="labelString">
+        <f:textbox/>
+    </f:entry>
+
+    <f:slave-mode name="mode" node="${it}"/>
+
+    <f:entry title="${%Force VM launch}" field="launchSupportForced"
+       description="${%VMs can always be switched on, even if direct support is missing in the secondary launch option.}" >
+        <f:checkbox />
+    </f:entry>
+
+    <f:entry title="${%Wait for VMTools}" field="waitForVMTools"
+       description="${%Wait for VMTools in the VM to start up.}" >
+        <f:checkbox />
+    </f:entry>
+    
+    <f:entry title="${%Delay between launch and boot complete}" field="launchDelay"
+    description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as a slave.}" >
+        <f:textbox default="60" />
+    </f:entry>
+
+    <f:dropdownList name="slave.delegateLauncher" title="${%Secondary launch method}"
+                    help="${descriptor.getHelpFile('launcher')}">
+        <j:forEach var="d" items="${descriptor.getComputerLauncherDescriptors()}" varStatus="loop">
+            <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                 selected="${it.delegateLauncher.descriptor==d}"
+                                 title="${d.displayName}">
+                <j:set var="descriptor" value="${d}"/>
+                <j:set var="instance"
+                       value="${it.delegateLauncher.descriptor==d ? it.delegateLauncher : null}"/>
+                <tr>
+                    <td>
+                        <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                    </td>
+                </tr>
+                <st:include from="${d}" page="${d.configPage}" optional="true"/>
+            </f:dropdownListBlock>
+        </j:forEach>
+    </f:dropdownList>
+
+    <!-- pointless to show this if there's only one option, which is the default -->
+    <j:if test="${h.getRetentionStrategyDescriptors().size() gt 1}">
+        <f:dropdownList name="slave.retentionStrategy" title="${%Availability}"
+                        help="/help/system-config/master-slave/availability.html">
+            <j:forEach var="d" items="${h.getRetentionStrategyDescriptors()}">
+                <j:if test="${d != null}">
+                    <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                         selected="${it.retentionStrategy.descriptor==d}"
+                                         title="${d.displayName}">
+                        <j:set var="descriptor" value="${d}"/>
+                        <j:set var="instance"
+                               value="${it.retentionStrategy.descriptor==d ? it.retentionStrategy : null}"/>
+                        <tr>
+                            <td>
+                                <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                            </td>
+                        </tr>
+                        <st:include from="${d}" page="${d.configPage}" optional="true"/>
+                    </f:dropdownListBlock>
+                </j:if>
+            </j:forEach>
+        </f:dropdownList>
+    </j:if>
+
+   <f:entry title="${%Disconnect After Limited Builds}" field="LimitedTestRunCount"
+      description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
+       <f:textbox default="0"/>
+   </f:entry>
+
+    <f:entry title="${%What to do when the slave is disconnected}" field="idleOption" name="idleOption">
+        <select class="setting-input" name="idleOption">
+            <j:forEach var="t" items="${descriptor.getIdleOptions()}" varStatus="loop">
+                <f:option value="${t}" selected="${t==instance.idleOption}">${t}</f:option>
+            </j:forEach>
+        </select>
+    </f:entry>
+
+    <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}"
+                      field="nodeProperties"/>
+
+</j:jelly>
