@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 package org.jenkinsci.plugins;
-
+ 
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Functions;
@@ -14,9 +14,7 @@ import hudson.model.TaskListener;
 import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
-import hudson.model.Hudson;
 import hudson.model.Run;
-import hudson.model.Slave;
 import hudson.model.queue.CauseOfBlockage;
 import hudson.slaves.*;
 import hudson.util.FormValidation;
@@ -28,23 +26,21 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import hudson.model.Executor;
 import hudson.model.Queue;
-import hudson.util.TimeUnit2;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import jenkins.model.Jenkins;
 
 /**
  *
  * @author Admin
  */
-public class vSphereCloudSlave extends Slave {
+public class vSphereCloudSlave extends AbstractCloudSlave {
 
     private final String vsDescription;
     private final String vmName;
@@ -74,26 +70,11 @@ public class vSphereCloudSlave extends Slave {
             String snapName, String launchDelay, String idleOption,
             String LimitedTestRunCount)
             throws FormException, IOException {
-        this(name, nodeDescription, remoteFS, numExecutors, mode, labelString, delegateLauncher, 
-                retentionStrategy, nodeProperties, vsDescription, vmName, launchSupportForced, 
-                waitForVMTools, snapName, launchDelay, idleOption, LimitedTestRunCount, false);
-    }
-    
-    public vSphereCloudSlave(String name, String nodeDescription,
-            String remoteFS, String numExecutors, Mode mode,
-            String labelString, ComputerLauncher delegateLauncher,
-            RetentionStrategy retentionStrategy,
-            List<? extends NodeProperty<?>> nodeProperties,
-            String vsDescription, String vmName,
-            boolean launchSupportForced, boolean waitForVMTools,
-            String snapName, String launchDelay, String idleOption,
-            String LimitedTestRunCount, boolean isTemplate)
-            throws FormException, IOException {
-                super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
-                new vSphereCloudLauncher(delegateLauncher, vsDescription, name,
-                        launchSupportForced, waitForVMTools, snapName, launchDelay,
-                        idleOption, LimitedTestRunCount, isTemplate),
-                retentionStrategy, nodeProperties);
+        super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
+              new vSphereCloudLauncher(delegateLauncher, vsDescription, name,
+                  launchSupportForced, waitForVMTools, snapName, launchDelay,
+                  idleOption, LimitedTestRunCount),
+              retentionStrategy, nodeProperties);
         this.vsDescription = vsDescription;
         this.vmName = name;
         this.snapName = snapName;
@@ -108,19 +89,12 @@ public class vSphereCloudSlave extends Slave {
     @Override
     protected Object readResolve() {
         super.readResolve();
-        ((vSphereCloudLauncher)super.getLauncher()).readResolve();
-        final RetentionStrategy strategy = this.getRetentionStrategy();
-        if(strategy instanceof CloudSlaveRetentionStrategy) {
-            ((CloudSlaveRetentionStrategy) strategy).TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
-        }
-
         if (NumberOfLimitedTestRuns == null) {
             NumberOfLimitedTestRuns = 0;
         }
         if (LimitedTestRunCount == null) {
             LimitedTestRunCount = 0;
         }
-        
         return this;
     }
     
@@ -156,9 +130,23 @@ public class vSphereCloudSlave extends Slave {
         return ((vSphereCloudLauncher) getLauncher()).getOverrideLaunchSupported() == Boolean.TRUE;
     }
 
-//    public void setLaunchSupportForced(boolean slaveLaunchesOnBootup) {
-//        ((vSphereCloudLauncher) getLauncher()).setOverrideLaunchSupported(slaveLaunchesOnBootup ? Boolean.TRUE : null);
-//    }
+    @Override
+    protected void _terminate(final TaskListener listener) throws IOException, InterruptedException {
+        try {
+            Computer computer = toComputer();
+            if(computer != null) {
+                computer.disconnect(new OfflineCause(){
+                    @Override
+                    public String toString() {
+                        return "Shutting down VSphere Cloud Slave";
+                    }
+                });
+                vSphereCloud.Log("Disconnected computer");                    
+            }
+        } catch(Exception e) {
+            vSphereCloud.Log("Can't disconnect: \n" + e.getMessage());
+        }
+    }
 
     private static class ProbableLaunchData {
 
@@ -233,8 +221,8 @@ public class vSphereCloudSlave extends Slave {
     }
 
     @Override
-    public Computer createComputer() {
-        return ((vSphereCloudLauncher)this.getLauncher()).getIsTemplate() ? new vSphereCloudSlaveTemplateComputer(this) : new vSphereCloudSlaveComputer(this);
+    public AbstractCloudComputer createComputer() {
+        return new vSphereCloudSlaveComputer(this);
     }
     
     @Override
@@ -249,7 +237,7 @@ public class vSphereCloudSlave extends Slave {
             };
         }
         
-        if(slaveIsStarting == Boolean.TRUE || doingLastInLimitedTestRun == Boolean.TRUE) {
+        if(slaveIsStarting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
         
@@ -260,7 +248,7 @@ public class vSphereCloudSlave extends Slave {
         return super.canTake(buildItem);
     }
 
-    static private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
+    static final private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
 
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
@@ -275,20 +263,16 @@ public class vSphereCloudSlave extends Slave {
             ret = true;
         }
 
-        if (DoUpdates) {
+        Executor executor = r.getExecutor();
+        if (executor != null && DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
                 vSphereCloud.Log(listener, "Starting limited count build: %d", NumberOfLimitedTestRuns);
-                Computer slave = r.getExecutor().getOwner();
+                Computer slave = executor.getOwner();
                 RunToSlaveMapper.put(r, slave);
-
-                // If this is the last run in a limited test run, then flag the node as offline.
-                if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                    doingLastInLimitedTestRun = Boolean.FALSE;
-                }
             } else {
                 vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
-                r.getExecutor().interrupt(Result.ABORTED);
+                executor.interrupt(Result.ABORTED);
             }
         }
 
@@ -297,14 +281,6 @@ public class vSphereCloudSlave extends Slave {
 
     public boolean EndLimitedTestRun(Run r) {
         boolean ret = true;
-
-        if( (!r.isBuilding()) && (r.getResult() != null) && (r.getResult().isWorseThan(Result.SUCCESS)) ) {
-            final vSphereCloudLauncher launcher = (vSphereCloudLauncher) this.getLauncher();
-            if(launcher != null && launcher.getIsTemplate()) {
-                LimitedTestRunCount = LimitedTestRunCount <= 0 ? 1 : LimitedTestRunCount;
-                NumberOfLimitedTestRuns = NumberOfLimitedTestRuns < LimitedTestRunCount ? LimitedTestRunCount + 1 : NumberOfLimitedTestRuns;
-            }
-        }
         
         // See if the run maps to an existing computer; remove if found.
         Computer slave = RunToSlaveMapper.get(r);
@@ -389,7 +365,7 @@ public class vSphereCloudSlave extends Slave {
 
         public List<vSphereCloud> getvSphereClouds() {
             List<vSphereCloud> result = new ArrayList<vSphereCloud>();
-            for (Cloud cloud : Hudson.getInstance().clouds) {
+            for (Cloud cloud : Jenkins.getInstance().clouds) {
                 if (cloud instanceof vSphereCloud) {
                     result.add((vSphereCloud) cloud);
                 }

@@ -4,18 +4,18 @@
  */
 package org.jenkinsci.plugins;
 
-import hudson.slaves.SlaveComputer;
-import hudson.model.Slave;
-import java.util.concurrent.Future;
+import hudson.slaves.AbstractCloudComputer;
+import hudson.slaves.AbstractCloudSlave;
+ 
 
 /**
  *
  * @author Admin
  */
-public class vSphereCloudSlaveComputer extends SlaveComputer {
+public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
     private final vSphereCloudSlave vSlave;
 
-    public vSphereCloudSlaveComputer(Slave slave) {
+    public vSphereCloudSlaveComputer(AbstractCloudSlave slave) {
         super(slave);
         vSlave = (vSphereCloudSlave)slave;
     }

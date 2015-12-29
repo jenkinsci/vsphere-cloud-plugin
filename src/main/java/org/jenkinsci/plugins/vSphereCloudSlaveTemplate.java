@@ -15,7 +15,7 @@
  */
 
 package org.jenkinsci.plugins;
-
+ 
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
@@ -23,7 +23,6 @@ import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
-import hudson.model.Hudson;
 import hudson.model.ItemGroup;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
@@ -41,9 +40,7 @@ import hudson.model.Node.Mode;
 import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.slaves.CloudSlaveRetentionStrategy;
 import hudson.slaves.NodeProperty;
-import hudson.util.TimeUnit2;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Set;
@@ -243,7 +240,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this;
     }
     
-    public vSphereCloudSlave provision(TaskListener listener) throws VSphereException, FormException, IOException {
+    public vSphereCloudProvisionedSlave provision(TaskListener listener) throws VSphereException, FormException, IOException {
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
         final UUID cloneUUID = UUID.randomUUID();
@@ -255,13 +252,15 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         final SSHLauncher sshLauncher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
         
         vSphere.disconnect();
-        final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
-        strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
-        return new vSphereCloudSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, sshLauncher, strategy, this.nodeProperties, this.parent.getVsDescription(), this.masterImageName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount), true);
+//        final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
+//        strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
+        final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
+        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, sshLauncher, strategy, this.nodeProperties, this.parent.getVsDescription(), this.masterImageName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
     }
     
+    @Overrides
     public Descriptor<vSphereCloudSlaveTemplate> getDescriptor() {
-        return Hudson.getInstance().getDescriptor(getClass());
+        return Jenkins.getInstance().getDescriptor(getClass());
     }
     
     @Extension

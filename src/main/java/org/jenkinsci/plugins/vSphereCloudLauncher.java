@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 package org.jenkinsci.plugins;
-
+ 
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.model.Descriptor;
@@ -39,8 +39,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     private final int launchDelay;
     private final MACHINE_ACTION idleAction;
     private final int LimitedTestRunCount;
-    private final boolean isTemplate;
-    
     
     public enum MACHINE_ACTION {
         SHUTDOWN,
@@ -57,7 +55,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             String vsDescription, String vmName,
             Boolean overrideLaunchSupported, Boolean waitForVMTools,
             String snapName, String launchDelay, String idleOption,
-            String LimitedTestRunCount, boolean isTemplate) {
+            String LimitedTestRunCount) {
         super();
         this.delegate = delegate;
         this.overrideLaunchSupported = overrideLaunchSupported;
@@ -82,15 +80,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             idleAction = MACHINE_ACTION.NOTHING;
         }
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
-        
-        this.isTemplate = isTemplate;
-        readResolve();
     }
     
-    public Object readResolve() {
-        return this;
-    }
-
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
             for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
@@ -218,7 +209,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             throw new IOException("Slave did not come online in allowed time");
                         }
                     }
-                } catch (Exception e) {
+                } catch (final Exception e) {
                     vSphereCloud.Log(slaveComputer, taskListener, "EXCEPTION while starting VM");
                     vSphereCloud.Log(slaveComputer, taskListener, e.getMessage());
                     vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
@@ -229,7 +220,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     if (v != null)
                         v.disconnect();
                 }
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 throw new RuntimeException(e);
             }
         }
@@ -239,14 +230,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
         
-//        if(this.limitedTestRunRemaining.decrementAndGet() > 0) {
-//            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it has more limited runs available.");
-//            return;
-//        }
-//        if(MACHINE_ACTION.NOTHING.equals(this.idleAction)) {
-//            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's machine's idle action is NOTHING.");
-//            return;
-//        }
         if(vsSlave == null) {
             vSphereCloud.Log(slaveComputer, taskListener, "Slave is null.");
             return;
@@ -263,10 +246,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
             return;
         }
-//        if(slaveComputer.countBusy() > 0) {
-//            vSphereCloud.Log(slaveComputer, taskListener, "Slave currently has executors busy working on jobs.");
-//            return;
-//        }
         
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         VSphere v = null;
@@ -327,7 +306,6 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             taskListener.fatalError(t.getMessage(), t);
         } finally {
             vsSlave.slaveIsDisconnecting = Boolean.FALSE;
-            vsSlave.doingLastInLimitedTestRun = Boolean.FALSE;
             vsSlave.slaveIsStarting = Boolean.FALSE;
         }
     }
@@ -359,11 +337,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public Integer getLimitedTestRunCount() {
         return LimitedTestRunCount;
     }
-    
-    public boolean getIsTemplate() {
-        return isTemplate;
-    }
-    
+        
     @Override
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
