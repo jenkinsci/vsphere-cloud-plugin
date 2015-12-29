@@ -61,7 +61,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         super._terminate(listener);
-        final vSphereCloudLauncher launcher = (vSphereCloudProvisionedLauncher) getLauncher();
+        final vSphereCloudLauncher launcher = (vSphereCloudLauncher) getLauncher();
         if(launcher != null) {
             final vSphereCloud cloud = launcher.findOurVsInstance();
             
