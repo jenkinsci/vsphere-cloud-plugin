@@ -44,16 +44,18 @@ public class Deploy extends VSphereBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+    private final boolean powerOn;
 
 	@DataBoundConstructor
 	public Deploy(String template, String clone, boolean linkedClone,
-			String resourcePool, String cluster, String datastore) throws VSphereException {
+		      String resourcePool, String cluster, String datastore, boolean powerOn) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
         this.datastore=datastore;
+	this.powerOn=powerOn;
 	}
 
 	public String getTemplate() {
@@ -78,6 +80,10 @@ public class Deploy extends VSphereBuildStep {
 
     public String getDatastore() {
         return datastore;
+    }
+
+    public boolean isPowerOn() {
+	return powerOn;
     }
 
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
@@ -108,7 +114,7 @@ public class Deploy extends VSphereBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, powerOn, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 
 		return true;
@@ -170,7 +176,7 @@ public class Deploy extends VSphereBuildStep {
 				if (template.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("template"));
 
-				VirtualMachine vm = vsphere.getVmByName(template);      
+				VirtualMachine vm = vsphere.getVmByName(template);
 				if (vm == null)
 					return FormValidation.error(Messages.validation_notFound("template"));
 

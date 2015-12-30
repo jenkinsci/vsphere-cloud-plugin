@@ -80,9 +80,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String targetHost;
     private final String credentialsId;
     private final List<? extends NodeProperty<?>> nodeProperties;
+    boolean POWER_ON = true;
     
     private transient Set<LabelAtom> labelSet;
-    protected transient vSphereCloud parent; 
+    protected transient vSphereCloud parent;
     
     @DataBoundConstructor
     public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
@@ -246,7 +247,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         final UUID cloneUUID = UUID.randomUUID();
         final String cloneName = this.cloneNamePrefix + "_" + cloneUUID;
         
-        vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, logger);
+        vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, POWER_ON, logger);
         
         final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
         final SSHLauncher sshLauncher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
