@@ -3,8 +3,7 @@
  * and open the template in the editor.
  */
 package org.jenkinsci.plugins;
-
-import hudson.model.Hudson;
+ 
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -30,6 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 import javax.annotation.CheckForNull;
+import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 
 import net.sf.json.JSONObject;
@@ -271,9 +271,7 @@ public class vSphereCloud extends Cloud {
                 
                 plannedNodes.add(new PlannedNode(template.getCloneNamePrefix(), Computer.threadPoolForRemoting.submit(new Callable<Node>() {
                     public Node call() throws Exception {
-                        vSphereCloudSlave slave = template.provision(StreamTaskListener.fromStdout());
-                        Hudson.getInstance().addNode(slave);
-                        slave.toComputer().connect(false).get();
+                        vSphereCloudProvisionedSlave slave = template.provision(StreamTaskListener.fromStdout());
                         return slave;
                     }
                 }), template.getNumberOfExceutors()));
@@ -343,7 +341,7 @@ public class vSphereCloud extends Cloud {
 
     public static List<vSphereCloud> findAllVsphereClouds() {
         List<vSphereCloud> vSphereClouds = new ArrayList<vSphereCloud>();
-        for (Cloud cloud : Hudson.getInstance().clouds) {
+        for (Cloud cloud : Jenkins.getInstance().clouds) {
             if (cloud instanceof vSphereCloud) {
                 vSphereClouds.add((vSphereCloud) cloud);
             }
