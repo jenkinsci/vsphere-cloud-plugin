@@ -7,7 +7,7 @@
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
-    <version>2.9-SNAPSHOT</version>
+    <version>2.9</version>
     <packaging>hpi</packaging>
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
@@ -37,7 +37,7 @@
         <connection>scm:git:https://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
         <developerConnection>scm:git:https://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
-      <tag>HEAD</tag>
+      <tag>vsphere-cloud-2.9</tag>
   </scm>    
   
     <properties>
