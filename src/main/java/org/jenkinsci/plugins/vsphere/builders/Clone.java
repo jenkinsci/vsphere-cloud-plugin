@@ -44,16 +44,18 @@ public class Clone extends VSphereBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+    private final boolean powerOn;
 
 	@DataBoundConstructor
 	public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore) throws VSphereException {
+		  String resourcePool, String cluster, String datastore, boolean powerOn) throws VSphereException {
 		this.sourceName = sourceName;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool=resourcePool;
 		this.cluster=cluster;
         this.datastore=datastore;
+	this.powerOn=powerOn;
 	}
 
 	public String getSourceName() {
@@ -80,6 +82,11 @@ public class Clone extends VSphereBuildStep {
         return datastore;
     }
 
+    public boolean isPowerOn() {
+        return powerOn;
+    }
+
+
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
 		return cloneFromSource(build, launcher, listener);
 		//TODO throw AbortException instead of returning value
@@ -102,7 +109,7 @@ public class Clone extends VSphereBuildStep {
                 expandedResourcePool = env.expand(resourcePool);
 
 		vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, jLogger);
+				expandedDatastore, powerOn, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
 		return true;
