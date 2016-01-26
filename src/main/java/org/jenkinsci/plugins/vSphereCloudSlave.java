@@ -71,12 +71,12 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             String LimitedTestRunCount)
             throws FormException, IOException {
         super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
-              new vSphereCloudLauncher(delegateLauncher, vsDescription, name,
+              new vSphereCloudLauncher(delegateLauncher, vsDescription, vmName,
                   launchSupportForced, waitForVMTools, snapName, launchDelay,
                   idleOption, LimitedTestRunCount),
               retentionStrategy, nodeProperties);
         this.vsDescription = vsDescription;
-        this.vmName = name;
+        this.vmName = vmName;
         this.snapName = snapName;
         this.waitForVMTools = waitForVMTools;
         this.launchDelay = launchDelay;
