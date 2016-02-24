@@ -256,7 +256,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 //        final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
 //        strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
         final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
-        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, sshLauncher, strategy, this.nodeProperties, this.parent.getVsDescription(), this.masterImageName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, sshLauncher, strategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
     }
     
     @Override
