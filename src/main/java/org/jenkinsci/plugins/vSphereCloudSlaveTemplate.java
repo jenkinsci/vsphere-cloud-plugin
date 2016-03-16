@@ -15,9 +15,9 @@
  */
 
 package org.jenkinsci.plugins;
- 
+  
+import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
-import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
 import hudson.Extension;
 import hudson.model.Computer;
@@ -275,7 +275,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             if(!(context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance()).hasPermission(Computer.CONFIGURE)) {
                 return new ListBoxModel();
             }
-            final List<StandardUsernamePasswordCredentials> credentials = lookupCredentials(StandardUsernamePasswordCredentials.class,context,ACL.SYSTEM,HTTP_SCHEME,HTTPS_SCHEME);
+            final List<StandardUsernameCredentials> credentials = lookupCredentials(StandardUsernameCredentials.class, context, ACL.SYSTEM, HTTP_SCHEME, HTTPS_SCHEME);
             return new StandardUsernameListBoxModel().withAll(credentials);
         }
     }
