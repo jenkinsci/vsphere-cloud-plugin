@@ -243,8 +243,10 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             return;
         }
         if (slaveComputer.isTemporarilyOffline()) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
-            return;
+            if (!slaveComputer.getOfflineCauseReason().contains("vSphere Plugin")) {
+                vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
+                return;
+            }
         }
         
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
