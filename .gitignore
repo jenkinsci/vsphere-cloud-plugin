@@ -3,6 +3,8 @@ work
 .project
 .classpath
 .settings
+.idea
+vsphere-cloud.iml
 
 /nb-configuration.xml
 /nbactions.xml
