@@ -142,7 +142,9 @@ public class vSphereStep extends AbstractStepImpl {
 
         private static final long serialVersionUID = 1;
 
-        private VSphereBuildStep action;
+        private transient VSphereBuildStep action;
+
+        private transient VSphereBuildStepContainer vSphereBSC;
 
         @Inject
         private transient vSphereStep step;
@@ -181,8 +183,7 @@ public class vSphereStep extends AbstractStepImpl {
                 default:
                     break;
             }
-//            action.perform(run, filePath, launcher, listener);
-            VSphereBuildStepContainer vSphereBSC = new VSphereBuildStepContainer(action, step.getServerName());
+            vSphereBSC = new VSphereBuildStepContainer(action, step.getServerName());
             vSphereBSC.perform(run, filePath, launcher, listener);
             if ("poweron".equals(step.getAction().toLowerCase()) ||
                     "deploy".equals(step.getAction().toLowerCase()) ||
