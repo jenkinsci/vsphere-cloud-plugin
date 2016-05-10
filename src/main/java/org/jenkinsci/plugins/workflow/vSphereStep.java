@@ -9,6 +9,7 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer;
+import org.jenkinsci.plugins.vsphere.builders.Clone;
 import org.jenkinsci.plugins.vsphere.builders.Deploy;
 import org.jenkinsci.plugins.vsphere.builders.PowerOff;
 import org.jenkinsci.plugins.vsphere.builders.PowerOn;
@@ -133,7 +134,7 @@ public class vSphereStep extends AbstractStepImpl {
 
         @Override
         public String getDisplayName() {
-            return "Invoke an vSphere action (deploy, powerOff, powerOn)";
+            return "Invoke an vSphere action (deploy, powerOff, powerOn or clone)";
         }
 
     }
@@ -179,6 +180,9 @@ public class vSphereStep extends AbstractStepImpl {
                     break;
                 case "deploy":
                     action = new Deploy(step.getTemplate(), step.getClone(), step.isLinkedClone(), "", step.getCluster(), step.getDatastore(), step.isPowerOn());
+                    break;
+                case "clone":
+                    action = new Clone(step.getTemplate(), step.getClone(), step.isLinkedClone(), "", step.getCluster(), step.getDatastore(), step.isPowerOn());
                     break;
                 default:
                     break;
