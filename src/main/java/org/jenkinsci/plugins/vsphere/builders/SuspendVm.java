@@ -14,18 +14,19 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.AbstractBuild;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.Collection;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -33,7 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class SuspendVm extends VSphereBuildStep {
+public class SuspendVm extends VSphereBuildStep implements SimpleBuildStep {
 
 	private final String vm;    
 
@@ -46,22 +47,59 @@ public class SuspendVm extends VSphereBuildStep {
 		return vm;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
-		return suspend(build, launcher, listener);
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			suspend(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+		return false;
+	}
+
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			retVal = suspend(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
 		//TODO throw AbortException instead of returning value
 	}
 
-	private boolean suspend(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
+	@Override
+	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public BuildStepMonitor getRequiredMonitorService() {
+		return null;
+	}
+
+	private boolean suspend(final Run<?, ?> run, Launcher launcher, final TaskListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
+		String expandedVm = vm;
 		EnvVars env;
 		try {
-			env = build.getEnvironment(listener);
+			env = run.getEnvironment(listener);
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
-
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedVm = env.expand(vm);
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild)run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
+		}
 
 		VSphereLogger.vsLogger(jLogger, "Suspending VM...");
 		vsphere.suspendVm( vsphere.getVmByName(expandedVm));

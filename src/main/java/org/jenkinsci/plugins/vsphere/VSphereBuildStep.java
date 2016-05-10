@@ -16,18 +16,20 @@ package org.jenkinsci.plugins.vsphere;
 
 import hudson.DescriptorExtensionList;
 import hudson.ExtensionPoint;
+import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.Describable;
-import hudson.model.AbstractBuild;
-import hudson.model.Descriptor;
-import hudson.model.Hudson;
-import hudson.slaves.Cloud;
+import hudson.model.*;
 
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
+
+import javax.annotation.Nonnull;
+import java.io.IOException;
 
 /**
  * Define a base class for all vSphere build steps.  All vSphere build steps should extend 
@@ -45,11 +47,17 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 		this.vsphere = vsphere;
 	}
 
+	public String getIP() {
+		return "";
+	}
+
 	public static DescriptorExtensionList<VSphereBuildStep, VSphereBuildStepDescriptor> all() {
 		return Hudson.getInstance().getDescriptorList(VSphereBuildStep.class);
 	}
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws Exception;
+
+	public abstract void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
 
 	public VSphereBuildStepDescriptor getDescriptor() {
 		return (VSphereBuildStepDescriptor)Hudson.getInstance().getDescriptor(getClass());

@@ -18,17 +18,18 @@ import com.vmware.vim25.ResourceAllocationInfo;
 import com.vmware.vim25.SharesInfo;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualEthernetCard;
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
+import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -46,17 +47,41 @@ public class ReconfigureMemory extends ReconfigureStep {
 		return memorySize;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			reconfigureMemory(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			retVal = reconfigureMemory(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
+		//TODO throw AbortException instead of returning value
+	}
+
+	public boolean reconfigureMemory(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
 
         PrintStream jLogger = listener.getLogger();
+		String expandedMemorySize = memorySize;
         EnvVars env;
         try {
-            env = build.getEnvironment(listener);
+            env = run.getEnvironment(listener);
         } catch (Exception e) {
             throw new VSphereException(e);
         }
-        env.overrideAll(build.getBuildVariables());
-        String expandedMemorySize = env.expand(memorySize);
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+			expandedMemorySize = env.expand(memorySize);
+		}
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
         spec.setMemoryMB(Long.valueOf(expandedMemorySize));

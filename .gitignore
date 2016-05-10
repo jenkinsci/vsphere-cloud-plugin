@@ -5,6 +5,7 @@ work
 .settings
 .idea
 vsphere-cloud.iml
+*.log
 
 /nb-configuration.xml
 /nbactions.xml

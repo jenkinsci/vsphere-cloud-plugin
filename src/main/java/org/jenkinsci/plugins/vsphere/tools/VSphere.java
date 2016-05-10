@@ -40,7 +40,6 @@ import com.vmware.vim25.VirtualMachineToolsStatus;
 import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
-import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ResourcePool;
@@ -261,12 +260,10 @@ public class VSphere {
             int timesToCheck = timeoutInSeconds / 5;
             // add one extra time for remainder
             timesToCheck++;
-            System.out.println("Checking " + timesToCheck + " times for vm to be powered on");
 
 			for (int i=0; i<timesToCheck; i++){
 
 				if(task.getTaskInfo().getState()==TaskInfoState.success){
-					System.out.println("VM was powered up successfully.");
                     return;
 				}
 

@@ -14,18 +14,19 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.AbstractBuild;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.Collection;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -54,27 +55,49 @@ public class Delete extends VSphereBuildStep {
 		return failOnNoExist;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
-
-		if(allowDelete())
-			return killVm(build, launcher, listener);
-		else
-			VSphereLogger.vsLogger(listener.getLogger(), "Deletion is disabled!");
-
-		return false;
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			if(allowDelete()) {
+				killVm(run, launcher, listener);
+			} else {
+				VSphereLogger.vsLogger(listener.getLogger(), "Deletion is disabled!");
+			}
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
 	}
 
-	private boolean killVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+	@Override
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			if(allowDelete()) {
+				retVal = killVm(build, launcher, listener);
+			} else {
+				VSphereLogger.vsLogger(listener.getLogger(), "Deletion is disabled!");
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
+		//TODO throw AbortException instead of returning value
+	}
+
+	private boolean killVm(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
 
 		PrintStream jLogger = listener.getLogger();
+		String expandedVm = vm;
 		EnvVars env;
 		try {
-			env = build.getEnvironment(listener);
+			env = run.getEnvironment(listener);
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedVm = env.expand(vm);
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild)run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
+		}
 
 		VSphereLogger.vsLogger(jLogger, "Destroying VM \""+expandedVm+".\" Please wait ...");
 		vsphere.destroyVm(expandedVm, failOnNoExist);

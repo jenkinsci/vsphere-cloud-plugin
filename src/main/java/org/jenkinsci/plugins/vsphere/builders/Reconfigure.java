@@ -16,13 +16,11 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
-import hudson.model.Hudson;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -30,12 +28,14 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.Collection;
 import java.util.List;
 
-public class Reconfigure extends VSphereBuildStep {
+public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep{
 
     private final List<ReconfigureStep> reconfigureSteps;
 	private final String vm;
@@ -54,21 +54,62 @@ public class Reconfigure extends VSphereBuildStep {
         return reconfigureSteps;
     }
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
-        return reconfigureVm(build, launcher, listener);
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			reconfigureVm(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
 	}
 
-	private boolean reconfigureVm(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
+	@Override
+	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+		return false;
+	}
+
+	@Override
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			retVal = reconfigureVm(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
+		//TODO throw AbortException instead of returning value
+	}
+
+	@Override
+	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public BuildStepMonitor getRequiredMonitorService() {
+		return null;
+	}
+
+	private boolean reconfigureVm(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException, IOException, InterruptedException {
 
 		PrintStream jLogger = listener.getLogger();
+		String expandedVm = vm;
 		EnvVars env;
 		try {
-			env = build.getEnvironment(listener);
+			env = run.getEnvironment(listener);
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
-		env.overrideAll(build.getBuildVariables());
-		String expandedVm = env.expand(vm);
+
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
+		}
 
         VirtualMachine realVM = vsphere.getVmByName(expandedVm);
 
@@ -78,7 +119,7 @@ public class Reconfigure extends VSphereBuildStep {
             actionStep.setVsphere(getVsphere());
             actionStep.setVM(realVM);
             actionStep.setVirtualMachineConfigSpec(spec);
-            actionStep.perform(build, launcher, listener);
+            actionStep.perform(run, null, launcher, listener);
         }
 		vsphere.reconfigureVm(expandedVm, spec);
 		VSphereLogger.vsLogger(jLogger, "Finished!");

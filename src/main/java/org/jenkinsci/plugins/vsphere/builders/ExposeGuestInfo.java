@@ -3,13 +3,11 @@ package org.jenkinsci.plugins.vsphere.builders;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.mo.VirtualMachine;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
-import hudson.model.EnvironmentContributingAction;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -17,23 +15,21 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Expose guest info for the named VM as environmental variables.
  * Information on variables can be found here.
  * https://www.vmware.com/support/developer/converter-sdk/conv55_apireference/vim.vm.GuestInfo.html
  */
-public class ExposeGuestInfo extends VSphereBuildStep {
+public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep {
 
     private final String vm;
     private final String envVariablePrefix;
@@ -53,16 +49,59 @@ public class ExposeGuestInfo extends VSphereBuildStep {
     }
 
     @Override
-    public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws Exception {
+    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+        try {
+            exposeInfo(run, launcher, listener);
+        } catch (Exception e) {
+            throw new AbortException(e.getMessage());
+        }
+    }
+
+    @Override
+    public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+        return false;
+    }
+
+    @Override
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+        boolean retVal = false;
+        try {
+            retVal = exposeInfo(build, launcher, listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return retVal;
+        //TODO throw AbortException instead of returning value
+    }
+
+    @Override
+    public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
+
+    @Override
+    public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
+
+    @Override
+    public BuildStepMonitor getRequiredMonitorService() {
+        return null;
+    }
+
+    public boolean exposeInfo(Run<?, ?> run, Launcher launcher, TaskListener listener) throws Exception {
         PrintStream jLogger = listener.getLogger();
+        String vmName = vm;
         EnvVars env;
         try {
-            env = build.getEnvironment(listener);
+            env = run.getEnvironment(listener);
         } catch (Exception e) {
             throw new VSphereException(e);
         }
-        env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-        String vmName = env.expand(vm);
+        if (run instanceof AbstractBuild) {
+            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+            vmName = env.expand(vm);
+        }
 
         VSphereLogger.vsLogger(jLogger, "Exposing guest info for VM \"" + vmName + "\" as environment variables");
 
@@ -71,7 +110,7 @@ public class ExposeGuestInfo extends VSphereBuildStep {
             throw new RuntimeException(Messages.validation_notFound("vm " + vmName));
         }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
-        build.addAction(envAction);
+        run.addAction(envAction);
 
         VSphereLogger.vsLogger(jLogger, "Successfully exposed guest info for VM \"" + vmName + "\"");
         return true;

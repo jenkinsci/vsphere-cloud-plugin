@@ -15,12 +15,11 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
 import com.vmware.vim25.mo.VirtualMachine;
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -28,11 +27,13 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.Collection;
 
-public class RenameSnapshot extends VSphereBuildStep {
+public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 
     private final String vm;
 	private final String oldName;
@@ -63,23 +64,73 @@ public class RenameSnapshot extends VSphereBuildStep {
         return newDescription;
     }
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			renameSnapshot(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+		return false;
+	}
+
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			retVal = renameSnapshot(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
+		//TODO throw AbortException instead of returning value
+	}
+
+	@Override
+	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public BuildStepMonitor getRequiredMonitorService() {
+		return null;
+	}
+
+	public boolean renameSnapshot(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
 
         PrintStream jLogger = listener.getLogger();
+		String expandedVm = vm;
+		String expandedOldName = oldName;
+		String expandedNewName = newName;
+		String expandedNewDescription = newDescription;
         EnvVars env;
         try {
-            env = build.getEnvironment(listener);
+            env = run.getEnvironment(listener);
         } catch (Exception e) {
             throw new VSphereException(e);
         }
-        env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-        String expandedVm = env.expand(vm);
-        String expandedOldName = env.expand(oldName);
-        String expandedNewName = env.expand(newName);
-        String expandedNewDescription = env.expand(newDescription);
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
+			expandedOldName = env.expand(oldName);
+			expandedNewName = env.expand(newName);
+			expandedNewDescription = env.expand(newDescription);
+		}
 
         VSphereLogger.vsLogger(jLogger, "Renaming snapshot of VM \""+expandedVm+"\" from \""+expandedOldName+"\" to \"" + expandedNewName + "\" with description \""+ expandedNewDescription +"\". Please wait ...");
+		try {
         vsphere.renameVmSnapshot(expandedVm, expandedOldName, expandedNewName, expandedNewDescription);
+		} catch (Exception e) {
+			throw new VSphereException(e);
+		}
         VSphereLogger.vsLogger(jLogger, "Renamed!");
 
         return true;

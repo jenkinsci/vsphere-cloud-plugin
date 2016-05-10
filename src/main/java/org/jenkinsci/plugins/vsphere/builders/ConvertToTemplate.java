@@ -14,11 +14,11 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
+import hudson.*;
 import hudson.model.BuildListener;
 import hudson.model.AbstractBuild;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
@@ -26,6 +26,7 @@ import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -37,90 +38,109 @@ import org.kohsuke.stapler.QueryParameter;
 
 public class ConvertToTemplate extends VSphereBuildStep {
 
-	private final String vm;
-	private final boolean force;
+    private final String vm;
+    private final boolean force;
 
-	@DataBoundConstructor
-	public ConvertToTemplate(String vm, boolean force) throws VSphereException {
-		this.force = force;
-		this.vm = vm;
-	}
+    @DataBoundConstructor
+    public ConvertToTemplate(String vm, boolean force) throws VSphereException {
+        this.force = force;
+        this.vm = vm;
+    }
 
-	public String getVm() {
-		return vm;
-	}
+    public String getVm() {
+        return vm;
+    }
 
-	public boolean isForce() {
-		return force;
-	}
+    public boolean isForce() {
+        return force;
+    }
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
-		return convert(build, launcher, listener);
-	}
+    @Override
+    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+        try {
+            convert(run, launcher, listener);
+        } catch (Exception e) {
+            throw new AbortException(e.getMessage());
+        }
+    }
 
-	private boolean convert(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException {
-		PrintStream jLogger = listener.getLogger();
-		VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");	
+    @Override
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+        boolean retVal = false;
+        try {
+            retVal = convert(build, launcher, listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return retVal;
+        //TODO throw AbortException instead of returning value
+    }
 
-		EnvVars env;
-		try {
-			env = build.getEnvironment(listener);
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
+    private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+        PrintStream jLogger = listener.getLogger();
+        VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");
+        String expandedVm = vm;
+        EnvVars env;
+        try {
+            env = run.getEnvironment(listener);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
 
-		Date date = new Date();
-		SimpleDateFormat df = new SimpleDateFormat("MMM dd, yyyy hh:mm:ss aaa");
+        Date date = new Date();
+        SimpleDateFormat df = new SimpleDateFormat("MMM dd, yyyy hh:mm:ss aaa");
 
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedVm = env.expand(vm);
+        if (run instanceof AbstractBuild) {
+            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+            expandedVm = env.expand(vm);
+        }
 
-		vsphere.markAsTemplate(expandedVm, df.format(date), force);
-		VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
+        vsphere.markAsTemplate(expandedVm, df.format(date), force);
+        VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
 
-		return true;
-	}
+        return true;
+    }
 
-	@Extension
-	public static final class ConvertToTemplateDescriptor extends VSphereBuildStepDescriptor {
+    @Extension
+    public static final class ConvertToTemplateDescriptor extends VSphereBuildStepDescriptor {
 
-		public ConvertToTemplateDescriptor() {
-			load();
-		}
+        public ConvertToTemplateDescriptor() {
+            load();
+        }
 
-		/**
-		 * This human readable name is used in the configuration screen.
-		 */
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_ConvertToTemplate();
-		}
+        /**
+         * This human readable name is used in the configuration screen.
+         */
+        @Override
+        public String getDisplayName() {
+            return Messages.vm_title_ConvertToTemplate();
+        }
 
-		public FormValidation doCheckVm(@QueryParameter String value)
-				throws IOException, ServletException {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the VM name"));
-			return FormValidation.ok();
-		}
+        public FormValidation doCheckVm(@QueryParameter String value)
+                throws IOException, ServletException {
+            if (value.length() == 0)
+                return FormValidation.error(Messages.validation_required("the VM name"));
+            return FormValidation.ok();
+        }
 
-		public FormValidation doTestData(@QueryParameter String serverName,
-				@QueryParameter String vm) {
-			try {
+        public FormValidation doTestData(@QueryParameter String serverName,
+                                         @QueryParameter String vm) {
+            try {
 
-				if (serverName.length() == 0 || vm.length() == 0)
-					return FormValidation.error(Messages.validation_requiredValues());
+                if (serverName.length() == 0 || vm.length() == 0)
+                    return FormValidation.error(Messages.validation_requiredValues());
 
-				if (vm.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("VM"));
+                if (vm.indexOf('$') >= 0)
+                    return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
-				if (vsphere.getVmByName(vm) == null)
-					return FormValidation.error(Messages.validation_notFound("VM"));
+                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                if (vsphere.getVmByName(vm) == null)
+                    return FormValidation.error(Messages.validation_notFound("VM"));
 
-				return FormValidation.ok(Messages.validation_success());
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			}
-		}
-	}	
+                return FormValidation.ok(Messages.validation_success());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
 }
