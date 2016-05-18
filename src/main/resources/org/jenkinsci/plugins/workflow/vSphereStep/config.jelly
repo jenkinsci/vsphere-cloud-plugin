@@ -1,4 +1,4 @@
-<!-- ?jelly escape-by-default='true'?>
+<?jelly escape-by-default='true'?>
 
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
     <f:entry title="${%Server}" field="serverName">
@@ -7,4 +7,4 @@
     <f:entry>
         <f:dropdownDescriptorSelector title="${%vSphere Action}" field="buildStep" descriptors="${descriptor.buildSteps}" />
     </f:entry>
-</j:jelly -->
+</j:jelly>
