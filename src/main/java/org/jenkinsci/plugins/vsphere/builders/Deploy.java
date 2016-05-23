@@ -170,18 +170,23 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
         vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, powerOn, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
-		IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 20);
-		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedClone+"\" : "+IP);
+		IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
 
-		VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
+		if(IP!=null) {
+			VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedClone + "\" : " + IP);
+			VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
 
-		if (run instanceof AbstractBuild) {
-			VSphereEnvAction envAction = new VSphereEnvAction();
-			envAction.add("VSPHERE_IP", IP);
-			run.addAction(envAction);
+			if (run instanceof AbstractBuild) {
+				VSphereEnvAction envAction = new VSphereEnvAction();
+				envAction.add("VSPHERE_IP", IP);
+				run.addAction(envAction);
+			}
+
+			return true;
+		} else {
+			VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting 60 seconds to get IP for \""+expandedClone+"\" ");
+			return false;
 		}
-
-		return true;
 	}
 
 	@Extension
