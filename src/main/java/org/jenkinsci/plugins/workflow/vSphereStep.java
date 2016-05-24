@@ -18,6 +18,8 @@ import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 
+import java.util.Map;
+
 /**
  * The vSphere invocation step for the Jenkins workflow plugin.
  */
@@ -121,9 +123,17 @@ public class vSphereStep extends AbstractStepImpl {
             vSphereBSC.perform(run, filePath, launcher, listener);
             if (step.getBuildStep().getClass().toString().contains("PowerOn") ||
                     step.getBuildStep().getClass().toString().contains("Deploy") ||
-                    step.getBuildStep().getClass().toString().contains("Clone")) {
+                    step.getBuildStep().getClass().toString().contains("Clone") ||
+                    step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
                 IP = step.getBuildStep().getIP();
                 envVars.put("VSPHERE_IP", IP);
+
+                if (step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
+                    Map<String, String> envVars = ((ExposeGuestInfo)step.getBuildStep()).getVars();
+                    for (Map.Entry<String, String> envVar: envVars.entrySet()) {
+                        envVars.put(envVar.getKey(), envVar.getValue());
+                    }
+                }
             }
             vSphereBSC = null;
 

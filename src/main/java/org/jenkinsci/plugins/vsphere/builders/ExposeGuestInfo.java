@@ -33,6 +33,8 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
 
     private final String vm;
     private final String envVariablePrefix;
+    private String IP;
+    private Map <String, String> envVars = new HashMap<>();
 
     @DataBoundConstructor
     public ExposeGuestInfo(final String vm, final String envVariablePrefix) throws VSphereException {
@@ -46,6 +48,15 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
 
     public String getEnvVariablePrefix() {
         return envVariablePrefix;
+    }
+
+    @Override
+    public String getIP() {
+        return IP;
+    }
+
+    public Map<String, String> getVars() {
+        return envVars;
     }
 
     @Override
@@ -146,6 +157,10 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                 continue;
             }
 
+            if ("IpAddress".equals(variableName)) {
+                IP = String.valueOf(value);
+            }
+            envVars.put(envVariablePrefix + "_" + variableName, String.valueOf(value));
             String environmentVariableName = envVariablePrefix + "_" + variableName;
             String environmentVariableValue = String.valueOf(value);
 
