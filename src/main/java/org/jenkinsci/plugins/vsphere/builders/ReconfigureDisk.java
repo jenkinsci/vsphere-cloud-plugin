@@ -20,11 +20,12 @@ import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 
-import hudson.EnvVars;
+import hudson.*;
 import hudson.Extension;
-import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
+import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -32,6 +33,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
 import java.io.IOException;
@@ -62,16 +64,39 @@ public class ReconfigureDisk extends ReconfigureStep {
 		return datastore;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException  {
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			reconfigureDisk(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			retVal = reconfigureDisk(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
+		//TODO throw AbortException instead of returning value
+	}
+
+	public boolean reconfigureDisk(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
 
 		PrintStream jLogger = listener.getLogger();
+		int diskSize = Integer.parseInt(this.diskSize);
 		EnvVars env;
 
 		try {
-			env = build.getEnvironment(listener);
-			env.overrideAll(build.getBuildVariables());
-			int diskSize = Integer.parseInt(env.expand(this.diskSize));
-
+			env = run.getEnvironment(listener);
+			if (run instanceof AbstractBuild) {
+				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+				diskSize = Integer.parseInt(env.expand(this.diskSize));
+			}
 			VirtualDeviceConfigSpec vdiskSpec = createAddDiskConfigSpec(vm, diskSize, jLogger);
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
 

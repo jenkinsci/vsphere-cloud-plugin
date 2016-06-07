@@ -14,18 +14,19 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.AbstractBuild;
+import hudson.*;
+import hudson.model.*;
+import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.Collection;
 
+import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -33,7 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-public class TakeSnapshot extends VSphereBuildStep {
+public class TakeSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 
 	private final String vm;    
 	private final String snapshotName;
@@ -64,24 +65,67 @@ public class TakeSnapshot extends VSphereBuildStep {
 		return includeMemory;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
-		return takeSnapshot(build, launcher, listener);
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			takeSnapshot(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+		return false;
+	}
+
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener)  {
+		boolean retVal = false;
+		try {
+			return takeSnapshot(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
 		//TODO throw AbortException instead of returning value
 	}
 
-	private boolean takeSnapshot(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
+	@Override
+	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+		return null;
+	}
+
+	@Override
+	public BuildStepMonitor getRequiredMonitorService() {
+		return null;
+	}
+
+	private boolean takeSnapshot(final Run<?, ?> run, Launcher launcher, final TaskListener listener) throws VSphereException{
 		PrintStream jLogger = listener.getLogger();
+		String expandedVm = vm;
+		String expandedSnapshotName = snapshotName;
+		String expandedDescription = description;
 		EnvVars env;
 		try {
-			env = build.getEnvironment(listener);
+			env = run.getEnvironment(listener);
 		} catch (Exception e) {
 			throw new VSphereException(e);
 		}
 
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild)run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
+			expandedSnapshotName = env.expand(snapshotName);
+			expandedDescription = env.expand(description);
+		}
 
 		VSphereLogger.vsLogger(jLogger, "Taking snapshot...");
-		vsphere.takeSnapshot(env.expand(vm), env.expand(snapshotName), env.expand(description), includeMemory);
+		vsphere.takeSnapshot(expandedVm, expandedSnapshotName, expandedDescription, includeMemory);
 		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;

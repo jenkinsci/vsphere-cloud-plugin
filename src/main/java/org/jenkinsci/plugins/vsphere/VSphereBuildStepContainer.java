@@ -14,24 +14,19 @@
  */
 package org.jenkinsci.plugins.vsphere;
 
-import hudson.DescriptorExtensionList;
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
+import hudson.*;
 import hudson.init.InitMilestone;
 import hudson.init.Initializer;
-import hudson.model.BuildListener;
-import hudson.model.Items;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractProject;
-import hudson.model.Hudson;
+import hudson.model.*;
 import hudson.slaves.Cloud;
 import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.ListBoxModel;
 
+import java.io.IOException;
 import java.io.PrintStream;
 
+import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep.VSphereBuildStepDescriptor;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
@@ -40,7 +35,9 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-public class VSphereBuildStepContainer extends Builder {
+import javax.annotation.Nonnull;
+
+public class VSphereBuildStepContainer extends Builder implements SimpleBuildStep {
 
     public static final String SELECTABLE_SERVER_NAME = "${VSPHERE_CLOUD_NAME}";
 
@@ -68,13 +65,15 @@ public class VSphereBuildStepContainer extends Builder {
 	}
 
 	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         VSphere vsphere = null;
         try {
-            EnvVars env = build.getEnvironment(listener);
-            env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-            String expandedServerName = env.expand(serverName);
-
+			String expandedServerName = serverName;
+			if (run instanceof AbstractBuild) {
+				EnvVars env = (run.getEnvironment(listener));
+				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+				expandedServerName = env.expand(serverName);
+			}
             startLogs(listener.getLogger(), expandedServerName);
 			//Need to ensure this server is same as one that was previously saved.
 			//TODO - also need to improve logging here.
@@ -87,16 +86,19 @@ public class VSphereBuildStepContainer extends Builder {
             }
 
 			buildStep.setVsphere(vsphere);
+			if (run instanceof AbstractBuild) {
+				buildStep.perform(((AbstractBuild) run), launcher, (BuildListener) listener);
+			} else {
+				buildStep.perform(run, filePath, launcher, listener);
+			}
 
-            return buildStep.perform(build, launcher, listener);
 		} catch (Exception e) {
-			VSphereLogger.vsLogger(listener.getLogger(), e);
+			throw new AbortException(e.getMessage());
 		} finally {
             if (vsphere != null) {
                 vsphere.disconnect();
             }
         }
-        return false;
 	}
 
 	private void startLogs(PrintStream logger, String serverName){

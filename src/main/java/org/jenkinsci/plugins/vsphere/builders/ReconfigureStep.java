@@ -17,15 +17,14 @@ package org.jenkinsci.plugins.vsphere.builders;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
-import hudson.DescriptorExtensionList;
-import hudson.ExtensionList;
-import hudson.ExtensionPoint;
-import hudson.Launcher;
+import hudson.*;
 import hudson.model.*;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
+import javax.annotation.Nonnull;
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -67,6 +66,8 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
 	}
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException;
+
+    public abstract void perform(@Nonnull Run<?, ?> run, FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
 
     protected VirtualDevice findDeviceByLabel(VirtualDevice[] devices, String label) {
         for(VirtualDevice d : devices) {

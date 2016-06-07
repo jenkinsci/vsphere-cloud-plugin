@@ -15,22 +15,10 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
 import com.google.common.base.Stopwatch;
-import hudson.EnvVars;
-import hudson.Extension;
-import hudson.Launcher;
-import hudson.model.BuildListener;
-import hudson.model.EnvironmentContributingAction;
-import hudson.model.AbstractBuild;
+import com.vmware.vim25.mo.VirtualMachine;
+import hudson.*;
+import hudson.model.*;
 import hudson.util.FormValidation;
-
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import javax.servlet.ServletException;
-
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -38,12 +26,19 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import com.vmware.vim25.mo.VirtualMachine;
+import javax.annotation.Nonnull;
+import javax.servlet.ServletException;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class PowerOn extends VSphereBuildStep {
 
 	private final String vm;    
 	private final int timeoutInSeconds;
+	private String IP;
 
 	@DataBoundConstructor
 	public PowerOn(final String vm, final int timeoutInSeconds) throws VSphereException {
@@ -59,49 +54,71 @@ public class PowerOn extends VSphereBuildStep {
 		return timeoutInSeconds;
 	}
 
-	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException {
-		return powerOn(build, launcher, listener);
+	@Override
+	public String getIP() {
+		return IP;
+	}
+
+	@Override
+	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+		try {
+			powerOn(run, launcher, listener);
+		} catch (Exception e) {
+			throw new AbortException(e.getMessage());
+		}
+	}
+
+	@Override
+	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
+		boolean retVal = false;
+		try {
+			retVal = powerOn(build, launcher, listener);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		return retVal;
 		//TODO throw AbortException instead of returning value
 	}
 
-	private boolean powerOn(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) throws VSphereException{
+	private boolean powerOn(final Run<?, ?> run, Launcher launcher, final TaskListener listener) throws VSphereException, IOException, InterruptedException {
 		PrintStream jLogger = listener.getLogger();
 		EnvVars env;
-		try {
-			env = build.getEnvironment(listener);
-		} catch (Exception e) {
-			throw new VSphereException(e);
+		String expandedVm = vm;
+
+		env = run.getEnvironment(listener);
+
+		if (run instanceof AbstractBuild) {
+			env.overrideAll(((AbstractBuild)run).getBuildVariables()); // Add in matrix axes..
+			expandedVm = env.expand(vm);
 		}
-
-		env.overrideAll(build.getBuildVariables()); // Add in matrix axes..
-		String expandedVm = env.expand(vm);
-
-		VSphereLogger.vsLogger(jLogger, "Waiting for VM " + expandedVm + " to start (VM may be restarted during this time)");
-        VSphereLogger.vsLogger(jLogger, "Timeout set to " + timeoutInSeconds + " seconds");
 
         Stopwatch stopwatch = new Stopwatch().start();
         vsphere.startVm(expandedVm, timeoutInSeconds);
         long elapsedTime = stopwatch.elapsedTime(TimeUnit.SECONDS);
-        VSphereLogger.vsLogger(jLogger, "VM started in " + elapsedTime  + " seconds");
 
         int secondsToWaitForIp = (int) (timeoutInSeconds - elapsedTime);
 
-		String vmIP = vsphere.getIp(vsphere.getVmByName(expandedVm), secondsToWaitForIp);
+		IP = vsphere.getIp(vsphere.getVmByName(expandedVm), secondsToWaitForIp);
 
-		if(vmIP==null){
+		if(IP==null){
 			VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for \""+expandedVm+"\" ");
 			return false;
 		}
 
-		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+vmIP);
-        VSphereLogger.vsLogger(jLogger, "Complete startup took " + stopwatch.elapsedTime(TimeUnit.SECONDS) + " seconds");
+		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+IP);
         stopwatch.stop();
 
         // useful to tell user about the environment variable
-        VSphereLogger.vsLogger(jLogger, "Exposing " + vmIP + " as environment variable VSPHERE_IP");
-        VSphereEnvAction envAction = new VSphereEnvAction();
-		envAction.add("VSPHERE_IP", vmIP);
-		build.addAction(envAction);
+        VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
+
+		if (run instanceof AbstractBuild) {
+			VSphereEnvAction envAction = new VSphereEnvAction();
+			envAction.add("VSPHERE_IP", IP);
+			run.addAction(envAction);
+		} else {
+			env.put("VSPHERE_IP", IP);
+		}
+
 		return true;
 	}
 
