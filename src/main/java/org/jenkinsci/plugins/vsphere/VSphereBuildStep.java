@@ -20,13 +20,10 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.*;
 
-import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
-import org.jenkinsci.plugins.workflow.steps.AbstractStepExecutionImpl;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
