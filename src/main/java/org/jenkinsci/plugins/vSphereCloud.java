@@ -389,6 +389,11 @@ public class vSphereCloud extends Cloud {
 
         /**
          * For UI.
+         * @param vsHost From UI.
+         * @param vsDescription From UI.
+         * @param credentialsId From UI.
+         * @param maxOnlineSlaves From UI.
+         * @return Result of the validation.
          */
         public FormValidation doTestConnection(@QueryParameter String vsHost,
                 @QueryParameter String vsDescription,

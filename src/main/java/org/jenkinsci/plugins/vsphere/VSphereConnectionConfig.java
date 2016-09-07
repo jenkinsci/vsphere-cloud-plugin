@@ -41,7 +41,7 @@ import org.kohsuke.stapler.QueryParameter;
 
 /**
  *
- * @author Oleg Nenashev <o.v.nenashev@gmail.com>
+ * @author Oleg Nenashev &lt;o.v.nenashev@gmail.com&gt;
  */
 public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConnectionConfig> {
     

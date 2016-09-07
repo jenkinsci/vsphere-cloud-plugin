@@ -74,7 +74,10 @@ public class VSphere {
 	/**
 	 * Initiates Connection to vSphere Server
          * @param server Server URL
-	 * @throws VSphereException 
+	 * @param user Username.
+	 * @param pw Password.
+	 * @throws VSphereException If an error occurred.
+	 * @return A connected instance.
 	 */
 	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
 		return new VSphere(server, user, pw);
@@ -104,7 +107,9 @@ public class VSphere {
      * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
-     * @throws VSphereException
+     * @param powerOn - If true the VM will be powered on.
+     * @param jLogger - Where to log to.
+     * @throws VSphereException If an error occurred.
      */
     public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_NOT_USE_SNAPSHOTS = false;
@@ -121,7 +126,9 @@ public class VSphere {
      * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
-     * @throws VSphereException
+     * @param powerOn - If true the VM will be powered on.
+     * @param jLogger - Where to log to.
+     * @throws VSphereException If an error occurred.
      */
     public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
         boolean DO_USE_SNAPSHOTS = true;
@@ -240,7 +247,8 @@ public class VSphere {
 
 	/**
 	 * @param name - Name of VM to start
-	 * @throws VSphereException 
+	 * @param timeoutInSeconds How long to wait for the VM to be running.
+	 * @throws VSphereException If an error occurred.
 	 */
 	public void startVm(String name, int timeoutInSeconds) throws VSphereException {
 
@@ -436,11 +444,12 @@ public class VSphere {
 	}
 
 	/**
-	 * Shortcut
+	 * Asks vSphere for the IP address used by a VM.
 	 * 
-	 * @param vm - VirtualMachine name of which IP is returned
-	 * @return - String containing IP address
-	 * @throws VSphereException 
+	 * @param vm VirtualMachine name whose IP is to be returned.
+	 * @param timeout How long to wait (in seconds) for the IP address to known to vSphere.
+	 * @return String containing IP address.
+	 * @throws VSphereException If an error occurred.
 	 */
 	public String getIp(VirtualMachine vm, int timeout) throws VSphereException {
 
@@ -477,11 +486,7 @@ public class VSphere {
 	/**
 	 * @param vmName - name of VM object to retrieve
 	 * @return - VirtualMachine object
-	 * @throws InvalidProperty
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws MalformedURLException 
-	 * @throws VSphereException 
+	 * @throws VSphereException If an error occurred.
 	 */
 	public VirtualMachine getVmByName(String vmName) throws VSphereException {
 		try {
@@ -548,11 +553,7 @@ public class VSphere {
 
 	/**
 	 * @return - ManagedEntity array of Datastore
-	 * @throws InvalidProperty
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws MalformedURLException
-	 * @throws VSphereException
+	 * @throws VSphereException If an error occurred.
 	 */
 	public ManagedEntity[] getDatastores() throws VSphereException {
 		try {
@@ -615,7 +616,8 @@ public class VSphere {
 	/**
 	 * Detroys the VM in vSphere
 	 * @param name - VM object to destroy
-	 * @throws VSphereException 
+	 * @param failOnNoExist If true and the VM does not exist then a VSphereException will be thrown.
+	 * @throws VSphereException If an error occurred.
 	 */
 	public void destroyVm(String name, boolean failOnNoExist) throws VSphereException{
 		try{
@@ -649,10 +651,11 @@ public class VSphere {
 
     /**
      * Renames a VM Snapshot
-     * @param oldName the current name of the vm
-     * @param newName the new name of the vm
-     * @param newDescription the new description of the vm
-     * @throws VSphereException
+     * @param vmName the name of the VM whose snapshot is being renamed.
+     * @param oldName the current name of the VM's snapshot.
+     * @param newName the new name of the VM's snapshot.
+     * @param newDescription the new description of the VM's snapshot.
+     * @throws VSphereException If an error occurred.
      */
     public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription) throws VSphereException{
         try{
@@ -678,7 +681,7 @@ public class VSphere {
      * Renames the VM vSphere
      * @param oldName the current name of the vm
      * @param newName the new name of the vm
-     * @throws VSphereException
+     * @throws VSphereException If an error occurred.
      */
     public void renameVm(String oldName, String newName) throws VSphereException{
         try{
@@ -812,7 +815,7 @@ public class VSphere {
 	 * @param virtualMachine - VM object
 	 * @param name - the name of the Port Group
 	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
-	 * @throws VSphereException
+	 * @throws VSphereException If an error occurred.
 	 */
 	public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
 														String name) throws VSphereException
@@ -838,7 +841,7 @@ public class VSphere {
 	 * @param virtualMachine - VM object
 	 * @param name - the name of the Port Group
 	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
-	 * @throws VSphereException
+	 * @throws VSphereException If an error occurred.
 	 */
 	public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
 																			 String name) throws VSphereException
@@ -863,7 +866,7 @@ public class VSphere {
 	 * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
 	 * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
 	 * @return returns DistributedVirtualSwitch object that represents the vDS Switch
-	 * @throws VSphereException
+	 * @throws VSphereException If an error occurred.
 	 */
 	public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
 			DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException
