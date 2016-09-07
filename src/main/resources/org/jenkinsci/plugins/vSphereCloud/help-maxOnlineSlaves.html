@@ -1,1 +1,7 @@
-<div>Maximum number of virtual machines that this vSphere Cloud should use at one time. A value of 0 indicates no maximum value.</div>
+<div>
+Maximum number of virtual machines that this vSphere Cloud may use at one time.<br/>
+A value of 0 indicates no maximum value.<br/>
+If there are more VMs running (in total - not just ones started by the vSphere plugin)
+than the maximum then the vSphere Cloud plug-in will not
+start up further VMs.
+</div>
