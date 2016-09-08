@@ -1,12 +1,9 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -18,9 +15,9 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
  * Jenkins asking us to start things.
  * <p/>
  * We do this by keeping a record of every slave we start, and every slave we
- * have active. That way, we can avoid over-provisioning.<br/>
- * The idea is that we're told what slaves we're going to create, when we've
- * created them (or failed to) and when they've died.
+ * have active. That way, we can avoid over-provisioning.<br>
+ * </br> The idea is that we're told what slaves we're going to create, when
+ * we've created them (or failed to) and when they've died.
  * <p/>
  * Note: This is not thread-safe. Callers must do their own synchronization.
  */
@@ -52,11 +49,16 @@ public class CloudProvisioningState {
     }
 
     /**
-     * To be called when we've decided to create a new node.<br/>
-     * Callers MUST ensure that
+     * To be called when we've decided to create a new node.<br>
+     * </br> Callers MUST ensure that
      * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)} or
      * {@link #provisioningEndedInError(CloudProvisioningRecord, String)} gets
      * called later.
+     * 
+     * @param provisionable
+     *            Our record for the template for the named node.
+     * @param nodeName
+     *            The name of the VM.
      */
     public void provisioningStarted(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasPreviouslyUnknownToPlanning = provisionable.addCurrentlyPlanned(nodeName);
@@ -67,10 +69,15 @@ public class CloudProvisioningState {
 
     /**
      * To be called when a newly created node (previously promised to
-     * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.<br/>
-     * Callers MUST ensure that
+     * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.<br>
+     * </br> Callers MUST ensure that
      * {@link #provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate, String)}
      * gets called later.
+     * 
+     * @param provisionable
+     *            Our record for the template for the named node.
+     * @param nodeName
+     *            The name of the VM.
      */
     public void provisionedSlaveNowActive(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasNotPreviouslyActive = provisionable.addCurrentlyActive(nodeName);
@@ -83,6 +90,11 @@ public class CloudProvisioningState {
      * To be called when a node we created (previously told to
      * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)}) has
      * died.
+     * 
+     * @param template
+     *            The template for the named node.
+     * @param nodeName
+     *            The name of the VM.
      */
     public void provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate template, String nodeName) {
         final CloudProvisioningRecord provisionable = getExistingRecord(template);
@@ -103,6 +115,11 @@ public class CloudProvisioningState {
      * To be called when a node that we previously promised to create (by
      * calling {@link #provisioningStarted(CloudProvisioningRecord, String)})
      * failed to start.
+     * 
+     * @param provisionable
+     *            Our record for the template for the named node.
+     * @param nodeName
+     *            The name of the VM.
      */
     public void provisioningEndedInError(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
@@ -182,8 +199,8 @@ public class CloudProvisioningState {
     }
 
     /**
-     * Logs a state change.<br/>
-     * If the state change isn't valid, it's logged as a warning.
+     * Logs a state change.<br>
+     * </br> If the state change isn't valid, it's logged as a warning.
      * 
      * @param logLevel
      *            The level to log the message at, if the boolean arguments are
