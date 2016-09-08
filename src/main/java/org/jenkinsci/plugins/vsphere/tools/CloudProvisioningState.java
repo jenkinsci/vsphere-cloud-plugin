@@ -13,15 +13,16 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 /**
  * Utility class that works out what slaves we should start up in response to
  * Jenkins asking us to start things.
- * <p/>
+ * <p>
  * We do this by keeping a record of every slave we start, and every slave we
  * have active. That way, we can avoid over-provisioning.
- * <p/>
+ * </p>
+ * <p>
  * The idea is that we are told what slaves that the cloud is going to create,
  * when the cloud has created them (or failed to) and when those slaves have
  * died. This way we can keep track of everything, in order to allow the cloud
  * to make accurate decisions regarding what to create next.
- * <p/>
+ * </p>
  * Note: This is not thread-safe. Callers must do their own synchronization.
  */
 public class CloudProvisioningState {
