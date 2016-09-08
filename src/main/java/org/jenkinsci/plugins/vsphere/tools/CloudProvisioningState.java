@@ -15,9 +15,12 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
  * Jenkins asking us to start things.
  * <p/>
  * We do this by keeping a record of every slave we start, and every slave we
- * have active. That way, we can avoid over-provisioning.<br>
- * </br> The idea is that we're told what slaves we're going to create, when
- * we've created them (or failed to) and when they've died.
+ * have active. That way, we can avoid over-provisioning.
+ * <p/>
+ * The idea is that we are told what slaves that the cloud is going to create,
+ * when the cloud has created them (or failed to) and when those slaves have
+ * died. This way we can keep track of everything, in order to allow the cloud
+ * to make accurate decisions regarding what to create next.
  * <p/>
  * Note: This is not thread-safe. Callers must do their own synchronization.
  */
@@ -49,11 +52,10 @@ public class CloudProvisioningState {
     }
 
     /**
-     * To be called when we've decided to create a new node.<br>
-     * </br> Callers MUST ensure that
-     * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)} or
-     * {@link #provisioningEndedInError(CloudProvisioningRecord, String)} gets
-     * called later.
+     * To be called when we've decided to create a new node. Callers MUST ensure
+     * that {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)}
+     * or {@link #provisioningEndedInError(CloudProvisioningRecord, String)}
+     * gets called later.
      * 
      * @param provisionable
      *            Our record for the template for the named node.
@@ -69,8 +71,8 @@ public class CloudProvisioningState {
 
     /**
      * To be called when a newly created node (previously promised to
-     * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.<br>
-     * </br> Callers MUST ensure that
+     * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.
+     * Callers MUST ensure that
      * {@link #provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate, String)}
      * gets called later.
      * 
@@ -199,8 +201,8 @@ public class CloudProvisioningState {
     }
 
     /**
-     * Logs a state change.<br>
-     * </br> If the state change isn't valid, it's logged as a warning.
+     * Logs a state change. If the state change isn't valid, it's logged as a
+     * warning.
      * 
      * @param logLevel
      *            The level to log the message at, if the boolean arguments are
