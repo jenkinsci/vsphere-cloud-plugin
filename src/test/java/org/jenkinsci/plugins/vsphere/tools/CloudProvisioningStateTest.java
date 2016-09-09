@@ -263,7 +263,7 @@ public class CloudProvisioningStateTest {
         final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
                 "snapshotName", false, "cluster", "resourcePool", "datastore", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", "credentialsId",
-                Collections.EMPTY_LIST);
+                Collections.EMPTY_LIST, Collections.EMPTY_LIST);
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<vSphereCloudSlaveTemplate>();
         templates.add(template);

@@ -1,0 +1,37 @@
+<div>
+Uses the vSphere "GuestInfo" data object to pass information to the newly-cloned virtual machine.
+The guest operating system can retrieve this information using the <tt>vmtoolsd</tt> utility.
+<br></br>
+e.g. Passing in a GuestInfo property named
+"<tt>JNLPURL</tt>"
+with value
+"<tt>${JENKINS_URL}computer/${NODE_NAME}/slave-agent.jnlp</tt>"
+could tell a virtual machine what URL to connect to in order to run the Jenkins slave.jar agent,
+and the virtual machine could retrieve that information using the command
+<tt>vmtoolsd --cmd "info-get guestinfo.JNLPURL"</tt>.
+<p>
+Variables which can be used within the values of these properties include
+<ul>
+<li>All variables from the Jenkins global configuration, e.g. environment variables.</li>
+<li>All variables exposed from "this" node's own properties, e.g. tool locations.</li>
+<li>Environment variables available in build steps that are not build-dependent:
+<tt>JENKINS_URL</tt>,
+<tt>NODE_NAME</tt>,
+<tt>NODE_LABELS</tt>.
+</li>
+<li>The following properties from this vSphere template definition:
+<tt>cluster</tt>,
+<tt>datastore</tt>,
+<tt>labelString</tt>,
+<tt>masterImageName</tt>,
+<tt>remoteFS</tt>,
+<tt>snapshotName</tt>,
+<tt>targetHost</tt>,
+<tt>templateDescription</tt>
+</li>
+</ul>
+</p>
+Note: This is not a list of properties that are exposed as GuestInfo properties by default.
+The above list is a list of variables that <em>may</em> be used in the GuestInfo properties.
+By default, no GuestInfo properties are passed.
+</div>

@@ -70,6 +70,15 @@
             <c:select/>
         </f:entry>
 
+        <f:entry title="${%GuestInfo Properties}" help="${descriptor.getHelpFile('guestInfoProperties')}">
+            <f:repeatable field="guestInfoProperties" add="${%Add}">
+                <st:include page="config.jelly" class="${descriptor.clazz}"/>
+                <div align="right">
+                    <f:repeatableDeleteButton value="${%Delete}"/>
+                </div>
+            </f:repeatable>
+        </f:entry>
+
         <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
     </table>
 </j:jelly>

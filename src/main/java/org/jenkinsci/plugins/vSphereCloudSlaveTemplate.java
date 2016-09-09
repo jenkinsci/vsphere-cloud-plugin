@@ -20,7 +20,9 @@ import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
 
+import hudson.EnvVars;
 import hudson.Extension;
+import hudson.Util;
 import hudson.model.Computer;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
@@ -28,9 +30,13 @@ import hudson.model.ItemGroup;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
 import hudson.util.ListBoxModel;
+
 import java.util.List;
+import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import jenkins.model.Jenkins;
+
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 
@@ -45,8 +51,11 @@ import hudson.slaves.NodeProperty;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
+import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -83,6 +92,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String targetHost;
     private final String credentialsId;
     private final List<? extends NodeProperty<?>> nodeProperties;
+    private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
     private static transient final boolean POWER_ON = true;
 
     private transient Set<LabelAtom> labelSet;
@@ -110,7 +120,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 final String targetResourcePool,
                 final String targetHost,
                 final String credentialsId,
-                final List<? extends NodeProperty<?>> nodeProperties) {
+                final List<? extends NodeProperty<?>> nodeProperties,
+                final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
         this.snapshotName = snapshotName;
@@ -133,6 +144,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.targetHost = targetHost;
         this.credentialsId = credentialsId;
         this.nodeProperties = nodeProperties;
+        this.guestInfoProperties = guestInfoProperties;
         readResolve();
     }
 
@@ -227,6 +239,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.nodeProperties;
     }
 
+    public List<? extends VSphereGuestInfoProperty> getGuestInfoProperties() {
+        return this.guestInfoProperties;
+    }
+
     public Set<LabelAtom> getLabelSet() {
         return this.labelSet;
     }
@@ -244,11 +260,18 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this;
     }
 
-    public vSphereCloudProvisionedSlave provision(final CloudProvisioningState algorithm, final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException {
+    public vSphereCloudProvisionedSlave provision(final CloudProvisioningState algorithm, final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
 
         vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, POWER_ON, logger);
+        if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
+            final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
+            if( !resolvedGuestInfoProperties.isEmpty() ) {
+                LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedGuestInfoProperties });
+                vSphere.addGuestInfoVariable(cloneName, resolvedGuestInfoProperties);
+            }
+        }
 
         final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
         final SSHLauncher launcher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
@@ -288,5 +311,55 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final List<StandardUsernameCredentials> credentials = lookupCredentials(StandardUsernameCredentials.class, context, ACL.SYSTEM, HTTP_SCHEME, HTTPS_SCHEME);
             return new StandardUsernameListBoxModel().withAll(credentials);
         }
+    }
+
+    private Map<String, String> calculateGuestInfoProperties(final String cloneName, final TaskListener listener)
+            throws IOException, InterruptedException {
+        final EnvVars knownVariables = calculateVariablesForGuestInfo(cloneName, listener);
+        final Map<String, String> resolvedGuestInfoProperties = new LinkedHashMap<String, String>();
+        for( final VSphereGuestInfoProperty property : this.guestInfoProperties ) {
+            final String name = property.getName();
+            final String configuredValue = property.getValue();
+            final String resolvedValue = Util.replaceMacro(configuredValue, knownVariables);
+            resolvedGuestInfoProperties.put(name, resolvedValue);
+        }
+        return resolvedGuestInfoProperties;
+    }
+
+    private EnvVars calculateVariablesForGuestInfo(final String cloneName, final TaskListener listener)
+            throws IOException, InterruptedException {
+        final EnvVars knownVariables = new EnvVars();
+        // Maintenance note: If you update this method, you must also update the
+        // UI help page to match.
+        final String jenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+        if (jenkinsUrl != null) {
+            addEnvVar(knownVariables, "JENKINS_URL", jenkinsUrl);
+            addEnvVar(knownVariables, "HUDSON_URL", jenkinsUrl);
+        }
+        addEnvVars(knownVariables, listener, Jenkins.getInstance().getGlobalNodeProperties());
+        addEnvVars(knownVariables, listener, this.nodeProperties);
+        addEnvVar(knownVariables, "NODE_NAME", cloneName);
+        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : Util.join(getLabelSet(), " "));
+        addEnvVar(knownVariables, "cluster", this.cluster);
+        addEnvVar(knownVariables, "datastore", this.datastore);
+        addEnvVar(knownVariables, "labelString", this.labelString);
+        addEnvVar(knownVariables, "masterImageName", this.masterImageName);
+        addEnvVar(knownVariables, "remoteFS", this.remoteFS);
+        addEnvVar(knownVariables, "snapshotName", this.snapshotName);
+        addEnvVar(knownVariables, "targetHost", this.targetHost);
+        addEnvVar(knownVariables, "templateDescription", this.templateDescription);
+        return knownVariables;
+    }
+
+    private static void addEnvVars(final EnvVars vars, final TaskListener listener, final Iterable<? extends NodeProperty> nodeProperties) throws IOException, InterruptedException {
+        if( nodeProperties!=null ) {
+            for (final NodeProperty nodeProperty: nodeProperties) {
+                nodeProperty.buildEnvVars(vars , listener);
+            }
+        }
+    }
+
+    private static void addEnvVar(final EnvVars vars, final String name, final Object valueOrNull) {
+        vars.put(name, valueOrNull==null?"":valueOrNull.toString());
     }
 }
