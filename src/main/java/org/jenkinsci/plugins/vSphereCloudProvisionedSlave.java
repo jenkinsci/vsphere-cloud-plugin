@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 package org.jenkinsci.plugins;
- 
+
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Functions;
@@ -35,7 +35,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
  */
 public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     private static final Logger LOGGER = Logger.getLogger(vSphereCloudProvisionedSlave.class.getName());
-    
+
     @DataBoundConstructor
     public vSphereCloudProvisionedSlave(String name, String nodeDescription,
             String remoteFS, String numExecutors, Mode mode,
@@ -47,24 +47,24 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
             String snapName, String launchDelay, String idleOption,
             String LimitedTestRunCount)
             throws FormException, IOException {
-        super(name, nodeDescription, 
-              remoteFS, numExecutors, 
+        super(name, nodeDescription,
+              remoteFS, numExecutors,
               mode, labelString,
-              delegateLauncher, retentionStrategy, 
+              delegateLauncher, retentionStrategy,
               nodeProperties, vsDescription,
-              vmName, launchSupportForced, 
-              waitForVMTools, snapName, 
-              launchDelay, idleOption, 
+              vmName, launchSupportForced,
+              waitForVMTools, snapName,
+              launchDelay, idleOption,
               LimitedTestRunCount);
     }
-        
+
     @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         super._terminate(listener);
         final vSphereCloudLauncher launcher = (vSphereCloudLauncher) getLauncher();
         if(launcher != null) {
             final vSphereCloud cloud = launcher.findOurVsInstance();
-            
+
             if(cloud != null) {
                 VSphere vSphere = null;
                 try {
@@ -78,8 +78,8 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
                     }
                 }
             }
-        }       
-        
+        }
+
     }
 
     @Extension
@@ -110,12 +110,12 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
 
         @Override
         public String getDisplayName() {
-            return "Slave virtual computer running under vSphere Cloud";
+            return "Slave created from a vSphere Cloud slave template";
         }
 
         @Override
         public boolean isInstantiable() {
-            return true;
+            return false;
         }
 
         public List<vSphereCloud> getvSphereClouds() {

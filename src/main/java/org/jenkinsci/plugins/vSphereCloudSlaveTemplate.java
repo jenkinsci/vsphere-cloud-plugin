@@ -15,10 +15,11 @@
  */
 
 package org.jenkinsci.plugins;
-  
+
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
+
 import hudson.Extension;
 import hudson.model.Computer;
 import hudson.model.Describable;
@@ -41,10 +42,12 @@ import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.NodeProperty;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Set;
-import java.util.UUID;
+
+import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
@@ -54,7 +57,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
  */
 public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveTemplate> {
     private static final Logger LOGGER = Logger.getLogger(vSphereCloudSlaveTemplate.class.getName());
-    
+
     protected static final SchemeRequirement HTTP_SCHEME = new SchemeRequirement("http");
     protected static final SchemeRequirement HTTPS_SCHEME = new SchemeRequirement("https");
 
@@ -66,7 +69,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String resourcePool;
     private final String datastore;
     private final String templateDescription;
-    private transient int templateInstanceCap;
+    private int templateInstanceCap;
     private final int numberOfExecutors;
     private final String remoteFS;
     private final String labelString;
@@ -80,11 +83,11 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String targetHost;
     private final String credentialsId;
     private final List<? extends NodeProperty<?>> nodeProperties;
-    boolean POWER_ON = true;
-    
+    private static transient final boolean POWER_ON = true;
+
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
-    
+
     @DataBoundConstructor
     public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
                 final String masterImageName,
@@ -132,138 +135,145 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.nodeProperties = nodeProperties;
         readResolve();
     }
-    
+
     public String getCloneNamePrefix() {
         return this.cloneNamePrefix;
     }
-    
+
     public String getMasterImageName() {
         return this.masterImageName;
     }
-    
+
     public String getSnapshotName() {
         return this.snapshotName;
     }
-    
+
     public boolean getLinkedClone() {
         return this.linkedClone;
     }
-    
+
     public String getCluster() {
         return this.cluster;
     }
-    
+
     public String getResourcePool() {
         return this.resourcePool;
     }
-    
+
     public String getDatastore() {
         return this.datastore;
     }
-    
+
     public String getTemplateDescription() {
         return this.templateDescription;
     }
-    
+
     public int getTemplateInstanceCap() {
         if(this.templateInstanceCap == Integer.MAX_VALUE) {
             return 0;
         }
         return this.templateInstanceCap;
     }
-    
-    public int getNumberOfExceutors() {
+
+    public int getNumberOfExecutors() {
         return this.numberOfExecutors;
     }
-    
+
     public String getRemoteFS() {
         return this.remoteFS;
     }
-    
+
     public String getLabelString() {
         return this.labelString;
     }
-    
+
     public Mode getMode() {
         return this.mode;
     }
-    
+
     public boolean getForceVMLaunch() {
         return this.forceVMLaunch;
     }
-    
+
     public boolean getWaitForVMTools() {
         return this.waitForVMTools;
     }
-    
+
     public int getLaunchDelay() {
         return this.launchDelay;
     }
-    
+
     public int getLimitedRunCount() {
         return this.limitedRunCount;
     }
-    
+
     public boolean getSaveFailure() {
         return this.saveFailure;
     }
-    
+
     public String getTargetResourcePool() {
         return this.targetResourcePool;
     }
-    
+
     public String getTargetHost() {
         return this.targetHost;
     }
-    
+
     public String getCredentialsId() {
         return this.credentialsId;
     }
 
     public List<? extends NodeProperty<?>> getNodeProperties() {
         return this.nodeProperties;
-    }   
-        
+    }
+
     public Set<LabelAtom> getLabelSet() {
         return this.labelSet;
     }
-    
+
     public vSphereCloud getParent() {
         return this.parent;
     }
-    
+
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
-       
+
         if(this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
         }
         return this;
     }
-    
-    public vSphereCloudProvisionedSlave provision(TaskListener listener) throws VSphereException, FormException, IOException {
+
+    public vSphereCloudProvisionedSlave provision(final CloudProvisioningState algorithm, final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException {
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
-        final UUID cloneUUID = UUID.randomUUID();
-        final String cloneName = this.cloneNamePrefix + "_" + cloneUUID;
-        
+
         vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, POWER_ON, logger);
-        
+
         final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
-        final SSHLauncher sshLauncher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
-        
+        final SSHLauncher launcher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
+
         vSphere.disconnect();
 //        final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
 //        strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
         final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
-        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, sshLauncher, strategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, launcher, strategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount)) {
+            @Override
+            protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
+                // once we're done with, remove our cached record.
+                synchronized(algorithm) {
+                    algorithm.provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate.this, cloneName);
+                }
+                super._terminate(listener);
+            }
+        };
     }
-    
+
     @Override
     public Descriptor<vSphereCloudSlaveTemplate> getDescriptor() {
         return Jenkins.getInstance().getDescriptor(getClass());
     }
-    
+
     @Extension
     public static final class DescriptorImpl extends Descriptor<vSphereCloudSlaveTemplate> {
         @Override

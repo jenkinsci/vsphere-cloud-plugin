@@ -3,7 +3,7 @@
  * and open the template in the editor.
  */
 package org.jenkinsci.plugins;
- 
+
 import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.model.Descriptor;
@@ -39,7 +39,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     private final int launchDelay;
     private final MACHINE_ACTION idleAction;
     private final int LimitedTestRunCount;
-    
+
     public enum MACHINE_ACTION {
         SHUTDOWN,
         REVERT,
@@ -81,7 +81,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         }
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
     }
-    
+
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
             for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
@@ -110,7 +110,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 }
 
                 // Slaves that take a while to start up make get multiple launch
-                // requests from Jenkins.  
+                // requests from Jenkins.
                 if (vsSlave.slaveIsStarting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring additional attempt to start the slave; it's already being started");
                     return;
@@ -229,7 +229,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
-        
+
         if(vsSlave == null) {
             vSphereCloud.Log(slaveComputer, taskListener, "Slave is null.");
             return;
@@ -248,7 +248,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                 return;
             }
         }
-        
+
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         VSphere v = null;
         try {
@@ -279,6 +279,8 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                             break;
                         case RESET:
                             resetVM(vm, slaveComputer, taskListener);
+                            break;
+                        case NOTHING:
                             break;
                     }
                     if (localIdle == MACHINE_ACTION.REVERT) {
@@ -339,7 +341,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     public Integer getLimitedTestRunCount() {
         return LimitedTestRunCount;
     }
-        
+
     @Override
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
