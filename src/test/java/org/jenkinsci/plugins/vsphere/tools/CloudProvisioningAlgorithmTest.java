@@ -164,6 +164,6 @@ public class CloudProvisioningAlgorithmTest {
 
     private static vSphereCloudSlaveTemplate stubTemplate(String prefix, int templateInstanceCap) {
         return new vSphereCloudSlaveTemplate(prefix, "", null, false, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, null, null);
+                null, null, null, false, false, 0, 0, false, null, null, null, null, null);
     }
 }
