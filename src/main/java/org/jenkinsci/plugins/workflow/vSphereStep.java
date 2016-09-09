@@ -70,19 +70,15 @@ public class vSphereStep extends AbstractStepImpl {
 
         public ListBoxModel doFillServerNameItems() {
             ListBoxModel select = new ListBoxModel();
-
             try {
-                boolean hasVsphereClouds = false;
                 for (Cloud cloud : Hudson.getInstance().clouds) {
                     if (cloud instanceof vSphereCloud) {
-                        hasVsphereClouds = true;
                         select.add(((vSphereCloud) cloud).getVsDescription());
                     }
                 }
             } catch (Exception e) {
                 e.printStackTrace();
             }
-
             return select;
         }
 
