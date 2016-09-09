@@ -18,6 +18,9 @@ import java.io.PrintStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -27,6 +30,7 @@ import org.apache.commons.lang.StringUtils;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInfoState;
 import com.vmware.vim25.VirtualMachineCloneSpec;
@@ -57,7 +61,6 @@ public class VSphere {
 	private final String session;
 
 	private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException{
-
 		try {
 			//TODO - change ignoreCert to be configurable
 			this.url = new URL(url);
@@ -82,7 +85,7 @@ public class VSphere {
 	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
 		return new VSphere(server, user, pw);
 	}
-        
+
         /**
          * Disconnect from vSphere server
          */
@@ -175,7 +178,6 @@ public class VSphere {
         } catch(Exception e){
             throw new VSphereException(e);
         }
-
     }
 
     private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
@@ -209,10 +211,10 @@ public class VSphere {
         	if (resourcePool == null) {
         		throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
         	}
-        	
+
         	rel.setPool(resourcePool.getMOR());
         } else if (isResourcePoolRequired) {
-    		throw new VSphereException("You must specify a resource  pool  when using a template");        	
+    		throw new VSphereException("You must specify a resource  pool  when using a template");
         }
 
         if (datastoreName != null && !datastoreName.isEmpty()) {
@@ -222,13 +224,11 @@ public class VSphere {
             }
             rel.setDatastore(datastore.getMOR());
         }
-
        return rel;
     }
 
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
         VirtualMachine vm = getVmByName(name);
-
         if(vm==null) {
             throw new VSphereException("No VM or template " + name + " found");
         }
@@ -251,7 +251,6 @@ public class VSphere {
 	 * @throws VSphereException If an error occurred.
 	 */
 	public void startVm(String name, int timeoutInSeconds) throws VSphereException {
-
 		try{
 			VirtualMachine vm = getVmByName(name);
             if (vm == null) {
@@ -324,7 +323,7 @@ public class VSphere {
 		VirtualMachineSnapshotInfo info = vm.getSnapshot();
 		if (info != null)
 		{
-			VirtualMachineSnapshotTree[] snapTree = 
+			VirtualMachineSnapshotTree[] snapTree =
 					info.getRootSnapshotList();
 			if (snapTree != null) {
 				ManagedObjectReference mor = findSnapshotInTree(
@@ -459,7 +458,7 @@ public class VSphere {
 		//Determine how many attempts will be made to fetch the IP address
 		final int waitSeconds = 5;
 		final int maxTries;
-		if (timeout<=waitSeconds) 
+		if (timeout<=waitSeconds)
 			maxTries = 1;
 		else
 			maxTries = (int) Math.round((double)timeout / waitSeconds);
@@ -495,9 +494,9 @@ public class VSphere {
 							"VirtualMachine", vmName);
 		} catch (Exception e) {
 			throw new VSphereException(e);
-		} 
+		}
 	}
-        
+
         public int countVms() throws VSphereException {
             int count = 0;
             try {
@@ -648,7 +647,6 @@ public class VSphere {
 		throw new VSphereException("Could not delete VM!");
 	}
 
-
     /**
      * Renames a VM Snapshot
      * @param vmName the name of the VM whose snapshot is being renamed.
@@ -675,7 +673,6 @@ public class VSphere {
             throw new VSphereException(e.getMessage());
         }
     }
-
 
     /**
      * Renames the VM vSphere
@@ -883,6 +880,38 @@ public class VSphere {
 			throw new VSphereException(e);
 		}
 	}
+
+    /**
+     * Passes data to a VM's "guestinfo" object. This data can then be read by
+     * the VMware Tools on the guest.
+     * <p>
+     * e.g. a variable named "Foo" with value "Bar" could be read on the guest
+     * using the command-line <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * </p>
+     * 
+     * @param vmName
+     *            The name of the VM.
+     * @param variables
+     *            A {@link Map} of variable name to variable value.
+     * @throws VSphereException
+     *             If an error occurred.
+     */
+    public void addGuestInfoVariable(String vmName, Map<String, String> variables) throws VSphereException {
+        VirtualMachineConfigSpec cs = new VirtualMachineConfigSpec();
+        OptionValue[] ourOptionValues = new OptionValue[variables.size()];
+        List<OptionValue> optionValues = new ArrayList<>();
+        for (Map.Entry<String, String> eachVariable : variables.entrySet()) {
+            OptionValue ov = new OptionValue();
+            ov.setKey("guestinfo." + eachVariable.getKey());
+            ov.setValue(eachVariable.getValue());
+            optionValues.add(ov);
+        }
+        for (int i = 0; i < optionValues.size(); i++) {
+            ourOptionValues[i] = optionValues.get(i);
+        }
+        cs.setExtraConfig(ourOptionValues);
+        reconfigureVm(vmName, cs);
+    }
 
     private void logMessage(PrintStream jLogger, String message) {
         if (jLogger != null) {
