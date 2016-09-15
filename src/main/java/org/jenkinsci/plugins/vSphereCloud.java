@@ -381,9 +381,9 @@ public class vSphereCloud extends Cloud {
         try {
             vSphere = vSphereInstance();
             vSphere.destroyVm(cloneName, false);
-            VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): VM deleted", cloneName);
+            VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): VM destroyed.", cloneName);
         } catch (VSphereException ex) {
-            VSLOG.log(Level.SEVERE, "provisionedSlaveHasTerminated({0}): Exception while trying to destroy VM", ex);
+            VSLOG.log(Level.SEVERE, "provisionedSlaveHasTerminated(" + cloneName + "): Exception while trying to destroy VM", ex);
         } finally {
             if (vSphere != null) {
                 vSphere.disconnect();
