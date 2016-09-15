@@ -1,9 +1,5 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package org.jenkinsci.plugins;
- 
+
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Functions;
@@ -26,14 +22,17 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+
 import hudson.model.Executor;
 import hudson.model.Queue;
+
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+
 import jenkins.model.Jenkins;
 
 /**
@@ -48,7 +47,9 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
-    private Integer LimitedTestRunCount = 0; // If limited test runs enabled, the number of tests to limit the slave too.
+    /** If more than zero then this is the number of build-jobs we limit the slave to. */
+    private Integer LimitedTestRunCount = 0;
+    /** A count of the number of build-jobs this slave has done. */
     private transient Integer NumberOfLimitedTestRuns = 0;
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
@@ -85,7 +86,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         this.NumberOfLimitedTestRuns = 0;
         readResolve();
     }
-    
+
     @Override
     protected Object readResolve() {
         super.readResolve();
@@ -97,7 +98,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         }
         return this;
     }
-    
+
     public String getVmName() {
         return vmName;
     }
@@ -141,10 +142,10 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         return "Shutting down VSphere Cloud Slave";
                     }
                 });
-                vSphereCloud.Log("Disconnected computer");                    
+                vSphereCloud.Log(this, listener, "Disconnected computer");
             }
         } catch(Exception e) {
-            vSphereCloud.Log("Can't disconnect: \n" + e.getMessage());
+            vSphereCloud.Log(this, listener, e, "Can't disconnect");
         }
     }
 
@@ -224,7 +225,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public AbstractCloudComputer createComputer() {
         return new vSphereCloudSlaveComputer(this);
     }
-    
+
     @Override
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
@@ -236,15 +237,15 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 }
             };
         }
-        
+
         if(slaveIsStarting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
-        
+
         if (slaveIsDisconnecting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
-        
+
         return super.canTake(buildItem);
     }
 
@@ -267,11 +268,11 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         if (executor != null && DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
-                vSphereCloud.Log(listener, "Starting limited count build: %d", NumberOfLimitedTestRuns);
+                vSphereCloud.Log(this, listener, "Starting limited count build: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
                 Computer slave = executor.getOwner();
                 RunToSlaveMapper.put(r, slave);
             } else {
-                vSphereCloud.Log(listener, "Terminating build due to limited build count: %d", LimitedTestRunCount);
+                vSphereCloud.Log(this, listener, "Terminating build due to limited build count: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
                 executor.interrupt(Result.ABORTED);
             }
         }
@@ -281,7 +282,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
     public boolean EndLimitedTestRun(Run r) {
         boolean ret = true;
-        
+
         // See if the run maps to an existing computer; remove if found.
         Computer slave = RunToSlaveMapper.get(r);
         if (slave != null) {
@@ -294,20 +295,20 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 NumberOfLimitedTestRuns = 0;
                 try {
                     if (slave != null) {
-                        vSphereCloud.Log("Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
-                        
+                        vSphereCloud.Log(this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+
                         slave.setTemporarilyOffline(true, new OfflineCause.ByCLI("vSphere Plugin marking the slave as offline due to reaching limited build threshold"));
                         slave.waitUntilOffline();
                         slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave as offline due to reaching limited build threshold"));
                         slave.setTemporarilyOffline(false, new OfflineCause.ByCLI("vSphere Plugin marking the slave as online after completing post-disconnect actions."));
                     }
                     else {
-                        vSphereCloud.Log("Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
+                        vSphereCloud.Log(this, "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
                     }
                 } catch (NullPointerException ex) {
-                    vSphereCloud.Log("NullPointerException thrown while retrieving the slave agent: %s", ex.getMessage());
+                    vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
                 } catch (InterruptedException ex) {
-                    vSphereCloud.Log("InterruptedException thrown while marking the slave as online or offline: %s", ex.getMessage());
+                    vSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
                 }
             }
         } else {
@@ -315,8 +316,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         }
         return ret;
     }
-
-
 
     /**
      * For UI.
