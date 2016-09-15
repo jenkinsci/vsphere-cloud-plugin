@@ -9,6 +9,7 @@ import static org.hamcrest.collection.IsArrayContainingInOrder.arrayContaining;
 import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
 import static org.junit.Assert.assertThat;
 import hudson.model.Node.Mode;
+import hudson.slaves.NodeProperty;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,6 +26,7 @@ import org.hamcrest.collection.IsIterableWithSize;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -131,13 +133,14 @@ public class CloudProvisioningStateTest {
         // When
         instance.provisioningStarted(provisionable, nodeName);
         instance.provisionedSlaveNowActive(provisionable, nodeName);
-        instance.provisionedSlaveNowTerminated(provisionable.getTemplate(), nodeName);
+        instance.provisionedSlaveNowTerminated(nodeName);
 
         // Then
         assertThat(loggedMessages, everyItem(logMessage(Level.FINE, expectedArgs)));
         assertThat(loggedMessages, IsIterableWithSize.<LogRecord> iterableWithSize(3));
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void failedToProvisionGivenNothingOutOfSequenceThenLogs() {
         // Given
@@ -170,7 +173,7 @@ public class CloudProvisioningStateTest {
 
         // When/Then
         wipeLog();
-        instance.provisionedSlaveNowTerminated(provisionable.getTemplate(), nodeName);
+        instance.provisionedSlaveNowTerminated(nodeName);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
@@ -206,11 +209,11 @@ public class CloudProvisioningStateTest {
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
-        instance.provisionedSlaveNowTerminated(provisionable.getTemplate(), nodeName);
+        instance.provisionedSlaveNowTerminated(nodeName);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
-        instance.provisionedSlaveNowTerminated(provisionable.getTemplate(), nodeName);
+        instance.provisionedSlaveNowTerminated(nodeName);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
     }
 
@@ -230,12 +233,12 @@ public class CloudProvisioningStateTest {
         instance.provisioningStarted(deletedAndInactiveRecord, deletedAndInactiveNodeName);
         instance.provisionedSlaveNowActive(deletedAndInactiveRecord, deletedAndInactiveNodeName);
         final vSphereCloudSlaveTemplate deletedAndInactiveTemplate = deletedAndInactiveRecord.getTemplate();
-        instance.provisionedSlaveNowTerminated(deletedAndInactiveTemplate, deletedAndInactiveNodeName);
+        instance.provisionedSlaveNowTerminated(deletedAndInactiveNodeName);
         // A template which is current but has no active slaves right now
         final CloudProvisioningRecord activeRecord = createRecord(instance);
         instance.provisioningStarted(activeRecord, livedAndDiedNodeName);
         instance.provisionedSlaveNowActive(activeRecord, livedAndDiedNodeName);
-        instance.provisionedSlaveNowTerminated(activeRecord.getTemplate(), livedAndDiedNodeName);
+        instance.provisionedSlaveNowTerminated(livedAndDiedNodeName);
 
         // When
         userHasDeletedSlaveTemplate(deletedButActiveRecord);
@@ -247,6 +250,72 @@ public class CloudProvisioningStateTest {
         assertThat(
                 loggedMessages,
                 contains(logMessage(containsString("Disposing"), Level.FINE, deletedAndInactiveTemplate.getCloneNamePrefix(), deletedAndInactiveTemplate.toString())));
+    }
+
+    @Test
+    public void countNodesGivenNoTemplatesOrSlavesThenReturnsZero() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+
+        // When
+        final int actual = instance.countNodes();
+
+        // Then
+        assertThat(actual, equalTo(0));
+    }
+
+    @Test
+    public void countNodesGivenNoSlavesInAnyTemplatesThenReturnsZero() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        createRecord(instance);
+        final String node = createNodeName();
+        final CloudProvisioningRecord previouslyActiveRecord = createRecord(instance);
+        previouslyActiveRecord.addCurrentlyActive(node);
+        previouslyActiveRecord.removeCurrentlyActive(node);
+        createRecord(instance);
+
+        // When
+        final int actual = instance.countNodes();
+
+        // Then
+        assertThat(actual, equalTo(0));
+    }
+
+    @Test
+    public void countNodesGiven2ActiveSlavesThenReturns2() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord activeRecord = createRecord(instance);
+        activeRecord.addCurrentlyActive(createNodeName());
+        activeRecord.addCurrentlyActive(createNodeName());
+
+        // When
+        final int actual = instance.countNodes();
+
+        // Then
+        assertThat(actual, equalTo(2));
+    }
+
+    @Test
+    public void countNodesGiven3ActiveAnd4PendingSlavesThenReturns7() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord recordWith2Active = createRecord(instance);
+        recordWith2Active.addCurrentlyActive(createNodeName());
+        recordWith2Active.addCurrentlyActive(createNodeName());
+        final CloudProvisioningRecord recordWith1Active4Planned = createRecord(instance);
+        recordWith1Active4Planned.addCurrentlyActive(createNodeName());
+        recordWith1Active4Planned.addCurrentlyPlanned(createNodeName());
+        recordWith1Active4Planned.addCurrentlyPlanned(createNodeName());
+        recordWith1Active4Planned.addCurrentlyPlanned(createNodeName());
+        recordWith1Active4Planned.addCurrentlyPlanned(createNodeName());
+
+        // When
+        final int actual = instance.countNodes();
+
+        // Then
+        assertThat(actual, equalTo(7));
     }
 
     private void wipeLog() {
@@ -262,8 +331,9 @@ public class CloudProvisioningStateTest {
         final String cloneNamePrefix = "prefix" + recordNumber;
         final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
                 "snapshotName", false, "cluster", "resourcePool", "datastore", "templateDescription", 0, 1, "remoteFS",
-                "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", "credentialsId",
-                Collections.EMPTY_LIST, Collections.EMPTY_LIST);
+                "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", null,
+                Collections.<NodeProperty<?>> emptyList(),
+                Collections.<VSphereGuestInfoProperty> emptyList());
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<vSphereCloudSlaveTemplate>();
         templates.add(template);

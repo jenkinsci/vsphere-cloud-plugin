@@ -29,6 +29,7 @@ import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
+import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 
 import java.util.List;
@@ -39,6 +40,7 @@ import jenkins.model.Jenkins;
 
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
 
 import static com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials;
 import hudson.model.Descriptor.FormException;
@@ -48,6 +50,8 @@ import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.NodeProperty;
+import hudson.slaves.ComputerLauncher;
+import hudson.slaves.RetentionStrategy;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -93,7 +97,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String credentialsId;
     private final List<? extends NodeProperty<?>> nodeProperties;
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
-    private static transient final boolean POWER_ON = true;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
@@ -261,37 +264,49 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public vSphereCloudProvisionedSlave provision(final CloudProvisioningState algorithm, final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
+        vSphereCloudProvisionedSlave slave = null;
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
-
+        final boolean POWER_ON = true;
         vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, POWER_ON, logger);
-        if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
-            final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
-            if( !resolvedGuestInfoProperties.isEmpty() ) {
-                LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedGuestInfoProperties });
-                vSphere.addGuestInfoVariable(cloneName, resolvedGuestInfoProperties);
+        try {
+            if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
+                final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
+                if( !resolvedGuestInfoProperties.isEmpty() ) {
+                    LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedGuestInfoProperties });
+                    vSphere.addGuestInfoVariable(cloneName, resolvedGuestInfoProperties);
+                }
+            }
+            final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
+            final RetentionStrategy<?> configuredStrategy = determineRetention();
+            slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+        } finally {
+            // if anything went wrong, try to tidy up
+            if( slave==null ) {
+                LOGGER.log(Level.FINER, "Creation of slave failed after cloning VM: destroying clone {0}", cloneName);
+                vSphere.destroyVm(cloneName, false);
             }
         }
-
-        final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
-        final SSHLauncher launcher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
-
         vSphere.disconnect();
-//        final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
-//        strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
-        final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
-        return new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, launcher, strategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount)) {
-            @Override
-            protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
-                // once we're done with, remove our cached record.
-                synchronized(algorithm) {
-                    algorithm.provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate.this, cloneName);
-                }
-                super._terminate(listener);
-            }
-        };
+        return slave;
     }
 
+    private ComputerLauncher determineLauncher(final VSphere vSphere, final String cloneName) throws VSphereException {
+        LOGGER.log(Level.FINER, "Slave {0} uses SSHLauncher - obtaining IP address...", cloneName);
+        final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
+        LOGGER.log(Level.FINER, "Slave {0} has IP address {1}", new Object[] { cloneName, ip });
+        final SSHLauncher launcher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
+        return launcher;
+    }
+
+    private RetentionStrategy<?> determineRetention() {
+//      final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
+//      strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
+      final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
+      return strategy;
+    }
+
+    @SuppressWarnings("unchecked")
     @Override
     public Descriptor<vSphereCloudSlaveTemplate> getDescriptor() {
         return Jenkins.getInstance().getDescriptor(getClass());
@@ -302,6 +317,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         @Override
         public String getDisplayName() {
             return null;
+        }
+
+        public FormValidation doCheckTemplateInstanceCap(@QueryParameter String templateInstanceCap) {
+            return FormValidation.validateNonNegativeInteger(templateInstanceCap);
         }
 
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context) {

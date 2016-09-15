@@ -74,7 +74,7 @@ public class CloudProvisioningState {
      * To be called when a newly created node (previously promised to
      * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.
      * Callers MUST ensure that
-     * {@link #provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate, String)}
+     * {@link #provisionedSlaveNowTerminated(String)}
      * gets called later.
      * 
      * @param provisionable
@@ -94,14 +94,13 @@ public class CloudProvisioningState {
      * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)}) has
      * died.
      * 
-     * @param template
-     *            The template for the named node.
      * @param nodeName
      *            The name of the VM.
      */
-    public void provisionedSlaveNowTerminated(vSphereCloudSlaveTemplate template, String nodeName) {
-        final CloudProvisioningRecord provisionable = getExistingRecord(template);
-        if (provisionable != null) {
+    public void provisionedSlaveNowTerminated(String nodeName) {
+        final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry = findEntryForVM(nodeName);
+        if (entry != null) {
+            final CloudProvisioningRecord provisionable = entry.getValue();
             final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
             final boolean wasPreviouslyActive = provisionable.removeCurrentlyActive(nodeName);
             if (recordIsPrunable(provisionable)) {
@@ -167,7 +166,30 @@ public class CloudProvisioningState {
         return result;
     }
 
-    private CloudProvisioningRecord getOrCreateRecord(final vSphereCloudSlaveTemplate template) {
+    /**
+     * Counts all the known nodes, both active and in-progress, across all
+     * templates.
+     * 
+     * @return The number of nodes that are active or soon-to-be-active.
+     */
+    public int countNodes() {
+        int result = 0;
+        for (final CloudProvisioningRecord record : records.values()) {
+            result += record.getCurrentlyPlanned().size();
+            result += record.getCurrentlyProvisioned().size();
+        }
+        return result;
+    }
+
+    /**
+     * Gets the record for the given template. If we didn't have one before, we
+     * create one.
+     * 
+     * @param template
+     *            The template in question.
+     * @return The one-and-only record for this template.
+     */
+    public CloudProvisioningRecord getOrCreateRecord(final vSphereCloudSlaveTemplate template) {
         final CloudProvisioningRecord existingRecord = getExistingRecord(template);
         if (existingRecord != null) {
             return existingRecord;
@@ -199,6 +221,19 @@ public class CloudProvisioningState {
         final List<? extends vSphereCloudSlaveTemplate> knownTemplates = parent.getTemplates();
         final boolean isKnownToParent = knownTemplates.contains(template);
         return !isKnownToParent;
+    }
+
+    private Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> findEntryForVM(String nodeName) {
+        for (final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry : records.entrySet()) {
+            final CloudProvisioningRecord record = entry.getValue();
+            if (record.getCurrentlyProvisioned().contains(nodeName)) {
+                return entry;
+            }
+            if (record.getCurrentlyPlanned().contains(nodeName)) {
+                return entry;
+            }
+        }
+        return null;
     }
 
     /**

@@ -1,16 +1,14 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-import static org.junit.Assert.*;
-import static org.hamcrest.CoreMatchers.*;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.hamcrest.CoreMatchers.sameInstance;
+import static org.junit.Assert.assertThat;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.hamcrest.core.IsSame;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
-import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -27,7 +25,7 @@ public class CloudProvisioningAlgorithmTest {
     @Test
     public void findTemplateWithMostFreeCapacityGivenNoOptionsThenReturnsNull() {
         // Given
-        final List<CloudProvisioningRecord> emptyList = Collections.EMPTY_LIST;
+        final List<CloudProvisioningRecord> emptyList = Collections.emptyList();
 
         // When
         final CloudProvisioningRecord actual = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(emptyList);

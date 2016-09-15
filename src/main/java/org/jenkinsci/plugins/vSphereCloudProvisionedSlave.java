@@ -21,21 +21,17 @@ import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
-import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
 /**
  *
  * @author Admin
  */
 public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
-    private static final Logger LOGGER = Logger.getLogger(vSphereCloudProvisionedSlave.class.getName());
-
     @DataBoundConstructor
     public vSphereCloudProvisionedSlave(String name, String nodeDescription,
             String remoteFS, String numExecutors, Mode mode,
@@ -62,24 +58,13 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         super._terminate(listener);
         final vSphereCloudLauncher launcher = (vSphereCloudLauncher) getLauncher();
-        if(launcher != null) {
+        if (launcher != null) {
             final vSphereCloud cloud = launcher.findOurVsInstance();
-
-            if(cloud != null) {
-                VSphere vSphere = null;
-                try {
-                    vSphere = cloud.vSphereInstance();
-                    vSphere.destroyVm(this.getComputer().getName(), false);
-                } catch (VSphereException ex) {
-                    java.util.logging.Logger.getLogger(vSphereCloudProvisionedSlave.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-                } finally {
-                    if(vSphere != null) {
-                        vSphere.disconnect();
-                    }
-                }
+            if (cloud != null) {
+                final String cloneName = this.getComputer().getName();
+                cloud.provisionedSlaveHasTerminated(cloneName);
             }
         }
-
     }
 
     @Extension

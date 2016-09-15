@@ -24,13 +24,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeMap;
-import java.util.TreeSet;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,29 +73,59 @@ public class vSphereCloud extends Cloud {
     private transient CloudProvisioningState templateState;
 
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
-    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, String format, Object... args)
+    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args)
     {
+        final Level logLevel = Level.INFO;
+        if (!VSLOG.isLoggable(logLevel) && listener == null)
+            return;
         String s = "";
         if (slave != null)
             s = String.format("[%s] ", slave.getNodeName());
         if (slaveComputer != null)
             s = String.format("[%s] ", slaveComputer.getName());
         s = s + String.format(format, args);
-        if (listener != null)
+        if (listener != null) {
             listener.getLogger().print(s + "\n");
-        VSLOG.log(Level.INFO, s);
+            if ( ex!=null ) {
+                listener.getLogger().print(ex.toString() + "\n");
+                ex.printStackTrace(listener.getLogger());
+            }
+        }
+        if ( ex!=null ) {
+            VSLOG.log(logLevel, s, ex);
+        } else {
+            VSLOG.log(logLevel, s);
+        }
     }
     public static void Log(String format, Object... args) {
-        InternalLog(null, null, null, format, args);
+        InternalLog(null, null, null, null, format, args);
+    }
+    public static void Log(Throwable ex, String format, Object... args) {
+        InternalLog(null, null, null, ex, format, args);
     }
     public static void Log(TaskListener listener, String format, Object... args) {
-        InternalLog(null, null, listener, format, args);
+        InternalLog(null, null, listener, null, format, args);
+    }
+    public static void Log(TaskListener listener, Throwable ex, String format, Object... args) {
+        InternalLog(null, null, listener, ex, format, args);
+    }
+    public static void Log(Slave slave, String format, Object... args) {
+        InternalLog(slave, null, null, null, format, args);
+    }
+    public static void Log(Slave slave, Throwable ex, String format, Object... args) {
+        InternalLog(slave, null, null, ex, format, args);
     }
     public static void Log(Slave slave, TaskListener listener, String format, Object... args) {
-        InternalLog(slave, null, listener, format, args);
+        InternalLog(slave, null, listener, null, format, args);
+    }
+    public static void Log(Slave slave, TaskListener listener, Throwable ex, String format, Object... args) {
+        InternalLog(slave, null, listener, ex, format, args);
     }
     public static void Log(SlaveComputer slave, TaskListener listener, String format, Object... args) {
-        InternalLog(null, slave, listener, format, args);
+        InternalLog(null, slave, listener, null, format, args);
+    }
+    public static void Log(SlaveComputer slave, TaskListener listener, Throwable ex, String format, Object... args) {
+        InternalLog(null, slave, listener, ex, format, args);
     }
 
     @Deprecated
@@ -150,8 +174,23 @@ public class vSphereCloud extends Cloud {
     private void ensureLists() {
         if (currentOnline == null)
             currentOnline = new ConcurrentHashMap<String, String>();
-        if (templateState == null)
+        if (templateState == null) {
+            /*
+             * If Jenkins has just restarted, we may have existing slaves that
+             * exist but aren't currently recorded in our non-persisted state,
+             * so we need to discover them.
+             */
             templateState = new CloudProvisioningState(this);
+            for (final vSphereCloudProvisionedSlave n : NodeIterator.nodes(vSphereCloudProvisionedSlave.class)) {
+                final String nodeName = n.getNodeName();
+                final vSphereCloudSlaveTemplate template = getTemplateForVM(nodeName);
+                if (template != null) {
+                    final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
+                    templateState.provisioningStarted(provisionable, nodeName);
+                    templateState.provisionedSlaveNowActive(provisionable, nodeName);
+                }
+            }
+        }
     }
 
     public int getMaxOnlineSlaves() {
@@ -166,11 +205,12 @@ public class vSphereCloud extends Cloud {
         return this.templates;
     }
 
-    public vSphereCloudSlaveTemplate getTemplate(final String template) {
-        if(this.templates==null)
+    private vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
+        if (this.templates == null || vmName == null)
             return null;
-        for(vSphereCloudSlaveTemplate t : this.templates) {
-            if(t.getCloneNamePrefix().equals(template)) {
+        for (final vSphereCloudSlaveTemplate t : this.templates) {
+            final String cloneNamePrefix = t.getCloneNamePrefix();
+            if (cloneNamePrefix != null && vmName.startsWith(cloneNamePrefix)) {
                 return t;
             }
         }
@@ -179,7 +219,7 @@ public class vSphereCloud extends Cloud {
 
     private List<vSphereCloudSlaveTemplate> getTemplates(final Label label) {
         if(this.templates==null)
-            return Collections.EMPTY_LIST;
+            return Collections.emptyList();
         List<vSphereCloudSlaveTemplate> matchingTemplates = new ArrayList<vSphereCloudSlaveTemplate>();
         for(vSphereCloudSlaveTemplate t : this.templates) {
             if(t.getMode() == Node.Mode.NORMAL) {
@@ -241,15 +281,16 @@ public class vSphereCloud extends Cloud {
         return !getTemplates(label).isEmpty();
     }
 
-    private boolean isOkToProvisionAnySlaves(VSphere vSphere) throws VSphereException {
+    private Integer calculateMaxAdditionalSlavesPermitted() {
         if (this.instanceCap == 0 || this.instanceCap == Integer.MAX_VALUE) {
-            return true;
+            return null;
         }
-        final int totalVms = vSphere.countVms();
-        final boolean thereIsNoRoom = totalVms >= this.instanceCap;
+        final int totalVms = templateState.countNodes();
+        final int maxSlavesToProvision = this.instanceCap - totalVms;
+        final boolean thereIsNoRoom = maxSlavesToProvision <= 0;
         VSLOG.info("There are " + totalVms + " VMs in this cloud. The instance cap for the cloud is "
                 + this.instanceCap + ", so we " + (thereIsNoRoom ? "are full" : "have room for more"));
-        return !thereIsNoRoom;
+        return Integer.valueOf(maxSlavesToProvision);
     }
 
     @Override
@@ -257,9 +298,13 @@ public class vSphereCloud extends Cloud {
         final String methodCallDescription = "provision(" + label + "," + excessWorkload + ")";
         try {
             int excessWorkloadSoFar = excessWorkload;
+            // First we see what our static slaves can do for us.
             int numberOfvSphereCloudSlaves = 0;
             int numberOfvSphereCloudSlaveExecutors = 0;
             for(vSphereCloudSlave n : NodeIterator.nodes(vSphereCloudSlave.class)) {
+                if( n instanceof vSphereCloudProvisionedSlave) {
+                    continue; // ignore cloud slaves
+                }
                 if(n.getComputer().isOffline() && label.matches(n.getAssignedLabels())) {
                     n.getComputer().tryReconnect();
                     numberOfvSphereCloudSlaves++;
@@ -272,24 +317,33 @@ public class vSphereCloud extends Cloud {
                         + numberOfvSphereCloudSlaveExecutors + " executors): Workload is satisifed by bringing those online.");
                 return Collections.emptySet();
             }
-            final VSphere vSphere = vSphereInstance();
-            if (!isOkToProvisionAnySlaves(vSphere)) {
-                return Collections.emptySet();
-            }
-            final List<vSphereCloudSlaveTemplate> templates = getTemplates(label);
-            final List<PlannedNode> plannedNodes = new ArrayList<PlannedNode>();
+            // If we've got this far then our static slaves are insufficient to meet
+            // demand and we should consider creating new slaves.
             synchronized(this) {
                 ensureLists();
             }
+            final List<PlannedNode> plannedNodes = new ArrayList<PlannedNode>();
             synchronized(templateState) {
                 templateState.pruneUnwantedRecords();
+                Integer maxSlavesToProvisionBeforeCloudCapHit = calculateMaxAdditionalSlavesPermitted();
+                if (maxSlavesToProvisionBeforeCloudCapHit!=null && maxSlavesToProvisionBeforeCloudCapHit<=0) {
+                    return Collections.emptySet(); // no capacity due to cloud instance cap
+                }
+                final List<vSphereCloudSlaveTemplate> templates = getTemplates(label);
                 final List<CloudProvisioningRecord> whatWeCouldUse = templateState.calculateProvisionableTemplates(templates);
                 VSLOG.log(Level.INFO, methodCallDescription + ": " + numberOfvSphereCloudSlaves + " existing slaves (="
                         + numberOfvSphereCloudSlaveExecutors + " executors), templates available are " + whatWeCouldUse);
-                while(excessWorkloadSoFar > 0) {
+                while (excessWorkloadSoFar > 0) {
+                    if (maxSlavesToProvisionBeforeCloudCapHit != null) {
+                        final int intValue = maxSlavesToProvisionBeforeCloudCapHit.intValue();
+                        if (intValue <= 0) {
+                            break; // out of capacity due to cloud instance cap
+                        }
+                        maxSlavesToProvisionBeforeCloudCapHit = Integer.valueOf(intValue - 1);
+                    }
                     final CloudProvisioningRecord whatWeShouldSpinUp = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(whatWeCouldUse);
                     if (whatWeShouldSpinUp==null) {
-                        break; // out of capacity
+                        break; // out of capacity due to template instance cap
                     }
                     final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, whatWeShouldSpinUp);
                     plannedNodes.add(plannedNode);
@@ -302,6 +356,38 @@ public class vSphereCloud extends Cloud {
         } catch (Exception ex) {
             VSLOG.log(Level.WARNING, methodCallDescription + ": Failed.", ex);
             return Collections.emptySet();
+        }
+    }
+
+    /**
+     * This is called by {@link vSphereCloudProvisionedSlave} instances once
+     * they terminate, so we can take note of their passing and then destroy the
+     * VM itself.
+     * 
+     * @param cloneName
+     *            The name of the VM that's just terminated.
+     */
+    void provisionedSlaveHasTerminated(final String cloneName) {
+        synchronized(this) {
+            ensureLists();
+        }
+        VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): recording in our runtime state...", cloneName);
+        // once we're done, remove our cached record.
+        synchronized(templateState) {
+            templateState.provisionedSlaveNowTerminated(cloneName);
+        }
+        VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): destroying VM...", cloneName);
+        VSphere vSphere = null;
+        try {
+            vSphere = vSphereInstance();
+            vSphere.destroyVm(cloneName, false);
+            VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): VM deleted", cloneName);
+        } catch (VSphereException ex) {
+            VSLOG.log(Level.SEVERE, "provisionedSlaveHasTerminated({0}): Exception while trying to destroy VM", ex);
+        } finally {
+            if (vSphere != null) {
+                vSphere.disconnect();
+            }
         }
     }
 
@@ -463,13 +549,11 @@ public class vSphereCloud extends Cloud {
          * @param vsHost From UI.
          * @param vsDescription From UI.
          * @param credentialsId From UI.
-         * @param maxOnlineSlaves From UI.
          * @return Result of the validation.
          */
         public FormValidation doTestConnection(@QueryParameter String vsHost,
                 @QueryParameter String vsDescription,
-                @QueryParameter String credentialsId,
-                @QueryParameter int maxOnlineSlaves) {
+                @QueryParameter String credentialsId) {
             try {
                 /* We know that these objects are not null */
                 if (vsHost.length() == 0) {
@@ -504,6 +588,14 @@ public class vSphereCloud extends Cloud {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String maxOnlineSlaves) {
+            return FormValidation.validateNonNegativeInteger(maxOnlineSlaves);
+        }
+
+        public FormValidation doCheckInstanceCap(@QueryParameter String instanceCap) {
+            return FormValidation.validateNonNegativeInteger(instanceCap);
         }
     }
 }
