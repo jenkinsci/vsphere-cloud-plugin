@@ -170,6 +170,9 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
         vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, powerOn, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
+		if (!powerOn) {
+			return true; // don't try to obtain IP if VM isn't being turned on.
+		}
 		IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
 
 		if(IP!=null) {
