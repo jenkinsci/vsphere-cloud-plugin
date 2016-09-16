@@ -10,6 +10,8 @@ import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
 import static org.junit.Assert.assertThat;
 import hudson.model.Node.Mode;
 import hudson.slaves.NodeProperty;
+import hudson.slaves.JNLPLauncher;
+import hudson.slaves.RetentionStrategy;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -332,7 +334,7 @@ public class CloudProvisioningStateTest {
         final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
                 "snapshotName", false, "cluster", "resourcePool", "datastore", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", null,
-                Collections.<NodeProperty<?>> emptyList(),
+                new JNLPLauncher(), RetentionStrategy.NOOP, Collections.<NodeProperty<?>> emptyList(),
                 Collections.<VSphereGuestInfoProperty> emptyList());
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<vSphereCloudSlaveTemplate>();

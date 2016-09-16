@@ -1,0 +1,14 @@
+<div>
+Specifies the method by which the Jenkins slave agent will be launched on the slave.
+<dl>
+<dt>Java Web Start</dt>
+<dd>Relies on processes within the virtual machine to connect to Jenkins.
+If you use this, you may find it useful to use GuestInfo Properties to pass data to the virtual machine telling it where to connect to.</dd>
+<dt>Execution of command</dt>
+<dd>The Jenkins master machine runs a command the connect to this slave.</dd>
+<dt>SSH (default)</dt>
+<dd>The Jenkins master logs into the slave via SSH, using the credentials specified, and uses that session to push the slave code onto the slave and then run it.
+You should leave the "host" field blank as the plugin will automatically fill that in itself (once it knows the IP address of the slave).
+</dd>
+</dl>
+</div>

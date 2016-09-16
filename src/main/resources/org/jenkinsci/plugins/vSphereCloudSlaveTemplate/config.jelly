@@ -1,4 +1,4 @@
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:c="/lib/credentials">
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
     <table width="100%">
         <f:entry title="${%Clone Name Prefix}" field="cloneNamePrefix">
             <f:textbox/>
@@ -50,24 +50,20 @@
 
         <f:slave-mode name="mode" node="${instance}"/>
 
-        <f:entry title="${%Force VM Launch}" field="forceVMLaunch" description="${%VMs can always be switched on, even if direct support is missing in the secondary launch option.}">
+        <f:entry title="${%Force VM Launch}" field="forceVMLaunch">
             <f:checkbox/>
         </f:entry>
 
-        <f:entry title="${%Wait for VMTools}" field="waitForVMTools" description="${%Wait for VMTools in the VM to start up.}">
+        <f:entry title="${%Wait for VMTools}" field="waitForVMTools">
             <f:checkbox/>
         </f:entry>
 
-        <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as slave.}">
+        <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
             <f:textbox clazz="required number" default="60"/>
         </f:entry>
 
         <f:entry title="${%Disconnect After Limited Builds}" field="limitedRunCount" description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
             <f:textbox clazz="required number" default="1"/>
-        </f:entry>
-
-        <f:entry title="${%Clone's user}" field="credentialsId">
-            <c:select/>
         </f:entry>
 
         <f:entry title="${%GuestInfo Properties}" help="${descriptor.getHelpFile('guestInfoProperties')}">
@@ -78,6 +74,38 @@
                 </div>
             </f:repeatable>
         </f:entry>
+
+        <f:dropdownList name="launcher" title="${%Launch method}"
+                         help="${descriptor.getHelpFile('launcher')}">
+            <j:forEach var="d" items="${descriptor.getLauncherDescriptors()}">
+                <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                      selected="${instance.launcher!=null and d.equals(instance.launcher.descriptor)}"
+                                      title="${d.displayName}">
+                    <j:set var="descriptor" value="${d}"/>
+                    <j:set var="instance" value="${(instance.launcher!=null and d.equals(instance.launcher.descriptor)) ? instance.launcher : null}"/>
+                    <f:invisibleEntry>
+                        <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                    </f:invisibleEntry>
+                    <st:include from="${d}" page="${d.configPage}" optional="true"/>
+                </f:dropdownListBlock>
+            </j:forEach>
+        </f:dropdownList>
+
+        <f:dropdownList name="retentionStrategy" title="${%Retention Strategy}"
+                         help="${descriptor.getHelpFile('retentionStrategy')}">
+            <j:forEach var="d" items="${descriptor.getRetentionStrategyDescriptors()}">
+                <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                      selected="${instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)}"
+                                      title="${d.displayName}">
+                    <j:set var="descriptor" value="${d}"/>
+                    <j:set var="instance" value="${(instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)) ? instance.retentionStrategy : null}"/>
+                    <f:invisibleEntry>
+                         <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                    </f:invisibleEntry>
+                    <st:include from="${d}" page="${d.configPage}" optional="true"/>
+                </f:dropdownListBlock>
+            </j:forEach>
+        </f:dropdownList>
 
         <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
     </table>
