@@ -1,20 +1,20 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <f:entry title="${%Name of this Cloud}" field="vsDescription">
+        <f:textbox/>
+    </f:entry>
     <f:entry>
         <f:property field="vsConnectionConfig"/>
     </f:entry>
-    <f:entry title="${%Name to use for this vSphere Cloud}" field="vsDescription">
-        <f:textbox/>
-    </f:entry>
+    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
 
     <f:advanced>
-        <f:entry title="${%Max number of virtual machines online}" field="maxOnlineSlaves" description="0 means unlimited.">
+        <f:entry title="${%Max number of VMs online}" field="maxOnlineSlaves" description="0 means unlimited.">
             <f:textbox clazz="required number"/>
         </f:entry>
         <f:entry title="${%Template Instance Cap}" field="instanceCap" description="0 means unlimited.">
             <f:textbox clazz="required number" default="0"/>
         </f:entry>
     </f:advanced>
-    <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">
         <f:repeatable field="templates" add="${%Add vSphere Template}">
