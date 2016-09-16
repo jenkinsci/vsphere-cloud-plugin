@@ -21,6 +21,8 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
+import java.util.logging.Level;
 
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
@@ -59,6 +61,7 @@ import com.vmware.vim25.mo.DistributedVirtualSwitch;
 public class VSphere {
 	private final URL url;
 	private final String session;
+	private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
 	private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException{
 		try {
@@ -86,20 +89,20 @@ public class VSphere {
 		return new VSphere(server, user, pw);
 	}
 
-        /**
-         * Disconnect from vSphere server
-         */
-        public void disconnect() {
-            try {
-                this.getServiceInstance().getServerConnection().logout();
-            } catch (Exception e) {
-                System.out.println("Caught exception when trying to disconnect vSphere." + String.format("%n") + e);
-            }
+    /**
+     * Disconnect from vSphere server.
+     * <p>
+     * Note: This logs any {@link Exception} it encounters - it does not pass
+     * them to get to the calling method.
+     * </p>
+     */
+    public void disconnect() {
+        try {
+            this.getServiceInstance().getServerConnection().logout();
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Caught exception when trying to disconnect vSphere.", e);
         }
-
-	public static String vSphereOutput(String msg){
-		return (Messages.VSphereLogger_title()+": ").concat(msg);
-	}
+    }
 
     /**
      * Deploys a new VM from a given template with a given name.
@@ -232,7 +235,7 @@ public class VSphere {
         if(vm==null) {
             throw new VSphereException("No VM or template " + name + " found");
         }
-        System.out.println("Reconfiguring VM. Please wait ...");
+        LOGGER.log(Level.FINER, "Reconfiguring VM. Please wait ...");
         try {
             Task task = vm.reconfigVM_Task(spec);
             String status = task.waitForTask();
@@ -267,10 +270,12 @@ public class VSphere {
             int timesToCheck = timeoutInSeconds / 5;
             // add one extra time for remainder
             timesToCheck++;
+            LOGGER.log(Level.FINER, "Checking " + timesToCheck + " times for vm to be powered on");
 
 			for (int i=0; i<timesToCheck; i++){
 
 				if(task.getTaskInfo().getState()==TaskInfoState.success){
+                    LOGGER.log(Level.FINER, "VM was powered up successfully.");
                     return;
 				}
 
@@ -295,7 +300,7 @@ public class VSphere {
 
 	private ManagedObjectReference findSnapshotInTree(
 			VirtualMachineSnapshotTree[] snapTree, String snapName) {
-
+		LOGGER.log(Level.FINER, "Looking for snapshot " + snapName);
 		for (VirtualMachineSnapshotTree node : snapTree) {
 			if (snapName.equals(node.getName())) {
 				return node.getSnapshot();
@@ -320,6 +325,7 @@ public class VSphere {
 			return null;
 		}
 
+		LOGGER.log(Level.FINER, "Looking for snapshot " + snapName + " in " + vm.getName() );
 		VirtualMachineSnapshotInfo info = vm.getSnapshot();
 		if (info != null)
 		{
@@ -344,12 +350,14 @@ public class VSphere {
 		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
 
 		if (snap == null) {
+			LOGGER.log(Level.SEVERE, "Cannot find snapshot: '" + snapName + "' for virtual machine: '" + vm.getName()+"'");
 			throw new VSphereException("Virtual Machine snapshot cannot be found");
 		}
 
 		try{
 			Task task = snap.revertToSnapshot_Task(null);
 			if (!task.waitForTask().equals(Task.SUCCESS)) {
+				LOGGER.log(Level.SEVERE, "Could not revert to snapshot '" + snap.toString() + "' for virtual machine:'" + vm.getName()+"'");
 				throw new VSphereException("Could not revert to snapshot");
 			}
 		}catch(Exception e){
@@ -624,7 +632,7 @@ public class VSphere {
 			if(vm==null){
 				if(failOnNoExist) throw new VSphereException("VM does not exist");
 
-				System.out.println("VM does not exist, or already deleted!");
+				LOGGER.log(Level.FINER, "VM does not exist, or already deleted!");
 				return;
 			}
 
@@ -636,7 +644,7 @@ public class VSphere {
 			String status = vm.destroy_Task().waitForTask();
 			if(status.equals(Task.SUCCESS))
 			{
-				System.out.println("VM was deleted successfully.");
+				LOGGER.log(Level.FINER, "VM was deleted successfully.");
 				return;
 			}
 
@@ -666,7 +674,7 @@ public class VSphere {
 
             snapshot.renameSnapshot(newName, newDescription);
 
-            System.out.println("VM Snapshot was renamed successfully.");
+            LOGGER.log(Level.FINER, "VM Snapshot was renamed successfully.");
             return;
 
         }catch(Exception e){
@@ -690,7 +698,7 @@ public class VSphere {
             String status = vm.rename_Task(newName).waitForTask();
             if(status.equals(Task.SUCCESS))
             {
-                System.out.println("VM was renamed successfully.");
+                LOGGER.log(Level.FINER, "VM was renamed successfully.");
                 return;
             }
 
@@ -729,7 +737,7 @@ public class VSphere {
             String status;
 			try {
                 if (!isSuspended(vm) && shutdownGracefully && vmToolIsEnabled(vm)) {
-                    System.out.println("Requesting guest shutdown");
+                    LOGGER.log(Level.FINER, "Requesting guest shutdown");
                     vm.shutdownGuest();
 
                     // Wait for up to 180 seconds for a shutdown - then shutdown hard.
@@ -737,18 +745,18 @@ public class VSphere {
                         Thread.sleep(1000);
                         if (isPoweredOff(vm)) {
                             doHardShutdown = false;
-                            System.out.println("VM gracefully powered down successfully.");
+                            LOGGER.log(Level.FINER, "VM gracefully powered down successfully.");
                             return;
                         }
                     }
                 }
 
                 if (doHardShutdown) {
-                    System.out.println("Powering off the VM");
+                    LOGGER.log(Level.FINER, "Powering off the VM");
                     status = vm.powerOffVM_Task().waitForTask();
 
                     if(status.equals(Task.SUCCESS)) {
-                        System.out.println("VM was powered down successfully.");
+                        LOGGER.log(Level.FINER, "VM was powered down successfully.");
                         return;
                     }
                 }
@@ -757,7 +765,7 @@ public class VSphere {
 			}
 		}
 		else if (isPoweredOff(vm)){
-			System.out.println("Machine is already off.");
+			LOGGER.log(Level.FINER, "Machine is already off.");
 			return;
 		}
 
@@ -776,12 +784,12 @@ public class VSphere {
 			}
 
 			if(Task.SUCCESS.equals(status)) {
-				System.out.println("VM was suspended successfully.");
+				LOGGER.log(Level.FINER, "VM was suspended successfully.");
 				return;
 			}
 		}
 		else {
-			System.out.println("Machine not powered on.");
+			LOGGER.log(Level.FINER, "Machine not powered on.");
 			return;
 		}
 
@@ -917,7 +925,7 @@ public class VSphere {
         if (jLogger != null) {
             VSphereLogger.vsLogger(jLogger, message);
         } else {
-            System.out.println(message);
+            LOGGER.log(Level.FINER, message);
         }
     }
 }
