@@ -255,10 +255,6 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 				if(!vm.getConfig().template)
 					return FormValidation.error(Messages.validation_notActually("template"));
 
-				VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
-				if (snap == null)
-					return FormValidation.error(Messages.validation_noSnapshots());
-
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
