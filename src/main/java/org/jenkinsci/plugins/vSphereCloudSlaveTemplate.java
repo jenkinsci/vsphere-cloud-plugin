@@ -27,11 +27,19 @@ import hudson.model.Computer;
 import hudson.model.Describable;
 import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
+import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
+import hudson.slaves.CommandLauncher;
+import hudson.slaves.ComputerLauncher;
+import hudson.slaves.JNLPLauncher;
+import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -48,10 +56,7 @@ import hudson.model.Label;
 import hudson.model.Node.Mode;
 import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
-import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.NodeProperty;
-import hudson.slaves.ComputerLauncher;
-import hudson.slaves.RetentionStrategy;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -59,6 +64,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
+import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
+import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -94,37 +101,46 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final boolean saveFailure;
     private final String targetResourcePool;
     private final String targetHost;
-    private final String credentialsId;
+    /**
+     * Credentials from old configuration format. Credentials are now in the
+     * {@link #launcher} configuration
+     */
+    @Deprecated()
+    private transient final String credentialsId;
     private final List<? extends NodeProperty<?>> nodeProperties;
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
+    private ComputerLauncher launcher;
+    private RetentionStrategy<?> retentionStrategy;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
 
     @DataBoundConstructor
     public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
-                final String masterImageName,
-                final String snapshotName,
-                final boolean linkedClone,
-                final String cluster,
-                final String resourcePool,
-                final String datastore,
-                final String templateDescription,
-                final int templateInstanceCap,
-                final int numberOfExecutors,
-                final String remoteFS,
-                final String labelString,
-                final Mode mode,
-                final boolean forceVMLaunch,
-                final boolean waitForVMTools,
-                final int launchDelay,
-                final int limitedRunCount,
-                final boolean saveFailure,
-                final String targetResourcePool,
-                final String targetHost,
-                final String credentialsId,
-                final List<? extends NodeProperty<?>> nodeProperties,
-                final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
+                                     final String masterImageName,
+                                     final String snapshotName,
+                                     final boolean linkedClone,
+                                     final String cluster,
+                                     final String resourcePool,
+                                     final String datastore,
+                                     final String templateDescription,
+                                     final int templateInstanceCap,
+                                     final int numberOfExecutors,
+                                     final String remoteFS,
+                                     final String labelString,
+                                     final Mode mode,
+                                     final boolean forceVMLaunch,
+                                     final boolean waitForVMTools,
+                                     final int launchDelay,
+                                     final int limitedRunCount,
+                                     final boolean saveFailure,
+                                     final String targetResourcePool,
+                                     final String targetHost,
+                                     final String credentialsId /*deprecated*/,
+                                     final ComputerLauncher launcher,
+                                     final RetentionStrategy<?> retentionStrategy,
+                                     final List<? extends NodeProperty<?>> nodeProperties,
+                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
         this.snapshotName = snapshotName;
@@ -148,6 +164,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.credentialsId = credentialsId;
         this.nodeProperties = nodeProperties;
         this.guestInfoProperties = guestInfoProperties;
+        this.launcher = launcher;
+        this.retentionStrategy = retentionStrategy;
         readResolve();
     }
 
@@ -234,6 +252,13 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.targetHost;
     }
 
+    /**
+     * Gets the old (deprecated) credentialsId field.
+     * 
+     * @return the old, deprecated, credentialsId field.
+     * @deprecated credentials are now in the {@link #getLauncher()} property.
+     */
+    @Deprecated()
     public String getCredentialsId() {
         return this.credentialsId;
     }
@@ -254,11 +279,50 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.parent;
     }
 
+    public ComputerLauncher getLauncher() {
+        return this.launcher;
+    }
+
+    public RetentionStrategy<?> getRetentionStrategy() {
+        return this.retentionStrategy;
+    }
+
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
-
         if(this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
+        }
+        /*
+         * If we've upgraded from an earlier version of the plugin
+         * where things were hard-coded instead of configurable
+         * then we'll need to transfer the data across to the new
+         * format.
+         */
+        if (this.launcher == null) {
+            LOGGER.log(Level.CONFIG, "{0} loaded old configuration that had hard-coded SSHLauncher.", this);
+            try {
+                final String oldCredentialsIdOrNull = getCredentialsId();
+                final String oldCredentialsId = oldCredentialsIdOrNull == null ? "" : oldCredentialsIdOrNull;
+                // these were the old hard-coded settings
+                this.launcher = new SSHLauncher(null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60);
+                LOGGER.log(Level.CONFIG, " - now configured to use {0}(..., {1}, ...)", new Object[] {
+                        this.launcher.getClass().getSimpleName(), oldCredentialsId });
+            } catch (Exception ex) {
+                LOGGER.log(Level.CONFIG, " - Failed to reconfigure launcher", ex);
+            }
+        }
+        if (this.retentionStrategy == null) {
+            LOGGER.log(Level.CONFIG, "{0} loaded old configuration that had hard-coded RunOnceCloudRetentionStrategy.",
+                    this);
+            try {
+                // these were the old hard-coded settings
+                final int oldTimeout = 2;
+                this.retentionStrategy = new RunOnceCloudRetentionStrategy(oldTimeout);
+                LOGGER.log(Level.CONFIG, " - now configured to use {0}({1})", new Object[] {
+                        this.retentionStrategy.getClass().getSimpleName(), oldTimeout });
+            } catch (Exception ex) {
+                LOGGER.log(Level.CONFIG, " - Failed to reconfigure strategy", ex);
+            }
         }
         return this;
     }
@@ -292,18 +356,29 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     private ComputerLauncher determineLauncher(final VSphere vSphere, final String cloneName) throws VSphereException {
-        LOGGER.log(Level.FINER, "Slave {0} uses SSHLauncher - obtaining IP address...", cloneName);
-        final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
-        LOGGER.log(Level.FINER, "Slave {0} has IP address {1}", new Object[] { cloneName, ip });
-        final SSHLauncher launcher = new SSHLauncher(ip, 0, credentialsId, null, null, null, null, this.launchDelay, 3, 60);
-        return launcher;
+        if (launcher instanceof JNLPLauncher) {
+            return launcher;
+        }
+        if (launcher instanceof CommandLauncher) {
+            return launcher;
+        }
+        if (launcher instanceof SSHLauncher) {
+            final SSHLauncher sshLauncher = (SSHLauncher) launcher;
+            LOGGER.log(Level.FINER, "Slave {0} uses SSHLauncher - obtaining IP address...", cloneName);
+            final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
+            LOGGER.log(Level.FINER, "Slave {0} has IP address {1}", new Object[] { cloneName, ip });
+            final SSHLauncher launcherWithIPAddress = new SSHLauncher(ip, sshLauncher.getPort(),
+                    sshLauncher.getCredentialsId(), sshLauncher.getJvmOptions(), sshLauncher.getJavaPath(),
+                    sshLauncher.getPrefixStartSlaveCmd(), sshLauncher.getSuffixStartSlaveCmd(),
+                    sshLauncher.getLaunchTimeoutSeconds(), sshLauncher.getMaxNumRetries(),
+                    sshLauncher.getRetryWaitTime());
+            return launcherWithIPAddress;
+        }
+        throw new IllegalStateException("Unsupported launcher in template configuration");
     }
 
     private RetentionStrategy<?> determineRetention() {
-//      final CloudSlaveRetentionStrategy strategy = new CloudSlaveRetentionStrategy();
-//      strategy.TIMEOUT = TimeUnit2.MINUTES.toMillis(1);
-      final RunOnceCloudRetentionStrategy strategy = new RunOnceCloudRetentionStrategy(2);
-      return strategy;
+        return retentionStrategy;
     }
 
     @SuppressWarnings("unchecked")
@@ -319,16 +394,55 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return null;
         }
 
+        public FormValidation doCheckCloneNamePrefix(@QueryParameter String cloneNamePrefix) {
+            return FormValidation.validateRequired(cloneNamePrefix);
+        }
+
+        public FormValidation doCheckLimitedRunCount(@QueryParameter String limitedRunCount) {
+            return FormValidation.validateNonNegativeInteger(limitedRunCount);
+        }
+
         public FormValidation doCheckTemplateInstanceCap(@QueryParameter String templateInstanceCap) {
             return FormValidation.validateNonNegativeInteger(templateInstanceCap);
         }
 
-        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup context) {
+        public FormValidation doCheckNumberOfExecutors(@QueryParameter String numberOfExecutors) {
+            return FormValidation.validatePositiveInteger(numberOfExecutors);
+        }
+
+        public FormValidation doCheckLaunchDelay(@QueryParameter String launchDelay) {
+            return FormValidation.validateNonNegativeInteger(launchDelay);
+        }
+
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup<?> context) {
             if(!(context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance()).hasPermission(Computer.CONFIGURE)) {
                 return new ListBoxModel();
             }
             final List<StandardUsernameCredentials> credentials = lookupCredentials(StandardUsernameCredentials.class, context, ACL.SYSTEM, HTTP_SCHEME, HTTPS_SCHEME);
             return new StandardUsernameListBoxModel().withAll(credentials);
+        }
+
+        public static List<Descriptor<ComputerLauncher>> getLauncherDescriptors() {
+            final List<String> supportedLaunchers = Arrays.asList(
+                    SSHLauncher.class.getName(),
+                    CommandLauncher.class.getName(),
+                    JNLPLauncher.class.getName()
+            );
+            final List<Descriptor<ComputerLauncher>> knownLaunchers = Jenkins.getInstance().getDescriptorList(ComputerLauncher.class);
+            final List<Descriptor<ComputerLauncher>> result = new ArrayList<>(knownLaunchers.size());
+            for (final Descriptor<ComputerLauncher> knownLauncher : knownLaunchers) {
+                if(supportedLaunchers.contains(knownLauncher.getId())) {
+                    result.add(knownLauncher);
+                }
+            }
+            return result;
+        }
+
+        public static List<Descriptor<RetentionStrategy<?>>> getRetentionStrategyDescriptors() {
+            final List<Descriptor<RetentionStrategy<?>>> result = new ArrayList<>();
+            result.add(RunOnceCloudRetentionStrategy.DESCRIPTOR);
+            result.add(VSphereCloudRetentionStrategy.DESCRIPTOR);
+            return result;
         }
     }
 
@@ -370,9 +484,9 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return knownVariables;
     }
 
-    private static void addEnvVars(final EnvVars vars, final TaskListener listener, final Iterable<? extends NodeProperty> nodeProperties) throws IOException, InterruptedException {
+    private static void addEnvVars(final EnvVars vars, final TaskListener listener, final Iterable<? extends NodeProperty<?>> nodeProperties) throws IOException, InterruptedException {
         if( nodeProperties!=null ) {
-            for (final NodeProperty nodeProperty: nodeProperties) {
+            for (final NodeProperty<?> nodeProperty: nodeProperties) {
                 nodeProperty.buildEnvVars(vars , listener);
             }
         }

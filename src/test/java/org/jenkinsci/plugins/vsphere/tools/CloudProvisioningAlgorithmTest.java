@@ -1,14 +1,18 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.hamcrest.CoreMatchers.sameInstance;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.*;
+import hudson.slaves.JNLPLauncher;
+import hudson.slaves.RetentionStrategy;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.hamcrest.core.IsSame;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
+import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -162,6 +166,6 @@ public class CloudProvisioningAlgorithmTest {
 
     private static vSphereCloudSlaveTemplate stubTemplate(String prefix, int templateInstanceCap) {
         return new vSphereCloudSlaveTemplate(prefix, "", null, false, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, null, null, null);
+                null, null, null, false, false, 0, 0, false, null, null, null, new JNLPLauncher(), RetentionStrategy.NOOP, null, null);
     }
 }
