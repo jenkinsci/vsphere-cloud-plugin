@@ -45,6 +45,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jenkins.model.Jenkins;
+import jenkins.slaves.JnlpSlaveAgentProtocol;
 
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -468,6 +469,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         if (jenkinsUrl != null) {
             addEnvVar(knownVariables, "JENKINS_URL", jenkinsUrl);
             addEnvVar(knownVariables, "HUDSON_URL", jenkinsUrl);
+        }
+        final String slaveSecret = JnlpSlaveAgentProtocol.SLAVE_SECRET.mac(cloneName);
+        if (slaveSecret != null) {
+            addEnvVar(knownVariables, "JNLP_SECRET", slaveSecret);
         }
         addEnvVars(knownVariables, listener, Jenkins.getInstance().getGlobalNodeProperties());
         addEnvVars(knownVariables, listener, this.nodeProperties);
