@@ -16,20 +16,23 @@
 
 package org.jenkinsci.plugins;
 
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
-import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
-import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
-
+import static com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Util;
-import hudson.model.Computer;
 import hudson.model.Describable;
-import hudson.model.Descriptor;
 import hudson.model.ItemGroup;
+import hudson.model.TaskListener;
+import hudson.model.Computer;
+import hudson.model.Descriptor;
+import hudson.model.Descriptor.FormException;
+import hudson.model.Label;
+import hudson.model.Node.Mode;
+import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.security.ACL;
 import hudson.security.AccessControlled;
+import hudson.slaves.NodeProperty;
 import hudson.slaves.CommandLauncher;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
@@ -37,40 +40,36 @@ import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 
+import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
 
+import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
+import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
+import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
-import static com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials;
-import hudson.model.Descriptor.FormException;
-import hudson.model.Label;
-import hudson.model.Node.Mode;
-import hudson.model.TaskListener;
-import hudson.model.labels.LabelAtom;
-import hudson.slaves.NodeProperty;
-
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
-
-import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
-import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
-import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
-import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
-import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
+import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
+import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
+import com.vmware.vim25.mo.VirtualMachine;
 
 /**
  *
@@ -84,6 +83,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     private final String cloneNamePrefix;
     private final String masterImageName;
+    private Boolean useSnapshot; // almost final
     private final String snapshotName;
     private final boolean linkedClone;
     private final String cluster;
@@ -119,6 +119,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     @DataBoundConstructor
     public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
                                      final String masterImageName,
+                                     final Boolean useSnapshot,
                                      final String snapshotName,
                                      final boolean linkedClone,
                                      final String cluster,
@@ -145,6 +146,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
         this.snapshotName = snapshotName;
+        this.useSnapshot = useSnapshot;
         this.linkedClone = linkedClone;
         this.cluster = cluster;
         this.resourcePool = resourcePool;
@@ -176,6 +178,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     public String getMasterImageName() {
         return this.masterImageName;
+    }
+
+    public boolean getUseSnapshot() {
+        return useSnapshot.booleanValue();
     }
 
     public String getSnapshotName() {
@@ -293,6 +299,9 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         if(this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
         }
+        if ( this.useSnapshot == null ) {
+            this.useSnapshot = Boolean.valueOf(this.snapshotName!=null);
+        }
         /*
          * If we've upgraded from an earlier version of the plugin
          * where things were hard-coded instead of configurable
@@ -333,7 +342,22 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
         final boolean POWER_ON = true;
-        vSphere.cloneVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, POWER_ON, logger);
+        final boolean useCurrentSnapshot;
+        final String snapshotToUse;
+        if (getUseSnapshot()) {
+            final String sn = getSnapshotName();
+            if (sn != null && !sn.isEmpty()) {
+                useCurrentSnapshot = false;
+                snapshotToUse = sn;
+            } else {
+                useCurrentSnapshot = true;
+                snapshotToUse = null;
+            }
+        } else {
+            useCurrentSnapshot = false;
+            snapshotToUse = null;
+        }
+        vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, useCurrentSnapshot, snapshotToUse, POWER_ON, logger);
         try {
             if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
                 final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
@@ -344,7 +368,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             }
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
-            slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotName, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+            final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
+            slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotNameForLauncher, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
         } finally {
             // if anything went wrong, try to tidy up
             if( slave==null ) {
@@ -411,8 +436,58 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return FormValidation.validatePositiveInteger(numberOfExecutors);
         }
 
+        public FormValidation doCheckLinkedClone(@QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot) {
+            final boolean noSnapshot = !useSnapshot;
+            if (linkedClone && noSnapshot) {
+                return FormValidation.warning("Linked clones are based upon a snapshot.");
+            }
+            return FormValidation.ok();
+        }
+
         public FormValidation doCheckLaunchDelay(@QueryParameter String launchDelay) {
             return FormValidation.validateNonNegativeInteger(launchDelay);
+        }
+
+        public FormValidation doTestCloneParameters(@QueryParameter String vsHost, @QueryParameter String vsDescription,
+                @QueryParameter String credentialsId, @QueryParameter String masterImageName,
+                @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot,
+                @QueryParameter String snapshotName) {
+            try {
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
+                final String effectiveUsername = config.getUsername();
+                final String effectivePassword = config.getPassword();
+                final VSphere vsphere = VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword);
+                try {
+                    final VirtualMachine vm = vsphere.getVmByName(masterImageName);
+                    if (vm == null) {
+                        return FormValidation.error(Messages.validation_notFound("master image \"" + masterImageName
+                                + "\""));
+                    }
+                    if (useSnapshot) {
+                        if (snapshotName != null && !snapshotName.isEmpty()) {
+                            final Object snapshot = vsphere.getSnapshotInTree(vm, snapshotName);
+                            if (snapshot == null) {
+                                return FormValidation.error(Messages.validation_notFound("snapshot \"" + snapshotName
+                                        + "\""));
+                            }
+                        } else {
+                            final Object snapshot = vm.getCurrentSnapShot();
+                            if (snapshot == null) {
+                                return FormValidation.error("No snapshots found.");
+                            }
+                        }
+                    } else {
+                        if (linkedClone) {
+                            return FormValidation.warning("vSphere doesn't like creating linked clones without a snapshot");
+                        }
+                    }
+                    return FormValidation.ok(Messages.validation_success());
+                } finally {
+                    vsphere.disconnect();
+                }
+            } catch (Exception e) {
+                return FormValidation.error(e, "Problem validating");
+            }
         }
 
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup<?> context) {
