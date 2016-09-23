@@ -5,12 +5,13 @@ import static org.hamcrest.CoreMatchers.*;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 
-import org.hamcrest.core.IsSame;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.junit.Before;
@@ -149,6 +150,111 @@ public class CloudProvisioningAlgorithmTest {
         }
     }
 
+    @Test
+    public void toBigIntegerGivenTwoPow128MinusOneThenReturnsTwoPow128MinusOne() {
+        testToBigInteger(-1, -1, "340282366920938463463374607431768211455");
+    }
+
+    @Test
+    public void toBigIntegerGivenTwoPow64PlusOneThenReturnsTwoPow64PlusOne() {
+        testToBigInteger(1, 1, "18446744073709551617");
+    }
+
+    @Test
+    public void toBigIntegerGivenZeroThenReturnsZero() {
+        testToBigInteger(0, 0, "0");
+    }
+
+    @Test
+    public void toBigIntegerGivenPowersOfTwoThenReturnsPowersOfTwo() {
+        long lsb = 1;
+        long msb = 0;
+        BigInteger big = new BigInteger("1");
+        for (int bit = 0; bit < 64; bit++) {
+            testToBigInteger(msb, lsb, big.toString());
+            lsb <<= 1;
+            big = big.add(big);
+        }
+        msb = 1;
+        for (int bit = 0; bit < 64; bit++) {
+            testToBigInteger(msb, lsb, big.toString());
+            msb <<= 1;
+            big = big.add(big);
+        }
+    }
+
+    private void testToBigInteger(long msb, long lsb, String expected) {
+        // Given
+        final BigInteger expectedValue = new BigInteger(expected);
+        final byte[] expectedBytes = expectedValue.toByteArray();
+        // When
+        final BigInteger actual = CloudProvisioningAlgorithm.toBigInteger(msb, lsb);
+        final byte[] actualBytes = actual.toByteArray();
+        final String scenario = "toBigInteger(" + msb + "," + lsb + ") == " + expected + "\ni.e. "
+                + toHexString(actualBytes) + " ~= " + toHexString(expectedBytes);
+        // Then
+        assertThat(scenario, actual, equalTo(expectedValue));
+    }
+
+    @Test
+    public void findUnusedNameGivenZeroOfTwoExistsThenReturnsOneThenTwo() {
+        // Given
+        final CloudProvisioningRecord record = createInstance(2, 0, 0);
+        final String prefix = record.getTemplate().getCloneNamePrefix();
+        final String expected1 = prefix + "_1";
+        final String expected2 = prefix + "_2";
+
+        // When
+        final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual1);
+        final String actual2 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual2);
+
+        // Then
+        assertThat(actual1, equalTo(expected1));
+        assertThat(actual2, equalTo(expected2));
+    }
+
+    @Test
+    public void findUnusedNameGivenOneOfTwoHasEndedThenReturnsOne() {
+        // Given
+        final CloudProvisioningRecord record = createInstance(2, 0, 0);
+        final String prefix = record.getTemplate().getCloneNamePrefix();
+        final String expected = prefix + "_1";
+
+        // When
+        final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual1);
+        final String actual2 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual2);
+        record.removeCurrentlyActive(actual1);
+        final String actual = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual);
+
+        // Then
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    public void findUnusedNameGivenUncappedInstancesThenReturnsUniqueNames() {
+        // Given
+        final CloudProvisioningRecord record = createInstance(0, 5, 6);
+        final String prefix = record.getTemplate().getCloneNamePrefix();
+        final List<String> actuals = new ArrayList<String>();
+
+        // When
+        for (int i = 0; i < 100; i++) {
+            final String actual = CloudProvisioningAlgorithm.findUnusedName(record);
+            record.addCurrentlyActive(actual);
+            actuals.add(actual);
+        }
+
+        // Then
+        final List<String> uniques = new ArrayList<String>(new LinkedHashSet<String>(actuals));
+        assertThat(actuals, equalTo(uniques));
+        assertThat(actuals, everyItem(startsWith(prefix + "_")));
+    }
+
     private CloudProvisioningRecord createInstance(int capacity, int provisioned, int planned) {
         final int iNum = ++instanceNumber;
         final vSphereCloudSlaveTemplate template = stubTemplate(iNum + "cap" + capacity, capacity);
@@ -166,6 +272,18 @@ public class CloudProvisioningAlgorithmTest {
 
     private static vSphereCloudSlaveTemplate stubTemplate(String prefix, int templateInstanceCap) {
         return new vSphereCloudSlaveTemplate(prefix, "", null, false, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, null, new JNLPLauncher(), RetentionStrategy.NOOP, null, null);
+                null, null, null, false, false, 0, 0, false, null, null, null, new JNLPLauncher(),
+                RetentionStrategy.NOOP, null, null);
+    }
+
+    private static String toHexString(byte[] bytes) {
+        final StringBuilder s = new StringBuilder("0x");
+        for (final byte b : bytes) {
+            final int highDigit = (((int) b) >> 8) & 15;
+            final int lowDigit = ((int) b) & 15;
+            s.append(Integer.toString(highDigit, 16));
+            s.append(Integer.toString(lowDigit, 16));
+        }
+        return s.toString();
     }
 }
