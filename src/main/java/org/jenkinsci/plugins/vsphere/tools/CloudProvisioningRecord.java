@@ -1,10 +1,7 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.Set;
-import java.util.SortedSet;
 import java.util.TreeSet;
 
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
