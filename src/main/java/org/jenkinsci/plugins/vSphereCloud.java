@@ -25,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -345,7 +344,8 @@ public class vSphereCloud extends Cloud {
                     if (whatWeShouldSpinUp==null) {
                         break; // out of capacity due to template instance cap
                     }
-                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, whatWeShouldSpinUp);
+                    final String nodeName = CloudProvisioningAlgorithm.findUnusedName(whatWeShouldSpinUp);
+                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, nodeName, whatWeShouldSpinUp);
                     plannedNodes.add(plannedNode);
                     excessWorkloadSoFar -= plannedNode.numExecutors;
                 }
@@ -396,32 +396,30 @@ public class vSphereCloud extends Cloud {
             super(displayName, future, numExecutors);
         }
 
-        public static VSpherePlannedNode createInstance(final CloudProvisioningState algorithm,
+        public static VSpherePlannedNode createInstance(final CloudProvisioningState templateState,
+                final String nodeName,
                 final CloudProvisioningRecord whatWeShouldSpinUp) {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
-            final String cloneNamePrefix = template.getCloneNamePrefix();
             final int numberOfExecutors = template.getNumberOfExecutors();
-            final UUID cloneUUID = UUID.randomUUID();
-            final String nodeName = cloneNamePrefix + "_" + cloneUUID;
             final Callable<Node> provisionNodeCallable = new Callable<Node>() {
                 public Node call() throws Exception {
                     try {
-                        final Node newNode = provisionNewNode(algorithm, whatWeShouldSpinUp, nodeName);
+                        final Node newNode = provisionNewNode(templateState, whatWeShouldSpinUp, nodeName);
                         VSLOG.log(Level.INFO, "Provisioned new slave " + nodeName);
-                        synchronized (algorithm) {
-                            algorithm.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
+                        synchronized (templateState) {
+                            templateState.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
                         }
                         return newNode;
                     } catch (Exception ex) {
                         VSLOG.log(Level.WARNING, "Failed to provision new slave " + nodeName, ex);
-                        synchronized (algorithm) {
-                            algorithm.provisioningEndedInError(whatWeShouldSpinUp, nodeName);
+                        synchronized (templateState) {
+                            templateState.provisioningEndedInError(whatWeShouldSpinUp, nodeName);
                         }
                         throw ex;
                     }
                 }
             };
-            algorithm.provisioningStarted(whatWeShouldSpinUp, nodeName);
+            templateState.provisioningStarted(whatWeShouldSpinUp, nodeName);
             final Future<Node> provisionNodeTask = Computer.threadPoolForRemoting.submit(provisionNodeCallable);
             final VSpherePlannedNode result = new VSpherePlannedNode(nodeName, provisionNodeTask, numberOfExecutors);
             return result;
