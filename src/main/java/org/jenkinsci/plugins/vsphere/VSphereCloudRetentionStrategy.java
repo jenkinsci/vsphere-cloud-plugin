@@ -3,12 +3,10 @@ package org.jenkinsci.plugins.vsphere;
 import hudson.model.Descriptor;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.RetentionStrategy;
-import hudson.util.FormValidation;
 
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
 
 public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
 

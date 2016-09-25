@@ -26,7 +26,6 @@ import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
 import hudson.slaves.RetentionStrategy;
-import hudson.util.FormValidation;
 import hudson.util.TimeUnit2;
 
 import java.io.IOException;
@@ -38,7 +37,6 @@ import java.util.logging.Logger;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
 
 /**
  *

@@ -332,7 +332,7 @@ public class CloudProvisioningStateTest {
         recordNumber++;
         final String cloneNamePrefix = "prefix" + recordNumber;
         final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
-                "snapshotName", false, "cluster", "resourcePool", "datastore", "templateDescription", 0, 1, "remoteFS",
+                null, "snapshotName", false, "cluster", "resourcePool", "datastore", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", null,
                 new JNLPLauncher(), RetentionStrategy.NOOP, Collections.<NodeProperty<?>> emptyList(),
                 Collections.<VSphereGuestInfoProperty> emptyList());
