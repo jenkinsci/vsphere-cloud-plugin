@@ -8,9 +8,11 @@ import hudson.Util;
 import hudson.model.TaskListener;
 import hudson.model.Descriptor;
 import hudson.slaves.ComputerLauncher;
+import hudson.slaves.DelegatingComputerLauncher;
 import hudson.slaves.SlaveComputer;
 
 import java.io.IOException;
+import java.io.ObjectStreamException;
 import java.util.Calendar;
 
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -28,9 +30,10 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
  *
  * @author Admin
  */
-public class vSphereCloudLauncher extends ComputerLauncher {
+public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
-    private final ComputerLauncher delegate;
+    @Deprecated
+    private transient ComputerLauncher delegate;
     private final Boolean overrideLaunchSupported;
     private final String vsDescription;
     private final String vmName;
@@ -51,13 +54,12 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     }
 
     @DataBoundConstructor
-    public vSphereCloudLauncher(ComputerLauncher delegate,
+    public vSphereCloudLauncher(ComputerLauncher launcher,
             String vsDescription, String vmName,
             Boolean overrideLaunchSupported, Boolean waitForVMTools,
             String snapName, String launchDelay, String idleOption,
             String LimitedTestRunCount) {
-        super();
-        this.delegate = delegate;
+        super(launcher);
         this.overrideLaunchSupported = overrideLaunchSupported;
         this.vsDescription = vsDescription;
         this.vmName = vmName;
@@ -80,6 +82,33 @@ public class vSphereCloudLauncher extends ComputerLauncher {
             idleAction = MACHINE_ACTION.NOTHING;
         }
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
+    }
+
+    private vSphereCloudLauncher(ComputerLauncher launcher, Boolean overrideLaunchSupported, String vsDescription,
+                                String vmName, Boolean waitForVMTools, String snapName, int launchDelay,
+                                MACHINE_ACTION idleAction, int limitedTestRunCount) {
+        super(launcher);
+        this.overrideLaunchSupported = overrideLaunchSupported;
+        this.vsDescription = vsDescription;
+        this.vmName = vmName;
+        this.waitForVMTools = waitForVMTools;
+        this.snapName = snapName;
+        this.launchDelay = launchDelay;
+        this.idleAction = idleAction;
+        LimitedTestRunCount = limitedTestRunCount;
+    }
+
+    /**
+     * Migrates instances from the old parent class to the new parent class.
+     * @return the deserialized instance.
+     * @throws ObjectStreamException if something went wrong.
+     */
+    private Object readResolve() throws ObjectStreamException {
+        if (delegate != null) {
+            return new vSphereCloudLauncher(delegate, overrideLaunchSupported, vsDescription, vmName, waitForVMTools,
+                    snapName, launchDelay, idleAction, LimitedTestRunCount);
+        }
+        return this;
     }
 
     public vSphereCloud findOurVsInstance() throws RuntimeException {
@@ -193,15 +222,15 @@ public class vSphereCloudLauncher extends ComputerLauncher {
                     /* At this point we have told vSphere to get the VM going.
                      * Now we wait our launch delay amount before trying to connect.
                      */
-                    if (delegate.isLaunchSupported()) {
+                    if (launcher.isLaunchSupported()) {
                         if (launchDelay > 0) {
                             vSphereCloud.Log(slaveComputer, taskListener, "Waiting for " + launchDelay
-                                    + " seconds before asking " + delegate + " to launch slave.");
+                                    + " seconds before asking " + launcher + " to launch slave.");
                             // Delegate is going to do launch.
                             Thread.sleep(launchDelay * 1000);
                         }
-                        vSphereCloud.Log(slaveComputer, taskListener, "Asking " + delegate.getClass().getSimpleName() + " to launch slave.");
-                        delegate.launch(slaveComputer, taskListener);
+                        vSphereCloud.Log(slaveComputer, taskListener, "Asking " + launcher.getClass().getSimpleName() + " to launch slave.");
+                        super.launch(slaveComputer, taskListener);
                     } else {
                         vSphereCloud.Log(slaveComputer, taskListener, "Waiting for up to " + launchDelay
                                 + " seconds for slave to come online.");
@@ -263,7 +292,7 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         VSphere v = null;
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
-            delegate.afterDisconnect(slaveComputer, taskListener);
+            super.afterDisconnect(slaveComputer, taskListener);
             vSphereCloud.Log(slaveComputer, taskListener, "Shutting down Virtual Machine...");
             MACHINE_ACTION localIdle = idleAction;
             if (localIdle == null) {
@@ -323,8 +352,12 @@ public class vSphereCloudLauncher extends ComputerLauncher {
         }
     }
 
+    /**
+     * @deprecated use {@link #getLauncher()}
+     */
+    @Deprecated
     public ComputerLauncher getDelegate() {
-        return delegate;
+        return launcher;
     }
 
     public String getVmName() {
@@ -354,15 +387,10 @@ public class vSphereCloudLauncher extends ComputerLauncher {
     @Override
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
-            return delegate.isLaunchSupported();
+            return launcher.isLaunchSupported();
         } else {
             return overrideLaunchSupported;
         }
-    }
-
-    @Override
-    public void beforeDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
-        delegate.beforeDisconnect(slaveComputer, taskListener); //this call does nothing.
     }
 
     @Override
