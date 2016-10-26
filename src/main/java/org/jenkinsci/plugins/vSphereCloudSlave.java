@@ -323,7 +323,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
      * @return original launcher
      */
     public ComputerLauncher getDelegateLauncher() {
-        return ((vSphereCloudLauncher) getLauncher()).getDelegate();
+        return ((vSphereCloudLauncher) getLauncher()).getLauncher();
     }
 
     @Extension
