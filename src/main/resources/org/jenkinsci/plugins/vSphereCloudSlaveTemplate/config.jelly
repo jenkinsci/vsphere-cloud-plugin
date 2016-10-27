@@ -31,6 +31,10 @@
             <f:textbox/>
         </f:entry>
 
+        <f:entry title="${%Customization Specification}" field="customizationSpec">
+            <f:textbox/>
+        </f:entry>
+
         <f:entry title="${%Description}" field="templateDescription">
             <f:textbox/>
         </f:entry>

@@ -45,18 +45,21 @@ public class Clone extends VSphereBuildStep {
     private final String resourcePool;
     private final String cluster;
     private final String datastore;
+    private final String customizationSpec;
     private final boolean powerOn;
     private String IP;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore, boolean powerOn) throws VSphereException {
+                 String resourcePool, String cluster, String datastore, boolean powerOn,
+		 String customizationSpec) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
         this.resourcePool=resourcePool;
         this.cluster=cluster;
         this.datastore=datastore;
+	this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
     }
 
@@ -82,6 +85,10 @@ public class Clone extends VSphereBuildStep {
 
     public String getDatastore() {
         return datastore;
+    }
+
+    public String getCustomizationSpec() {
+        return customizationSpec;
     }
 
     public boolean isPowerOn() {
@@ -121,6 +128,7 @@ public class Clone extends VSphereBuildStep {
         String expandedCluster = cluster;
         String expandedDatastore = datastore;
         String expandedResourcePool = resourcePool;
+        String expandedCustomizationSpec = customizationSpec;
         EnvVars env;
         try {
             env = run.getEnvironment(listener);
@@ -135,9 +143,10 @@ public class Clone extends VSphereBuildStep {
             expandedCluster = env.expand(cluster);
             expandedDatastore = env.expand(datastore);
             expandedResourcePool = env.expand(resourcePool);
+            expandedCustomizationSpec = env.expand(customizationSpec);
         }
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, powerOn, jLogger);
+                expandedDatastore, powerOn, expandedCustomizationSpec, jLogger);
         if (powerOn) {
             IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
         }
@@ -199,9 +208,15 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
+        public FormValidation doCheckCustomizationSpec(@QueryParameter String value)
+                throws IOException, ServletException {
+            return FormValidation.ok();
+        }
+
         public FormValidation doTestData(@QueryParameter String serverName,
                                          @QueryParameter String sourceName, @QueryParameter String clone,
-                                         @QueryParameter String resourcePool, @QueryParameter String cluster) {
+                                         @QueryParameter String resourcePool, @QueryParameter String cluster,
+                                         @QueryParameter String customizationSpec) {
             try {
                 if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
                         || cluster.length()==0 )
@@ -224,6 +239,11 @@ public class Clone extends VSphereBuildStep {
                 VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
                 if (snap == null)
                     return FormValidation.error(Messages.validation_noSnapshots());
+
+                if(customizationSpec.length() > 0 &&
+                        vsphere.getCustomizationSpecByName(customizationSpec) == null) {
+                    return FormValidation.error(Messages.validation_notFound("customizationSpec"));
+                }
 
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {

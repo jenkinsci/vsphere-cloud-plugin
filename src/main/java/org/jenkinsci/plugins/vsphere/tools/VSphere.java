@@ -29,6 +29,8 @@ import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.StringUtils;
 
+import com.vmware.vim25.CustomizationSpec;
+import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.ManagedObjectReference;
@@ -46,11 +48,13 @@ import com.vmware.vim25.VirtualMachineSnapshotInfo;
 import com.vmware.vim25.VirtualMachineSnapshotTree;
 import com.vmware.vim25.VirtualMachineToolsStatus;
 import com.vmware.vim25.mo.ClusterComputeResource;
+import com.vmware.vim25.mo.CustomizationSpecManager;
 import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ResourcePool;
+import com.vmware.vim25.mo.ServerConnection;
 import com.vmware.vim25.mo.ServiceInstance;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
@@ -116,14 +120,15 @@ public class VSphere {
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
      * @param powerOn - If true the VM will be powered on.
+     * @param customizationSpec - Customization spec to use for this VM
      * @param jLogger - Where to log to.
      * @throws VSphereException If an error occurred.
      */
-    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
     }
 
     /**
@@ -136,14 +141,15 @@ public class VSphere {
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
      * @param powerOn - If true the VM will be powered on.
+     * @param customizationSpec - Customization spec to use for this VM
      * @param jLogger - Where to log to.
      * @throws VSphereException If an error occurred.
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
     }
 
     /**
@@ -174,12 +180,14 @@ public class VSphere {
      * @param powerOn
      *            If true then the new VM will be switched on after it has been
      *            created.
+     * @param customizationSpec
+     *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
      *            Where to log to.
      * @throws VSphereException
      *             if anything goes wrong.
      */
-    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, PrintStream jLogger) throws VSphereException {
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         try{
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if(sourceVm==null) {
@@ -215,6 +223,12 @@ public class VSphere {
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
+            }
+
+            if(customizationSpec != null && customizationSpec.length() > 0) {
+                logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will use customization specification \"" + customizationSpec + "\".");
+                CustomizationSpecItem spec = getCustomizationSpecByName(customizationSpec);
+                cloneSpec.setCustomization(spec.getSpec());
             }
 
             final Folder sameFolderAsSource = (Folder) sourceVm.getParent();
@@ -621,6 +635,19 @@ public class VSphere {
             }
         }
         return null;
+    }
+
+    public CustomizationSpecItem getCustomizationSpecByName(final String customizationSpecName) throws VSphereException {
+        try {
+            ServerConnection conn = getServiceInstance().getServerConnection();
+            CustomizationSpecManager mgr = new CustomizationSpecManager(
+                    conn,
+                    getServiceInstance().getServiceContent().customizationSpecManager);
+
+            return mgr.getCustomizationSpec(customizationSpecName);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
     }
 
 	/**
