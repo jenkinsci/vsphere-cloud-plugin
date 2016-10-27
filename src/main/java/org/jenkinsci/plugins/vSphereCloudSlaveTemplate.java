@@ -89,6 +89,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String cluster;
     private final String resourcePool;
     private final String datastore;
+    private final String customizationSpec;
     private final String templateDescription;
     private int templateInstanceCap;
     private final int numberOfExecutors;
@@ -125,6 +126,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final String cluster,
                                      final String resourcePool,
                                      final String datastore,
+                                     final String customizationSpec,
                                      final String templateDescription,
                                      final int templateInstanceCap,
                                      final int numberOfExecutors,
@@ -151,6 +153,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.cluster = cluster;
         this.resourcePool = resourcePool;
         this.datastore = datastore;
+        this.customizationSpec = customizationSpec;
         this.templateDescription = templateDescription;
         this.templateInstanceCap = templateInstanceCap;
         this.numberOfExecutors = numberOfExecutors;
@@ -202,6 +205,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     public String getDatastore() {
         return this.datastore;
+    }
+
+    public String getCustomizationSpec() {
+        return this.customizationSpec;
     }
 
     public String getTemplateDescription() {
@@ -357,7 +364,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             useCurrentSnapshot = false;
             snapshotToUse = null;
         }
-        vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, useCurrentSnapshot, snapshotToUse, POWER_ON, logger);
+        vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, useCurrentSnapshot, snapshotToUse, POWER_ON, this.customizationSpec, logger);
         try {
             if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
                 final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
@@ -555,6 +562,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : Util.join(getLabelSet(), " "));
         addEnvVar(knownVariables, "cluster", this.cluster);
         addEnvVar(knownVariables, "datastore", this.datastore);
+        addEnvVar(knownVariables, "customizationSpec", this.customizationSpec);
         addEnvVar(knownVariables, "labelString", this.labelString);
         addEnvVar(knownVariables, "masterImageName", this.masterImageName);
         addEnvVar(knownVariables, "remoteFS", this.remoteFS);
