@@ -30,6 +30,10 @@
         <f:entry title="${%Datastore}" field="datastore">
             <f:textbox/>
         </f:entry>
+        
+        <f:entry title="${%Folder}" field="folder">
+            <f:textbox/>
+        </f:entry>
 
         <f:entry title="${%Customization Specification}" field="customizationSpec">
             <f:textbox/>

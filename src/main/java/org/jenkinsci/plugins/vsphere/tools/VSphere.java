@@ -119,16 +119,17 @@ public class VSphere {
      * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
+     * @param folderName - Folder name or path to use
      * @param powerOn - If true the VM will be powered on.
      * @param customizationSpec - Customization spec to use for this VM
      * @param jLogger - Where to log to.
      * @throws VSphereException If an error occurred.
      */
-    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
     }
 
     /**
@@ -140,16 +141,17 @@ public class VSphere {
      * @param resourcePoolName - resource pool to use
      * @param cluster - ComputeClusterResource to use
      * @param datastoreName - Datastore to use
+     * @param folderName - Folder name or path to use
      * @param powerOn - If true the VM will be powered on.
      * @param customizationSpec - Customization spec to use for this VM
      * @param jLogger - Where to log to.
      * @throws VSphereException If an error occurred.
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
     }
 
     /**
@@ -169,6 +171,8 @@ public class VSphere {
      *            (Optional) The name of the cluster, or null.
      * @param datastoreName
      *            (Optional) The name of the data store, or null.
+     * @param folderName
+     *            (Optional) The name or path of the VSphere folder, or null
      * @param useCurrentSnapshot
      *            If true then the clone will be created from the source VM's
      *            "current" snapshot. This means that the VM <em>must</em> have
@@ -187,7 +191,7 @@ public class VSphere {
      * @throws VSphereException
      *             if anything goes wrong.
      */
-    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         try{
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if(sourceVm==null) {
@@ -231,8 +235,18 @@ public class VSphere {
                 cloneSpec.setCustomization(spec.getSpec());
             }
 
-            final Folder sameFolderAsSource = (Folder) sourceVm.getParent();
-            final Task task = sourceVm.cloneVM_Task(sameFolderAsSource,
+            Folder folder;
+            if (folderName == null || folderName.isEmpty() || folderName.equals(" ")) {
+                //same folder as source
+                folder = (Folder) sourceVm.getParent();
+            } else if (!folderExists(folderName)) {
+                folder = (Folder) sourceVm.getParent();
+                logMessage(jLogger, "Unable to find the specified folder. Creating VM in the same folder as its parent ");
+            } else {
+                folder = getFolder(folderName);
+            }
+
+            final Task task = sourceVm.cloneVM_Task(folder,
                     cloneName, cloneSpec);
             logMessage(jLogger, "Started cloning of " + sourceType + " \"" + sourceName + "\". Please wait ...");
 
@@ -637,6 +651,50 @@ public class VSphere {
         return null;
     }
 
+    /*
+     Check if folder exists along all the vSphere folders
+     */
+    public Boolean folderExists(String folderPath) throws VSphereException {
+        try {
+            String[] folderHierarchy = folderPath.split("/");
+            ManagedEntity folder = null;
+
+            for (int i = 0; i < folderHierarchy.length; i++) {
+                if (i == 0) {
+                    folder = new InventoryNavigator(getServiceInstance().getRootFolder()).searchManagedEntity("Folder", folderHierarchy[i]);
+                } else {
+                    folder = new InventoryNavigator(folder).searchManagedEntity(null, folderHierarchy[i]);
+                }
+                if (folder == null) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed while checking if folder exists");
+            throw new VSphereException(e);
+        }
+    }
+
+    public Folder getFolder(String folderPath) throws VSphereException {
+        try {
+            String[] folderHierarchy = folderPath.split("/");
+            ManagedEntity folder = null;
+
+            for (int i = 0; i < folderHierarchy.length; i++) {
+                if (i == 0) {
+                    folder = new InventoryNavigator(getServiceInstance().getRootFolder()).searchManagedEntity("Folder", folderHierarchy[i]);
+                } else {
+                    folder = new InventoryNavigator(folder).searchManagedEntity(null, folderHierarchy[i]);
+                }
+            }
+            return (Folder) folder;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Invalid folder");
+            throw new VSphereException(e);
+        }
+    }
+    
     public CustomizationSpecItem getCustomizationSpecByName(final String customizationSpecName) throws VSphereException {
         try {
             ServerConnection conn = getServiceInstance().getServerConnection();
