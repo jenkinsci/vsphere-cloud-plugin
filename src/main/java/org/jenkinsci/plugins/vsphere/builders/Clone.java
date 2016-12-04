@@ -186,7 +186,10 @@ public class Clone extends VSphereBuildStep {
                                                   @QueryParameter String sourceName)
                 throws IOException, ServletException {
             try {
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                if (serverName == null){
+                    return FormValidation.error(Messages.validation_required("serverName"));
+                }
+                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 VirtualMachine virtualMachine = vsphere.getVmByName(sourceName);
                 if (virtualMachine == null) {
@@ -222,7 +225,7 @@ public class Clone extends VSphereBuildStep {
                         || cluster.length()==0 )
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 //TODO what if clone name is variable?
                 VirtualMachine cloneVM = vsphere.getVmByName(clone);

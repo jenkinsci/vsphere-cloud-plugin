@@ -173,7 +173,7 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 				if (serverName.length() == 0 || oldName.length()==0 || newName.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if (vmObj == null)

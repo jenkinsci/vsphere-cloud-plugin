@@ -7,7 +7,7 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.jenkinsci.plugins.vSphereCloud;
+import org.jenkinsci.plugins.VSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 
 /**
@@ -35,18 +35,18 @@ public class CloudProvisioningState {
      * Our parent, so we can check what templates still exist (as the user may
      * have added/removed some).
      */
-    private final vSphereCloud parent;
+    private final VSphereCloud parent;
     /**
      * Where we log to. This is only instance-based for test-purposes, and
      * transient to stop serialization problems.
      */
     private transient final Logger logger;
 
-    public CloudProvisioningState(vSphereCloud parent) {
+    public CloudProvisioningState(VSphereCloud parent) {
         this(parent, LOGGER);
     }
 
-    CloudProvisioningState(vSphereCloud parent, Logger logger) {
+    CloudProvisioningState(VSphereCloud parent, Logger logger) {
         this.parent = parent;
         this.logger = logger;
         this.logger.log(Level.FINE, "Created for parent {0}", parent.toString());

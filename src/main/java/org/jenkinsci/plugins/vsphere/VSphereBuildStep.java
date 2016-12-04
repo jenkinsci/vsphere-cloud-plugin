@@ -20,7 +20,8 @@ import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.*;
 
-import org.jenkinsci.plugins.vSphereCloud;
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.VSphereCloud;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -49,7 +50,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 	}
 
 	public static DescriptorExtensionList<VSphereBuildStep, VSphereBuildStepDescriptor> all() {
-		return Hudson.getInstance().getDescriptorList(VSphereBuildStep.class);
+		return Jenkins.getInstance().getDescriptorList(VSphereBuildStep.class);
 	}
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws Exception;
@@ -57,7 +58,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 	public abstract void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
 
 	public VSphereBuildStepDescriptor getDescriptor() {
-		return (VSphereBuildStepDescriptor)Hudson.getInstance().getDescriptor(getClass());
+		return (VSphereBuildStepDescriptor) Jenkins.getInstance().getDescriptor(getClass());
 	}
 
 	public static abstract class VSphereBuildStepDescriptor extends Descriptor<VSphereBuildStep> {
@@ -68,9 +69,17 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 			super(clazz);
 		}
 
-		public static vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
+		public static VSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
+			return getVSphereCloudByName(serverName, null);
+		}
+
+		public static VSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
+			return getVSphereCloudByHash(hash, null);
+		}
+
+		public static VSphereCloud getVSphereCloudByName(String serverName, String jobName) throws RuntimeException, VSphereException {
 			if (serverName != null){
-				for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
+				for (VSphereCloud cloud : VSphereCloud.findAllVsphereClouds(jobName)) {
 					if (cloud.getVsDescription().equals(serverName)) {
 						return cloud;
 					}
@@ -79,9 +88,9 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 			throw new RuntimeException(Messages.validation_instanceNotFound(serverName));
 		}
 
-		public static vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {
-			for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
-				if (cloud.getHash()==hash ){
+		public static VSphereCloud getVSphereCloudByHash(int hash, String jobName) throws RuntimeException, VSphereException {
+			for (VSphereCloud cloud : VSphereCloud.findAllVsphereClouds(jobName)) {
+				if (cloud.getHash()==hash){
 					return cloud;
 				}
 			}

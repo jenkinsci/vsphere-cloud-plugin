@@ -7,7 +7,8 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.slaves.Cloud;
 import hudson.util.ListBoxModel;
-import org.jenkinsci.plugins.vSphereCloud;
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.VSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer;
 import org.jenkinsci.plugins.vsphere.builders.*;
@@ -71,9 +72,9 @@ public class vSphereStep extends AbstractStepImpl {
         public ListBoxModel doFillServerNameItems() {
             ListBoxModel select = new ListBoxModel();
             try {
-                for (Cloud cloud : Hudson.getInstance().clouds) {
-                    if (cloud instanceof vSphereCloud) {
-                        select.add(((vSphereCloud) cloud).getVsDescription());
+                for (Cloud cloud : Jenkins.getInstance().clouds) {
+                    if (cloud instanceof VSphereCloud) {
+                        select.add(((VSphereCloud) cloud).getVsDescription());
                     }
                 }
             } catch (Exception e) {
@@ -83,7 +84,7 @@ public class vSphereStep extends AbstractStepImpl {
         }
 
         public DescriptorExtensionList<VSphereBuildStep, VSphereBuildStep.VSphereBuildStepDescriptor> getBuildSteps() {
-            return Hudson.getInstance().getDescriptorList(VSphereBuildStep.class);
+            return Jenkins.getInstance().getDescriptorList(VSphereBuildStep.class);
         }
     }
 
