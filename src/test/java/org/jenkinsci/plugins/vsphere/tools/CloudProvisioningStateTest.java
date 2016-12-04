@@ -25,7 +25,7 @@ import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 import org.hamcrest.collection.IsIterableWithSize;
-import org.jenkinsci.plugins.VSphereCloud;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
@@ -35,7 +35,7 @@ import org.junit.Test;
 
 public class CloudProvisioningStateTest {
     private static List<vSphereCloudSlaveTemplate> stubVSphereCloudTemplates;
-    private static VSphereCloud stubVSphereCloud;
+    private static vSphereCloud stubVSphereCloud;
     private int recordNumber;
     private int nodeNumber;
     private Logger testLogger;
@@ -45,7 +45,7 @@ public class CloudProvisioningStateTest {
     public static void setupClass() {
         stubVSphereCloudTemplates = new ArrayList<vSphereCloudSlaveTemplate>();
         final VSphereConnectionConfig vsConnectionConfig = new VSphereConnectionConfig("vsHost", "credentialsId");
-        stubVSphereCloud = new VSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, stubVSphereCloudTemplates);
+        stubVSphereCloud = new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, stubVSphereCloudTemplates);
     }
 
     @Before

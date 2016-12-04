@@ -44,7 +44,7 @@ import java.util.logging.Level;
 /**
  * @author Admin
  */
-public class VSphereCloud extends Cloud {
+public class vSphereCloud extends Cloud {
 
     @Deprecated
     private transient String vsHost;
@@ -132,13 +132,13 @@ public class VSphereCloud extends Cloud {
     }
 
     @Deprecated
-    public VSphereCloud(String vsHost, String vsDescription,
+    public vSphereCloud(String vsHost, String vsDescription,
                         String username, String password, int maxOnlineSlaves) {
         this(null, vsDescription, maxOnlineSlaves, 0, null);
     }
 
     @DataBoundConstructor
-    public VSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates) {
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates) {
         super("vSphereCloud");
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
@@ -505,8 +505,8 @@ public class VSphereCloud extends Cloud {
             currentOnlineSlaveCount--;
     }
 
-    public static List<VSphereCloud> findAllVsphereClouds(String jobName) {
-        List<VSphereCloud> vSphereClouds = new ArrayList<VSphereCloud>();
+    public static List<vSphereCloud> findAllVsphereClouds(String jobName) {
+        List<vSphereCloud> vSphereClouds = new ArrayList<vSphereCloud>();
 
         String[] path = new String[0];
         Folder prevFolder = null;
@@ -539,14 +539,14 @@ public class VSphereCloud extends Cloud {
         }
 
         for (Cloud cloud : Jenkins.getInstance().clouds) {
-            if (cloud instanceof VSphereCloud) {
-                vSphereClouds.add((VSphereCloud) cloud);
+            if (cloud instanceof vSphereCloud) {
+                vSphereClouds.add((vSphereCloud) cloud);
             }
         }
         return vSphereClouds;
     }
 
-    private static void extractClouds(List<VSphereCloud> vSphereClouds, Folder folder) {
+    private static void extractClouds(List<vSphereCloud> vSphereClouds, Folder folder) {
         DescribableList<AbstractFolderProperty<?>, AbstractFolderPropertyDescriptor> properties = folder.getProperties();
         for (AbstractFolderProperty<?> property : properties) {
             if (property instanceof FolderVSphereCloudProperty) {
@@ -557,7 +557,7 @@ public class VSphereCloud extends Cloud {
 
     public static List<String> findAllVsphereCloudNames() {
         List<String> cloudNames = new ArrayList<String>();
-        for (VSphereCloud vSphereCloud : findAllVsphereClouds(null)) {
+        for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : findAllVsphereClouds(null)) {
             cloudNames.add(vSphereCloud.getVsDescription());
         }
         return cloudNames;
@@ -573,7 +573,7 @@ public class VSphereCloud extends Cloud {
 
         public final
         @Deprecated
-        ConcurrentMap<String, VSphereCloud> hypervisors = new ConcurrentHashMap<String, VSphereCloud>();
+        ConcurrentMap<String, vSphereCloud> hypervisors = new ConcurrentHashMap<String, vSphereCloud>();
         private
         @Deprecated
         String vsHost;

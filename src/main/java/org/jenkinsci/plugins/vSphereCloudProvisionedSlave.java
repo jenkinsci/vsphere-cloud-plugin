@@ -59,7 +59,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
         super._terminate(listener);
         final vSphereCloudLauncher launcher = (vSphereCloudLauncher) getLauncher();
         if (launcher != null) {
-            final VSphereCloud cloud = launcher.findOurVsInstance();
+            final vSphereCloud cloud = launcher.findOurVsInstance();
             if (cloud != null) {
                 final String cloneName = this.getComputer().getName();
                 cloud.provisionedSlaveHasTerminated(cloneName);
@@ -79,7 +79,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
             }
 
             vSphereCloudLauncher vsL = (vSphereCloudLauncher) ((SlaveComputer) c).getLauncher();
-            VSphereCloud vsC = vsL.findOurVsInstance();
+            vSphereCloud vsC = vsL.findOurVsInstance();
             if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName())) {
                 throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
             }
@@ -103,19 +103,19 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
             return false;
         }
 
-        public List<VSphereCloud> getvSphereClouds() {
-            List<VSphereCloud> result = new ArrayList<VSphereCloud>();
+        public List<vSphereCloud> getvSphereClouds() {
+            List<vSphereCloud> result = new ArrayList<vSphereCloud>();
             for (Cloud cloud : Jenkins.getInstance().clouds) {
-                if (cloud instanceof VSphereCloud) {
-                    result.add((VSphereCloud) cloud);
+                if (cloud instanceof vSphereCloud) {
+                    result.add((vSphereCloud) cloud);
                 }
             }
             return result;
         }
 
-        public VSphereCloud getSpecificvSphereCloud(String vsDescription)
+        public vSphereCloud getSpecificvSphereCloud(String vsDescription)
                 throws Exception {
-            for (VSphereCloud vs : getvSphereClouds()) {
+            for (vSphereCloud vs : getvSphereClouds()) {
                 if (vs.getVsDescription().equals(vsDescription)) {
                     return vs;
                 }
@@ -153,7 +153,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
                 @QueryParameter String vmName,
                 @QueryParameter String snapName) {
             try {
-                VSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
+                vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
                 VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
                 if (vm == null) {
                     return FormValidation.error("Virtual Machine was not found");

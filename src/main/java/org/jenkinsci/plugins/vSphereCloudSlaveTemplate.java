@@ -115,7 +115,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private RetentionStrategy<?> retentionStrategy;
 
     private transient Set<LabelAtom> labelSet;
-    protected transient VSphereCloud parent;
+    protected transient vSphereCloud parent;
 
     @DataBoundConstructor
     public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
@@ -289,7 +289,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.labelSet;
     }
 
-    public VSphereCloud getParent() {
+    public vSphereCloud getParent() {
         return this.parent;
     }
 

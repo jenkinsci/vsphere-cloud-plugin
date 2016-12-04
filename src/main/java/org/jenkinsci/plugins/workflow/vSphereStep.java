@@ -2,13 +2,12 @@ package org.jenkinsci.plugins.workflow;
 
 import com.google.inject.Inject;
 import hudson.*;
-import hudson.model.Hudson;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.slaves.Cloud;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.VSphereCloud;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer;
 import org.jenkinsci.plugins.vsphere.builders.*;
@@ -73,8 +72,8 @@ public class vSphereStep extends AbstractStepImpl {
             ListBoxModel select = new ListBoxModel();
             try {
                 for (Cloud cloud : Jenkins.getInstance().clouds) {
-                    if (cloud instanceof VSphereCloud) {
-                        select.add(((VSphereCloud) cloud).getVsDescription());
+                    if (cloud instanceof vSphereCloud) {
+                        select.add(((vSphereCloud) cloud).getVsDescription());
                     }
                 }
             } catch (Exception e) {

@@ -6,7 +6,7 @@ import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
 import hudson.Extension;
 import hudson.util.FormValidation;
 import org.apache.commons.lang.StringUtils;
-import org.jenkinsci.plugins.VSphereCloud;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -19,22 +19,22 @@ import java.util.List;
  */
 public class FolderVSphereCloudProperty extends AbstractFolderProperty<AbstractFolder<?>> {
 
-    public List<VSphereCloud> getVsphereClouds() {
+    public List<vSphereCloud> getVsphereClouds() {
         return clouds;
     }
 
-    private List<VSphereCloud> clouds = null;
+    private List<vSphereCloud> clouds = null;
 
-    public List<VSphereCloud> getClouds() {
+    public List<vSphereCloud> getClouds() {
         return clouds;
     }
 
-    public void setClouds(List<VSphereCloud> clouds) {
+    public void setClouds(List<vSphereCloud> clouds) {
         this.clouds = clouds;
     }
 
     @DataBoundConstructor
-    public FolderVSphereCloudProperty(List<VSphereCloud> clouds) {
+    public FolderVSphereCloudProperty(List<vSphereCloud> clouds) {
         this.clouds = clouds;
     }
 

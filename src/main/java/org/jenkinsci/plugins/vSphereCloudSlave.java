@@ -142,10 +142,10 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         return "Shutting down VSphere Cloud Slave";
                     }
                 });
-                VSphereCloud.Log(this, listener, "Disconnected computer");
+                vSphereCloud.Log(this, listener, "Disconnected computer");
             }
         } catch(Exception e) {
-            VSphereCloud.Log(this, listener, e, "Can't disconnect");
+            vSphereCloud.Log(this, listener, e, "Can't disconnect");
         }
     }
 
@@ -268,11 +268,11 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         if (executor != null && DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
-                VSphereCloud.Log(this, listener, "Starting limited count build: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
+                vSphereCloud.Log(this, listener, "Starting limited count build: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
                 Computer slave = executor.getOwner();
                 RunToSlaveMapper.put(r, slave);
             } else {
-                VSphereCloud.Log(this, listener, "Terminating build due to limited build count: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
+                vSphereCloud.Log(this, listener, "Terminating build due to limited build count: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
                 executor.interrupt(Result.ABORTED);
             }
         }
@@ -295,7 +295,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 NumberOfLimitedTestRuns = 0;
                 try {
                     if (slave != null) {
-                        VSphereCloud.Log(this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+                        vSphereCloud.Log(this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
 
                         slave.setTemporarilyOffline(true, new OfflineCause.ByCLI("vSphere Plugin marking the slave as offline due to reaching limited build threshold"));
                         slave.waitUntilOffline();
@@ -303,12 +303,12 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         slave.setTemporarilyOffline(false, new OfflineCause.ByCLI("vSphere Plugin marking the slave as online after completing post-disconnect actions."));
                     }
                     else {
-                        VSphereCloud.Log(this, "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
+                        vSphereCloud.Log(this, "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
                     }
                 } catch (NullPointerException ex) {
-                    VSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
+                    vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
                 } catch (InterruptedException ex) {
-                    VSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
+                    vSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
                 }
             }
         } else {
@@ -338,7 +338,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             }
 
             vSphereCloudLauncher vsL = (vSphereCloudLauncher) ((SlaveComputer) c).getLauncher();
-            VSphereCloud vsC = vsL.findOurVsInstance();
+            vSphereCloud vsC = vsL.findOurVsInstance();
             if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName())) {
                 throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
             }
@@ -362,19 +362,19 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return true;
         }
 
-        public List<VSphereCloud> getvSphereClouds() {
-            List<VSphereCloud> result = new ArrayList<VSphereCloud>();
+        public List<vSphereCloud> getvSphereClouds() {
+            List<vSphereCloud> result = new ArrayList<vSphereCloud>();
             for (Cloud cloud : Jenkins.getInstance().clouds) {
-                if (cloud instanceof VSphereCloud) {
-                    result.add((VSphereCloud) cloud);
+                if (cloud instanceof vSphereCloud) {
+                    result.add((vSphereCloud) cloud);
                 }
             }
             return result;
         }
 
-        public VSphereCloud getSpecificvSphereCloud(String vsDescription)
+        public vSphereCloud getSpecificvSphereCloud(String vsDescription)
                 throws Exception {
-            for (VSphereCloud vs : getvSphereClouds()) {
+            for (vSphereCloud vs : getvSphereClouds()) {
                 if (vs.getVsDescription().equals(vsDescription)) {
                     return vs;
                 }
@@ -412,7 +412,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 @QueryParameter String vmName,
                 @QueryParameter String snapName) {
             try {
-                VSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
+                vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
                 VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
                 if (vm == null) {
                     return FormValidation.error("Virtual Machine was not found");

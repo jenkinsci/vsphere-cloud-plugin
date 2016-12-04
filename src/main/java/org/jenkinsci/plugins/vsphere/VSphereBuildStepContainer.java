@@ -28,7 +28,7 @@ import hudson.util.DescribableList;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
-import org.jenkinsci.plugins.VSphereCloud;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep.VSphereBuildStepDescriptor;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
@@ -178,9 +178,9 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 //adding try block to prevent page from not loading
 
                 for (Cloud cloud : Jenkins.getInstance().clouds) {
-                    if (cloud instanceof VSphereCloud) {
+                    if (cloud instanceof vSphereCloud) {
                         hasVsphereClouds = true;
-                        select.add(((VSphereCloud) cloud).getVsDescription());
+                        select.add(((vSphereCloud) cloud).getVsDescription());
                     }
                 }
                 if (hasVsphereClouds) {
@@ -200,7 +200,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 if (property instanceof FolderVSphereCloudProperty) {
 
                     FolderVSphereCloudProperty vSphereCloudProperty = (FolderVSphereCloudProperty) property;
-                    for (VSphereCloud vSphereCloud : ((FolderVSphereCloudProperty) property).getClouds()) {
+                    for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : ((FolderVSphereCloudProperty) property).getClouds()) {
                         select.add(vSphereCloud.getVsDescription());
                     }
                     hasVsphereClouds = true;
