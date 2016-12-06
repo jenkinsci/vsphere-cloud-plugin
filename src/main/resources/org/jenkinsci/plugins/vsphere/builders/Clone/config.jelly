@@ -38,6 +38,10 @@ limitations under the License.
   <f:entry title="${%Datastore}" field="datastore">
     <f:textbox  />
   </f:entry>
+  
+  <f:entry title="${%Folder}" field="datastore">
+    <f:textbox  />
+  </f:entry>
 
   <f:entry title="${%Power on?}" field="powerOn">
     <f:checkbox  />

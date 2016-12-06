@@ -49,19 +49,21 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 	private final String resourcePool;
 	private final String cluster;
     private final String datastore;
+    private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
 	private String IP;
 
 	@DataBoundConstructor
 	public Deploy(String template, String clone, boolean linkedClone,
-		      String resourcePool, String cluster, String datastore, String customizationSpec, boolean powerOn) throws VSphereException {
+		      String resourcePool, String cluster, String datastore, String folder, String customizationSpec, boolean powerOn) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool= (resourcePool != null) ? resourcePool : "";
 		this.cluster=cluster;
         this.datastore=datastore;
+        this.folder=folder;
         this.customizationSpec=customizationSpec;
 		this.powerOn=powerOn;
 	}
@@ -88,6 +90,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
     public String getDatastore() {
         return datastore;
+    }
+    
+    public String getFolder() {
+        return folder;
     }
 
     public String getCustomizationSpec() {
@@ -150,6 +156,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 		String expandedTemplate = template;
 		String expandedCluster = cluster;
 		String expandedDatastore = datastore;
+                String expandedFolder = folder;
                 String expandedCustomizationSpec = customizationSpec;
 		EnvVars env;
 		try {
@@ -164,6 +171,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 			expandedTemplate = env.expand(template);
 			expandedCluster = env.expand(cluster);
 			expandedDatastore = env.expand(datastore);
+                        expandedFolder = env.expand(folder);
                         expandedCustomizationSpec = env.expand(customizationSpec);
 		}
 
@@ -176,7 +184,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, powerOn, expandedCustomizationSpec, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
 		VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
 		if (!powerOn) {
 			return true; // don't try to obtain IP if VM isn't being turned on.

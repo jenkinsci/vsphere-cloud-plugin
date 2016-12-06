@@ -45,20 +45,22 @@ public class Clone extends VSphereBuildStep {
     private final String resourcePool;
     private final String cluster;
     private final String datastore;
+    private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
     private String IP;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore, boolean powerOn,
-		 String customizationSpec) throws VSphereException {
+                 String resourcePool, String cluster, String datastore, String folder,
+                 boolean powerOn, String customizationSpec) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
         this.resourcePool=resourcePool;
         this.cluster=cluster;
         this.datastore=datastore;
+        this.folder=folder;
 	this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
     }
@@ -85,6 +87,10 @@ public class Clone extends VSphereBuildStep {
 
     public String getDatastore() {
         return datastore;
+    }
+    
+    public String getFolder() {
+        return folder;
     }
 
     public String getCustomizationSpec() {
@@ -127,6 +133,7 @@ public class Clone extends VSphereBuildStep {
         String expandedSource = sourceName;
         String expandedCluster = cluster;
         String expandedDatastore = datastore;
+        String expandedFolder = folder;
         String expandedResourcePool = resourcePool;
         String expandedCustomizationSpec = customizationSpec;
         EnvVars env;
@@ -142,11 +149,12 @@ public class Clone extends VSphereBuildStep {
             expandedSource = env.expand(sourceName);
             expandedCluster = env.expand(cluster);
             expandedDatastore = env.expand(datastore);
+            expandedFolder = env.expand(folder);
             expandedResourcePool = env.expand(resourcePool);
             expandedCustomizationSpec = env.expand(customizationSpec);
         }
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, powerOn, expandedCustomizationSpec, jLogger);
+                expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
         if (powerOn) {
             IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
         }
