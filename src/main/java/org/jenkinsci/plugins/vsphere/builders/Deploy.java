@@ -254,7 +254,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 						|| cluster.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				//TODO what if clone name is variable?
 				VirtualMachine cloneVM = vsphere.getVmByName(clone);

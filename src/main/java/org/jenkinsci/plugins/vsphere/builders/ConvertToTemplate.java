@@ -126,6 +126,9 @@ public class ConvertToTemplate extends VSphereBuildStep {
         public FormValidation doTestData(@QueryParameter String serverName,
                                          @QueryParameter String vm) {
             try {
+                if (serverName == null){
+                    return FormValidation.error(Messages.validation_required("serverName"));
+                }
 
                 if (serverName.length() == 0 || vm.length() == 0)
                     return FormValidation.error(Messages.validation_requiredValues());
@@ -133,7 +136,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
                 if (vsphere.getVmByName(vm) == null)
                     return FormValidation.error(Messages.validation_notFound("VM"));
 
