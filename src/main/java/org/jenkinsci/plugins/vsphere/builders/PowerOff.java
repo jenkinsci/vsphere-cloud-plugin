@@ -43,11 +43,19 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 	private final boolean evenIfSuspended;
     private final boolean shutdownGracefully;
 
+
+	private final boolean ignoreIfNotExists;
+
 	@DataBoundConstructor
-	public PowerOff( final String vm, final boolean evenIfSuspended, final boolean shutdownGracefully) throws VSphereException {
+	public PowerOff( final String vm, final boolean evenIfSuspended, final boolean shutdownGracefully, final boolean ignoreIfNotExists) throws VSphereException {
 		this.vm = vm;
 		this.evenIfSuspended = evenIfSuspended;
         this.shutdownGracefully = shutdownGracefully;
+        this.ignoreIfNotExists = ignoreIfNotExists;
+	}
+
+	public boolean isIgnoreIfNotExists() {
+		return ignoreIfNotExists;
 	}
 
 	public boolean isEvenIfSuspended() {
@@ -118,12 +126,17 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 
 		VSphereLogger.vsLogger(jLogger, "Shutting Down VM " + expandedVm + "...");
         VirtualMachine vsphereVm = vsphere.getVmByName(expandedVm);
-        if (vsphereVm == null) {
+        if (vsphereVm == null && !ignoreIfNotExists) {
             throw new RuntimeException(Messages.validation_notFound("vm " + expandedVm));
         }
-		vsphere.powerOffVm( vsphereVm, evenIfSuspended, shutdownGracefully);
 
-		VSphereLogger.vsLogger(jLogger, "Successfully shutdown \""+expandedVm+"\"");
+        if (vsphereVm != null) {
+			vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully);
+
+			VSphereLogger.vsLogger(jLogger, "Successfully shutdown \"" + expandedVm + "\"");
+		} else {
+			VSphereLogger.vsLogger(jLogger, "Does not exists, BUT ignore it! \"" + expandedVm + "\"");
+		}
 
 		return true;
 	}
