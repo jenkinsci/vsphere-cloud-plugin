@@ -48,10 +48,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 	private final boolean linkedClone;
 	private final String resourcePool;
 	private final String cluster;
-    private final String datastore;
-    private final String folder;
-    private final String customizationSpec;
-    private final boolean powerOn;
+	private final String datastore;
+  private final String folder;
+  private final String customizationSpec;
+  private final boolean powerOn;
 	private String IP;
 
 	@DataBoundConstructor
@@ -91,7 +91,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }

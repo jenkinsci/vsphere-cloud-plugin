@@ -122,7 +122,9 @@ public class vSphereStep extends AbstractStepImpl {
                     step.getBuildStep().getClass().toString().contains("Clone") ||
                     step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
                 IP = step.getBuildStep().getIP();
-                envVars.put("VSPHERE_IP", IP);
+                if(IP) {
+                    envVars.put("VSPHERE_IP", IP);
+                }
 
                 if (step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
                     Map<String, String> envVars = ((ExposeGuestInfo)step.getBuildStep()).getVars();

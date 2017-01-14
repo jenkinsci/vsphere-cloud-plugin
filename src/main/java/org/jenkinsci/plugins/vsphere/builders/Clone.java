@@ -48,12 +48,13 @@ public class Clone extends VSphereBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
+    private final int timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
                  String resourcePool, String cluster, String datastore, String folder,
-                 boolean powerOn, String customizationSpec) throws VSphereException {
+                 boolean powerOn, int timeoutInSeconds, String customizationSpec) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -61,8 +62,9 @@ public class Clone extends VSphereBuildStep {
         this.cluster=cluster;
         this.datastore=datastore;
         this.folder=folder;
-	this.customizationSpec=customizationSpec;
+        this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
+        this.timeoutInSeconds=timeoutInSeconds;
     }
 
     public String getSourceName() {
@@ -88,7 +90,7 @@ public class Clone extends VSphereBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }
@@ -156,7 +158,11 @@ public class Clone extends VSphereBuildStep {
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
         if (powerOn) {
-            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
+            if(timeoutInSeconds) {
+                IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSeconds);
+            }else {
+                IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
+            }
         }
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
