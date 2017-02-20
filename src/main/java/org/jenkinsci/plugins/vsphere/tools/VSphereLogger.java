@@ -32,7 +32,7 @@ public class VSphereLogger {
 	}
 
     public static void vsLogger(PrintStream logger, Exception e){
-        if(logger ==null) {
+        if(logger == null) {
             return;
         }
 

@@ -135,7 +135,7 @@ public class SuspendVm extends VSphereBuildStep implements SimpleBuildStep {
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 				if (vsphere.getVmByName(vm) == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
 

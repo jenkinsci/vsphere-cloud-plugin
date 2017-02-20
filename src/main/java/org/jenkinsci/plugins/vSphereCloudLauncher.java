@@ -113,7 +113,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
-            for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds()) {
+            for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
                 if (cloud.getVsDescription().equals(vsDescription)) {
                     return cloud;
                 }
@@ -353,6 +353,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
     }
 
     /**
+     * @return actual launcher
      * @deprecated use {@link #getLauncher()}
      */
     @Deprecated
@@ -445,7 +446,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
     }
 
     private void revertVM(VirtualMachine vm, vSphereCloud vsC, SlaveComputer slaveComputer,
-            TaskListener taskListener)
+                          TaskListener taskListener)
             throws IOException, InterruptedException, VSphereException {
         if (!snapName.isEmpty()) {
             VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);

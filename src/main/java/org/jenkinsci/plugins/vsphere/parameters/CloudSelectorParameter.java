@@ -3,7 +3,6 @@ package org.jenkinsci.plugins.vsphere.parameters;
 import hudson.Extension;
 import hudson.model.ParameterValue;
 import hudson.model.SimpleParameterDefinition;
-import hudson.model.StringParameterDefinition;
 import hudson.model.StringParameterValue;
 import hudson.util.ListBoxModel;
 import net.sf.json.JSONObject;
@@ -26,12 +25,12 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
 
     @Override
     public StringParameterValue getDefaultParameterValue() {
-        List<String> cloudNames = vSphereCloud.finaAllVsphereCloudNames();
+        List<String> cloudNames = vSphereCloud.findAllVsphereCloudNames();
         return new StringParameterValue(getName(), cloudNames.get(0), getDescription());
     }
 
     private StringParameterValue checkValue(StringParameterValue value) {
-        List<String> cloudNames = vSphereCloud.finaAllVsphereCloudNames();
+        List<String> cloudNames = vSphereCloud.findAllVsphereCloudNames();
         if (!cloudNames.contains(value.value))
             throw new IllegalArgumentException("No vsphere cloud with name: " + value.value);
         return value;
@@ -50,7 +49,7 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
 
     @Exported
     public List<String> getCloudNames() {
-        return vSphereCloud.finaAllVsphereCloudNames();
+        return vSphereCloud.findAllVsphereCloudNames();
     }
 
     @Extension
@@ -58,7 +57,7 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
 
         public ListBoxModel doFillCloudNameItems() {
             ListBoxModel items = new ListBoxModel();
-            for (String cloudName : vSphereCloud.finaAllVsphereCloudNames()) {
+            for (String cloudName : vSphereCloud.findAllVsphereCloudNames()) {
                 items.add(cloudName);
             }
             return items;

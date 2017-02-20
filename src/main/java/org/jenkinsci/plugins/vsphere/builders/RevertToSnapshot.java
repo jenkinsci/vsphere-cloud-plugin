@@ -151,7 +151,7 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));

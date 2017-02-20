@@ -23,6 +23,8 @@ import java.io.PrintStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 /**
  * Expose guest info for the named VM as environmental variables.
@@ -30,16 +32,21 @@ import java.util.*;
  * https://www.vmware.com/support/developer/converter-sdk/conv55_apireference/vim.vm.GuestInfo.html
  */
 public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep {
+    private static final List USABLE_CLASS_TYPES = Arrays.asList(String.class, boolean.class, Boolean.class, int.class, Integer.class);
+    private static final Pattern ipv4Pattern = Pattern.compile("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$");
 
     private final String vm;
     private final String envVariablePrefix;
+    private final Boolean waitForIp4;
+    private String resolvedEnvVariablePrefix = null;
     private String IP;
     private Map <String, String> envVars = new HashMap<>();
 
     @DataBoundConstructor
-    public ExposeGuestInfo(final String vm, final String envVariablePrefix) throws VSphereException {
+    public ExposeGuestInfo(final String vm, final String envVariablePrefix, Boolean waitForIp4) throws VSphereException {
         this.vm = vm;
         this.envVariablePrefix = envVariablePrefix;
+        this.waitForIp4 = waitForIp4;
     }
 
     public String getVm() {
@@ -112,6 +119,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
         if (run instanceof AbstractBuild) {
             env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
             vmName = env.expand(vm);
+            resolvedEnvVariablePrefix = env.expand(envVariablePrefix).replace("-", "_");
         }
 
         VSphereLogger.vsLogger(jLogger, "Exposing guest info for VM \"" + vmName + "\" as environment variables");
@@ -121,6 +129,21 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
             throw new RuntimeException(Messages.validation_notFound("vm " + vmName));
         }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
+
+        if (waitForIp4){
+            String prefix = resolvedEnvVariablePrefix == null ? envVariablePrefix : resolvedEnvVariablePrefix;
+            String machineIP = envAction.data.get(prefix + "_IpAddress");
+            while (!ipv4Pattern.matcher(machineIP).find()) {
+                try {
+                    TimeUnit.SECONDS.sleep(30);
+                } catch (InterruptedException e) {
+
+                }
+                envAction = createGuestInfoEnvAction(vsphere.getVmByName(vmName), jLogger);
+                machineIP = envAction.data.get(prefix + "_IpAddress");
+            }
+        }
+
         run.addAction(envAction);
 
         VSphereLogger.vsLogger(jLogger, "Successfully exposed guest info for VM \"" + vmName + "\"");
@@ -133,9 +156,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
 
         VSphereEnvAction envAction = new VSphereEnvAction();
 
-        List USABLE_CLASS_TYPES = Arrays.asList(String.class, boolean.class,
-                Boolean.class, int.class, Integer.class);
-
+        String prefix = resolvedEnvVariablePrefix == null ? envVariablePrefix : resolvedEnvVariablePrefix;
 
         for (Method method : GuestInfo.class.getDeclaredMethods()) {
             if (!method.getName().startsWith("get") || method.getParameterTypes().length > 0) {
@@ -160,8 +181,8 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
             if ("IpAddress".equals(variableName)) {
                 IP = String.valueOf(value);
             }
-            envVars.put(envVariablePrefix + "_" + variableName, String.valueOf(value));
-            String environmentVariableName = envVariablePrefix + "_" + variableName;
+            envVars.put(prefix + "_" + variableName, String.valueOf(value));
+            String environmentVariableName = prefix + "_" + variableName;
             String environmentVariableValue = String.valueOf(value);
 
             envAction.add(environmentVariableName, environmentVariableValue);
@@ -203,7 +224,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                 if (vm.length() == 0 || serverName.length()==0)
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));

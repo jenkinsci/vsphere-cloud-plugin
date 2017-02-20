@@ -133,7 +133,7 @@ public class Delete extends VSphereBuildStep {
 				if (serverName.length() == 0 || vm.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
