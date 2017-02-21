@@ -16,7 +16,6 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import hudson.*;
 import hudson.model.*;
-import hudson.tasks.BuildStep;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 

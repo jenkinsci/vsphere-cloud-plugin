@@ -1,20 +1,6 @@
-/*   Copyright 2013, MANDIANT, Eric Lordahl
- *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
- *
- *       http://www.apache.org/licenses/LICENSE-2.0
- *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
- */
+
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.StringExpression;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
@@ -25,7 +11,6 @@ import java.io.PrintStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
@@ -39,7 +24,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
@@ -285,19 +269,23 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 	 */
 	private static class VSphereEnvAction implements EnvironmentContributingAction {
 		// Decided not to record this data in build.xml, so marked transient:
-		private transient Map<String,String> data = new HashMap<String,String>();
+		private final transient Map<String,String> data = new HashMap<String,String>();
 
 		private void add(String key, String val) {
 			if (data==null) return;
 			data.put(key, val);
 		}
 
+        @Override
 		public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
 			if (data!=null) env.putAll(data);
 		}
 
+        @Override
 		public String getIconFileName() { return null; }
+        @Override
 		public String getDisplayName() { return null; }
+        @Override
 		public String getUrlName() { return null; }
 	}
 }

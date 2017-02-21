@@ -65,7 +65,7 @@ public class vSphereCloud extends Cloud {
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient CloudProvisioningState templateState;
 
-    private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
+    private static final java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
 
     private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args) {
         final Level logLevel = Level.INFO;
@@ -413,6 +413,7 @@ public class vSphereCloud extends Cloud {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
             final int numberOfExecutors = template.getNumberOfExecutors();
             final Callable<Node> provisionNodeCallable = new Callable<Node>() {
+                @Override
                 public Node call() throws Exception {
                     try {
                         final Node newNode = provisionNewNode(templateState, whatWeShouldSpinUp, nodeName);

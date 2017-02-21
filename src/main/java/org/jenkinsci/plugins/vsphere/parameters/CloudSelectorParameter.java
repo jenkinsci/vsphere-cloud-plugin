@@ -43,6 +43,7 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
         return checkValue(value);
     }
 
+    @Override
     public StringParameterValue createValue(String value) {
         return checkValue(new StringParameterValue(getName(), value, getDescription()));
     }

@@ -14,7 +14,7 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
  */
 public final class CloudProvisioningRecord {
     private final vSphereCloudSlaveTemplate template;
-    private Set<String> currentlyProvisioned;
+    private final Set<String> currentlyProvisioned;
     private Set<String> currentlyPlanned;
 
     CloudProvisioningRecord(vSphereCloudSlaveTemplate template) {
@@ -72,7 +72,7 @@ public final class CloudProvisioningRecord {
 
     private double calcFullness() {
         final int maxToProvision = calcMaxToProvision();
-        return ((double) calcCurrentCommitment()) / (double) maxToProvision;
+        return calcCurrentCommitment() / (double) maxToProvision;
     }
 
     boolean hasCapacityForMore() {
