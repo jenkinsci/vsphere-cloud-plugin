@@ -6,6 +6,15 @@
         <f:property field="vsConnectionConfig"/>
     </f:entry>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
+   
+    <f:optionalBlock title="${%Use StatsD}" field="useDDStatsd" inline="true">
+        <f:entry title="${%StatsD Host}" field="statsdHost">
+            <f:textbox clazz="required"/>
+        </f:entry>
+        <f:entry title="${%StatsD Port}" field="statsdPort">
+            <f:textbox clazz="required number"/>
+        </f:entry>
+    </f:optionalBlock>
 
     <f:advanced>
         <f:entry title="${%Max number of VMs online}" field="maxOnlineSlaves" description="0 means unlimited.">
