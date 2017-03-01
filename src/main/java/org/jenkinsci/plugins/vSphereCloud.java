@@ -57,7 +57,7 @@ public class vSphereCloud extends Cloud {
     @Deprecated
     private transient String password;
     private final int maxOnlineSlaves;
-    private final boolean useDDStatsd;
+    private final boolean enableStatsd;
     private final String statsdHost;
     private final int statsdPort;
     
@@ -141,27 +141,26 @@ public class vSphereCloud extends Cloud {
     
     @Deprecated
     public vSphereCloud(String vsHost, String vsDescription,
-                        String username, String password, int maxOnlineSlaves, String statsdHost, int statsdPort, boolean useDDStatsd) {
-        this(null, vsDescription, maxOnlineSlaves, 0, null, statsdHost, statsdPort, useDDStatsd);
+                        String username, String password, int maxOnlineSlaves, String statsdHost, int statsdPort, boolean enableStatsd) {
+        this(null, vsDescription, maxOnlineSlaves, 0, null, statsdHost, statsdPort, enableStatsd);
     }
 
     @DataBoundConstructor
-    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates, String statsdHost, int statsdPort, boolean useDDStatsd) {
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates, String statsdHost, int statsdPort, boolean enableStatsd) {
         super("vSphereCloud");
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
         this.vsConnectionConfig = vsConnectionConfig;
         this.statsdHost = statsdHost;
         this.statsdPort = statsdPort;
-        this.useDDStatsd = useDDStatsd;
+        this.enableStatsd = enableStatsd;
         
-        if(this.useDDStatsd && statsdClient == null) {
+        if(this.enableStatsd && statsdClient == null) {
             try{
                 statsdClient = new NonBlockingStatsDClient(
                             "vsphere-cloud",            /* prefix to any stats; may be null or empty string */
                             this.statsdHost,                 /* common case: localhost */
-                            this.statsdPort,                 /* port */
-                            new String[] {""}           /* Datadog extension: Constant tags, always applied */
+                            this.statsdPort
                 );
                 Log("Success in connecting to statsd host["+statsdHost+"] on port["+statsdPort+"].");
             } catch(Exception e) {
@@ -292,8 +291,8 @@ public class vSphereCloud extends Cloud {
     }
     
     public 
-    boolean getUseDDStatsd() {
-        return useDDStatsd;
+    boolean getEnableStatsd() {
+        return enableStatsd;
     }
     
     public
@@ -402,7 +401,7 @@ public class vSphereCloud extends Cloud {
                         break; // out of capacity due to template instance cap
                     }
                     final String nodeName = CloudProvisioningAlgorithm.findUnusedName(whatWeShouldSpinUp);
-                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, nodeName, whatWeShouldSpinUp, useDDStatsd, statsdClient);
+                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, nodeName, whatWeShouldSpinUp, enableStatsd, statsdClient);
                     plannedNodes.add(plannedNode);
                     excessWorkloadSoFar -= plannedNode.numExecutors;
                 }
@@ -455,7 +454,7 @@ public class vSphereCloud extends Cloud {
         public static VSpherePlannedNode createInstance(final CloudProvisioningState templateState,
                                                         final String nodeName,
                                                         final CloudProvisioningRecord whatWeShouldSpinUp,
-                                                        final boolean useDDStatsd,
+                                                        final boolean enableStatsd,
                                                         final StatsDClient statsdClient) {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
             final int numberOfExecutors = template.getNumberOfExecutors();
@@ -465,14 +464,14 @@ public class vSphereCloud extends Cloud {
                     try {
                         final Node newNode = provisionNewNode(templateState, whatWeShouldSpinUp, nodeName);
                         VSLOG.log(Level.INFO, "Provisioned new slave " + nodeName);
-                        if(statsdClient != null && useDDStatsd) statsdClient.incrementCounter("provision.success."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
+                        if(statsdClient != null && enableStatsd) statsdClient.incrementCounter("provision.success."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
                         synchronized (templateState) {
                             templateState.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
                         }
                         return newNode;
                     } catch (Exception ex) {
                         VSLOG.log(Level.WARNING, "Failed to provision new slave " + nodeName, ex);
-                        if(statsdClient != null && useDDStatsd) statsdClient.incrementCounter("provision.failed."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
+                        if(statsdClient != null && enableStatsd) statsdClient.incrementCounter("provision.failed."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
                         synchronized (templateState) {
                             templateState.provisioningEndedInError(whatWeShouldSpinUp, nodeName);
                         }
@@ -640,7 +639,7 @@ public class vSphereCloud extends Cloud {
 
         private String statsdHost;
         private int statsdPort;
-        private boolean useDDStatsd;
+        private boolean enableStatsd;
 
         @Override
         public String getDisplayName() {
@@ -656,7 +655,7 @@ public class vSphereCloud extends Cloud {
             maxOnlineSlaves = o.getInt("maxOnlineSlaves");
             statsdHost = o.getString("statsdHost");
             statsdPort = o.getInt("statsdPort");
-            useDDStatsd = o.getBoolean("useDDStatsd");
+            enableStatsd = o.getBoolean("enableStatsd");
 
             save();
             return super.configure(req, o);

@@ -7,7 +7,7 @@
     </f:entry>
     <f:validateButton title="${%Test Connection}" progress="${%Testing...}" method="testConnection" with="vsHost,vsDescription,credentialsId"/>
    
-    <f:optionalBlock title="${%Use StatsD}" field="useDDStatsd" inline="true">
+    <f:optionalBlock title="${%Use StatsD}" field="enableStatsd" inline="true">
         <f:entry title="${%StatsD Host}" field="statsdHost">
             <f:textbox clazz="required"/>
         </f:entry>
