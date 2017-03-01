@@ -158,8 +158,8 @@ public class vSphereCloud extends Cloud {
         if(this.enableStatsd) {
             try{
                 statsdClient = new NonBlockingStatsDClient(
-                            "vsphere-cloud",            /* prefix to any stats; may be null or empty string */
-                            this.statsdHost,                 /* common case: localhost */
+                            "vsphere-cloud",
+                            this.statsdHost,
                             this.statsdPort
                 );
                 Log("Success in connecting to statsd host["+statsdHost+"] on port["+statsdPort+"].");
