@@ -155,7 +155,7 @@ public class vSphereCloud extends Cloud {
         this.statsdPort = statsdPort;
         this.enableStatsd = enableStatsd;
         
-        if(this.enableStatsd && statsdClient == null) {
+        if(this.enableStatsd) {
             try{
                 statsdClient = new NonBlockingStatsDClient(
                             "vsphere-cloud",            /* prefix to any stats; may be null or empty string */
