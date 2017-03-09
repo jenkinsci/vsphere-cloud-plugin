@@ -73,7 +73,7 @@ public class vSphereCloud extends Cloud {
     private transient CloudProvisioningState templateState;
 
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
-    private StatsDClient statsdClient;
+    private transient StatsDClient statsdClient;
     
     private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args) {
         final Level logLevel = Level.INFO;
