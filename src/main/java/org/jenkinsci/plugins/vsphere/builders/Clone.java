@@ -23,6 +23,9 @@ import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.logging.Logger;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
@@ -116,15 +119,24 @@ public class Clone extends VSphereBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws AbortException {
         boolean retVal = false;
         try {
             retVal = cloneFromSource(build, launcher, listener);
         } catch (Exception e) {
-            e.printStackTrace();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            VSphereLogger.vsLogger(listener.getLogger(), "Error cloning VM or template\n" + sw.toString());
+
+            try {
+                sw.close();
+            } catch (Exception ex) {
+                // ignore
+            }
+            throw new AbortException(e.getMessage());
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
     }
 
     private boolean cloneFromSource(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
