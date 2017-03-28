@@ -47,5 +47,9 @@ limitations under the License.
     <f:checkbox  />
   </f:entry>
 
+  <f:entry title="${%Customization Specification}" field="customizationSpec">
+    <f:textbox/>
+  </f:entry>
+
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster"/>
 </j:jelly>

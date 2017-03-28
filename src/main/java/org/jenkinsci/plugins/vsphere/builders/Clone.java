@@ -61,7 +61,7 @@ public class Clone extends VSphereBuildStep {
         this.cluster=cluster;
         this.datastore=datastore;
         this.folder=folder;
-	this.customizationSpec=customizationSpec;
+        this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
     }
 
@@ -251,7 +251,7 @@ public class Clone extends VSphereBuildStep {
                 if (snap == null)
                     return FormValidation.error(Messages.validation_noSnapshots());
 
-                if(customizationSpec.length() > 0 &&
+                if(customizationSpec != null && customizationSpec.length() > 0 &&
                         vsphere.getCustomizationSpecByName(customizationSpec) == null) {
                     return FormValidation.error(Messages.validation_notFound("customizationSpec"));
                 }
