@@ -168,9 +168,10 @@ public class Clone extends VSphereBuildStep {
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
         if (powerOn) {
+            VSphereLogger.vsLogger(jLogger,"Powering on VM...");
             IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
         }
-        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
+        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");
 
         return true;
     }
