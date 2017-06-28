@@ -44,6 +44,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,6 +62,7 @@ import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -69,6 +71,8 @@ import org.kohsuke.stapler.QueryParameter;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
+import com.vmware.vim25.OptionValue;
+import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.mo.VirtualMachine;
 
 /**
@@ -77,6 +81,8 @@ import com.vmware.vim25.mo.VirtualMachine;
  */
 public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveTemplate> {
     private static final Logger LOGGER = Logger.getLogger(vSphereCloudSlaveTemplate.class.getName());
+    private static final String VSPHERE_ATTR_FOR_JENKINSURL = vSphereCloudSlaveTemplate.class.getSimpleName()
+            + ".jenkinsUrl";
 
     protected static final SchemeRequirement HTTP_SCHEME = new SchemeRequirement("http");
     protected static final SchemeRequirement HTTPS_SCHEME = new SchemeRequirement("https");
@@ -351,7 +357,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this;
     }
 
-    public vSphereCloudProvisionedSlave provision(final CloudProvisioningState algorithm, final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
+    public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
         vSphereCloudProvisionedSlave slave = null;
         final PrintStream logger = listener.getLogger();
         final VSphere vSphere = getParent().vSphereInstance();
@@ -371,14 +377,28 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             useCurrentSnapshot = false;
             snapshotToUse = null;
         }
-        vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, this.customizationSpec, logger);
         try {
-            if( this.guestInfoProperties!=null && !this.guestInfoProperties.isEmpty()) {
-                final Map<String, String> resolvedGuestInfoProperties = calculateGuestInfoProperties(cloneName, listener);
-                if( !resolvedGuestInfoProperties.isEmpty() ) {
-                    LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedGuestInfoProperties });
-                    vSphere.addGuestInfoVariable(cloneName, resolvedGuestInfoProperties);
-                }
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, this.customizationSpec, logger);
+            LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
+        } catch (VSphereDuplicateException ex) {
+            final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
+            if ( vmJenkinsUrl==null ) {
+                LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it wasn't started by this plugin.", cloneName );
+                throw ex;
+            }
+            final String ourJenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+            if ( vmJenkinsUrl.equals(ourJenkinsUrl) ) {
+                LOGGER.log(Level.INFO, "Found existing VM {0} that we started previously (and must have either lost track of it or failed to delete it).", cloneName );
+            } else {
+                LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it doesn't belong to this Jenkins server: it belongs to {1}.  You MUST reconfigure one of these Jenkins servers to use a different naming strategy so that we no longer get clashes within vSphere host {2}. i.e. change the cloneNamePrefix on one/both to ensure uniqueness.", new Object[]{ cloneName, vmJenkinsUrl, this.getParent().getVsHost() } );
+                throw ex;
+            }
+        }
+        try {
+            final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
+            if( !resolvedExtraConfigParameters.isEmpty() ) {
+                LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedExtraConfigParameters });
+                vSphere.setExtraConfigParameters(cloneName, resolvedExtraConfigParameters);
             }
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
@@ -536,17 +556,51 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
     }
 
-    private Map<String, String> calculateGuestInfoProperties(final String cloneName, final TaskListener listener)
+    private static String findWhichJenkinsThisVMBelongsTo(final VSphere vSphere, String cloneName) {
+        final VirtualMachine vm;
+        try {
+            vm = vSphere.getVmByName(cloneName);
+        } catch (VSphereException e) {
+            return null;
+        }
+        final VirtualMachineConfigInfo config = vm.getConfig();
+        if (config == null) {
+            return null;
+        }
+        final OptionValue[] extraConfigs = config.extraConfig;
+        if (extraConfigs == null) {
+            return null;
+        }
+        String vmJenkinsUrl = null;
+        for (final OptionValue ec : extraConfigs) {
+            final String configName = ec.key;
+            final String configValue = ec.value == null ? null : ec.value.toString();
+            if (VSPHERE_ATTR_FOR_JENKINSURL.equals(configName)) {
+                vmJenkinsUrl = configValue;
+            }
+        }
+        return vmJenkinsUrl;
+    }
+
+    private Map<String, String> calculateExtraConfigParameters(final String cloneName, final TaskListener listener)
             throws IOException, InterruptedException {
         final EnvVars knownVariables = calculateVariablesForGuestInfo(cloneName, listener);
-        final Map<String, String> resolvedGuestInfoProperties = new LinkedHashMap<String, String>();
-        for( final VSphereGuestInfoProperty property : this.guestInfoProperties ) {
+        final Map<String, String> result = new LinkedHashMap<String, String>();
+        final String jenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+        if (jenkinsUrl != null) {
+            result.put(VSPHERE_ATTR_FOR_JENKINSURL, jenkinsUrl);
+        }
+        List<? extends VSphereGuestInfoProperty> guestInfoConfig = this.guestInfoProperties;
+        if (guestInfoConfig == null) {
+            guestInfoConfig = Collections.emptyList();
+        }
+        for (final VSphereGuestInfoProperty property : guestInfoConfig) {
             final String name = property.getName();
             final String configuredValue = property.getValue();
             final String resolvedValue = Util.replaceMacro(configuredValue, knownVariables);
-            resolvedGuestInfoProperties.put(name, resolvedValue);
+            result.put("guestinfo." + name, resolvedValue);
         }
-        return resolvedGuestInfoProperties;
+        return result;
     }
 
     private EnvVars calculateVariablesForGuestInfo(final String cloneName, final TaskListener listener)

@@ -415,7 +415,7 @@ public class vSphereCloud extends Cloud {
             final Callable<Node> provisionNodeCallable = new Callable<Node>() {
                 public Node call() throws Exception {
                     try {
-                        final Node newNode = provisionNewNode(templateState, whatWeShouldSpinUp, nodeName);
+                        final Node newNode = provisionNewNode(whatWeShouldSpinUp, nodeName);
                         VSLOG.log(Level.INFO, "Provisioned new slave " + nodeName);
                         synchronized (templateState) {
                             templateState.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
@@ -436,10 +436,10 @@ public class vSphereCloud extends Cloud {
             return result;
         }
 
-        private static Node provisionNewNode(final CloudProvisioningState algorithm, final CloudProvisioningRecord whatWeShouldSpinUp, final String cloneName)
+        private static Node provisionNewNode(final CloudProvisioningRecord whatWeShouldSpinUp, final String cloneName)
                 throws VSphereException, FormException, IOException, InterruptedException {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
-            final vSphereCloudProvisionedSlave slave = template.provision(algorithm, cloneName, StreamTaskListener.fromStdout());
+            final vSphereCloudProvisionedSlave slave = template.provision(cloneName, StreamTaskListener.fromStdout());
             // ensure Jenkins knows about us before we forget what we're doing,
             // otherwise it'll just ask for more.
             Jenkins.getInstance().addNode(slave);
