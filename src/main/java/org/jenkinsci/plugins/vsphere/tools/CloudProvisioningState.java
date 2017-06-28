@@ -2,6 +2,8 @@ package org.jenkinsci.plugins.vsphere.tools;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -66,16 +68,20 @@ public class CloudProvisioningState {
     public void provisioningStarted(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasPreviouslyUnknownToPlanning = provisionable.addCurrentlyPlanned(nodeName);
         final boolean wasAlreadyActive = provisionable.removeCurrentlyActive(nodeName);
-        logStateChange(Level.FINE, "Intending to create {0}", "wasPreviouslyUnknownToPlanning",
-                wasPreviouslyUnknownToPlanning, true, "wasAlreadyActive", wasAlreadyActive, false, nodeName);
+        final boolean wasPreviouslyUnwanted = provisionable.removeCurrentlyUnwanted(nodeName);
+        logStateChange(Level.FINE, "Intending to create {0}",
+                "wasPreviouslyUnknownToPlanning", wasPreviouslyUnknownToPlanning, true,
+                "wasAlreadyActive", wasAlreadyActive, false,
+                "wasPreviouslyUnwanted", wasPreviouslyUnwanted, false,
+                nodeName);
     }
 
     /**
      * To be called when a newly created node (previously promised to
      * {@link #provisioningStarted(CloudProvisioningRecord, String)}) comes up.
      * Callers MUST ensure that
-     * {@link #provisionedSlaveNowTerminated(String)}
-     * gets called later.
+     * {@link #provisionedSlaveNowUnwanted(String, boolean)} gets called later
+     * when we do not want it anymore.
      * 
      * @param provisionable
      *            Our record for the template for the named node.
@@ -85,32 +91,153 @@ public class CloudProvisioningState {
     public void provisionedSlaveNowActive(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasNotPreviouslyActive = provisionable.addCurrentlyActive(nodeName);
         final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
-        logStateChange(Level.FINE, "Marking {0} as active", "wasNotPreviouslyActive", wasNotPreviouslyActive, true,
-                "wasPreviouslyPlanned", wasPreviouslyPlanned, true, nodeName);
+        final boolean wasPreviouslyUnwanted = provisionable.removeCurrentlyUnwanted(nodeName);
+        logStateChange(Level.FINE, "Marking {0} as active",
+                "wasNotPreviouslyActive", wasNotPreviouslyActive, true,
+                "wasPreviouslyPlanned", wasPreviouslyPlanned, true,
+                "wasPreviouslyUnwanted", wasPreviouslyUnwanted, false,
+                nodeName);
     }
 
     /**
      * To be called when a node we created (previously told to
-     * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)}) has
-     * died.
+     * {@link #provisionedSlaveNowActive(CloudProvisioningRecord, String)}) is
+     * no longer wanted and should be deleted.
      * 
      * @param nodeName
      *            The name of the VM.
+     * @param willAttemptImmediateDeletion
+     *            If true then the caller must attempt to delete the slave and
+     *            guarantee that they will call
+     *            {@link #unwantedSlaveNotDeleted(String)} or
+     *            {@link #unwantedSlaveNowDeleted(String)} as appropriate (just
+     *            as if they'd called {@link #isOkToDeleteUnwantedVM(String)}
+     *            and been told True). If false then the caller is under no such
+     *            obligation.
      */
-    public void provisionedSlaveNowTerminated(String nodeName) {
+    public void provisionedSlaveNowUnwanted(String nodeName, boolean willAttemptImmediateDeletion) {
         final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry = findEntryForVM(nodeName);
         if (entry != null) {
             final CloudProvisioningRecord provisionable = entry.getValue();
             final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
             final boolean wasPreviouslyActive = provisionable.removeCurrentlyActive(nodeName);
+            final boolean wasNotPreviouslyUnwanted = provisionable.setCurrentlyUnwanted(nodeName, willAttemptImmediateDeletion)==null;
+            logStateChange(Level.FINE, "Marking {0} for termination",
+                    "wasPreviouslyPlanned", wasPreviouslyPlanned, false,
+                    "wasPreviouslyActive", wasPreviouslyActive, true,
+                    "wasNotPreviouslyUnwanted", wasNotPreviouslyUnwanted, true,
+                    nodeName);
+        } else {
+            logger.log(Level.WARNING, "Asked to mark {0} for termination, but we have no record of it.", nodeName);
+        }
+    }
+
+    /**
+     * To be called before commencing the deletion of a VM.
+     * 
+     * @param nodeName
+     *            The name of the VM being deleted.
+     * @return null if the VM is not unwanted (it may have recently been
+     *         deleted). false if another thread is currently trying to delete
+     *         it. true if deletion should be attempted, in which case the
+     *         caller MUST later call {@link #unwantedSlaveNowDeleted(String)}
+     *         or {@link #unwantedSlaveNotDeleted(String)}.
+     */
+    public Boolean isOkToDeleteUnwantedVM(String nodeName) {
+        final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry = findEntryForVM(nodeName);
+        if (entry == null) {
+            return null;
+        }
+        final CloudProvisioningRecord record = entry.getValue();
+        final Boolean thisNode = record.isCurrentlyUnwanted(nodeName);
+        if (thisNode == null) {
+            return null;
+        }
+        boolean someoneElseIsDeletingThis = thisNode.booleanValue();
+        boolean isOkForUsToDeleteIt = !someoneElseIsDeletingThis;
+        if (isOkForUsToDeleteIt) {
+            record.setCurrentlyUnwanted(nodeName, true);
+        }
+        return Boolean.valueOf(isOkForUsToDeleteIt);
+    }
+
+    /**
+     * MUST be called when a node previously declared to be unwanted (previously
+     * told to {@link #provisionedSlaveNowUnwanted(String, boolean)}) and that
+     * we were given clearance to delete
+     * ({@link #isOkToDeleteUnwantedVM(String)} returned true) has been
+     * successfully removed.
+     * 
+     * @param nodeName
+     *            The name of the VM that was successfully deleted.
+     */
+    public void unwantedSlaveNowDeleted(String nodeName) {
+        final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry = findEntryForVM(nodeName);
+        if (entry != null) {
+            final CloudProvisioningRecord provisionable = entry.getValue();
+            final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
+            final boolean wasPreviouslyActive = provisionable.removeCurrentlyActive(nodeName);
+            final boolean wasPreviouslyUnwanted = provisionable.removeCurrentlyUnwanted(nodeName);
             if (recordIsPrunable(provisionable)) {
                 removeExistingRecord(provisionable);
             }
-            logStateChange(Level.FINE, "Marking {0} as terminated", "wasPreviouslyPlanned", wasPreviouslyPlanned,
-                    false, "wasPreviouslyActive", wasPreviouslyActive, true, nodeName);
+            logStateChange(Level.FINE, "Marking {0} as successfully terminated",
+                    "wasPreviouslyPlanned", wasPreviouslyPlanned, false,
+                    "wasPreviouslyActive", wasPreviouslyActive, false,
+                    "wasPreviouslyUnwanted", wasPreviouslyUnwanted, true,
+                    nodeName);
         } else {
-            logger.log(Level.WARNING, "Asked to mark {0} as terminated, but we have no record of it.", nodeName);
+            logger.log(Level.WARNING, "Asked to mark {0} as terminated, but we had no record of it.", nodeName);
         }
+    }
+
+    /**
+     * MUST be called when a node previously declared to be unwanted (previously
+     * told to {@link #provisionedSlaveNowUnwanted(String, boolean)}) and that
+     * we were given clearance to delete
+     * ({@link #isOkToDeleteUnwantedVM(String)} returned true) failed to be
+     * removed.
+     * 
+     * @param nodeName
+     *            The name of the VM that failed to delete
+     */
+    public void unwantedSlaveNotDeleted(String nodeName) {
+        final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry = findEntryForVM(nodeName);
+        if (entry != null) {
+            final CloudProvisioningRecord provisionable = entry.getValue();
+            final boolean isPlanned = provisionable.getCurrentlyPlanned().contains(nodeName);
+            final boolean isActive = provisionable.getCurrentlyProvisioned().contains(nodeName);
+            final boolean isUnwanted = provisionable.setCurrentlyUnwanted(nodeName, false) != null;
+            logStateChange(Level.INFO, "Marking {0} as unsuccessfully terminated - we'll have to try again later",
+                    "isPlanned", isPlanned, false,
+                    "isActive", isActive, false,
+                    "isUnwanted", isUnwanted, true,
+                    nodeName);
+        } else {
+            logger.log(Level.WARNING, "Asked to mark {0} as unsuccessfully terminated, but we had no record of it.",
+                    nodeName);
+        }
+    }
+
+    /**
+     * To be called if we become aware that there is a VM that exist in vSphere
+     * (that we created) which we don't want anymore.
+     * 
+     * @param template
+     *            The template to which the node belonged.
+     * @param nodeName
+     *            The name of the node that exists (despite our wishes).
+     */
+    public void recordExistingUnwantedVM(final vSphereCloudSlaveTemplate template, String nodeName) {
+        final CloudProvisioningRecord record = getOrCreateRecord(template);
+        final boolean wasPreviouslyPlanned = record.removeCurrentlyPlanned(nodeName);
+        final boolean wasPreviouslyActive = record.removeCurrentlyActive(nodeName);
+        final boolean wasAlreadyUnwanted = record.setCurrentlyUnwanted(nodeName, false) != null;
+        logStateChange(Level.INFO, "Marking {0} as found in vSphere but unwanted",
+                "wasPreviouslyPlanned", wasPreviouslyPlanned, false,
+                "wasPreviouslyActive", wasPreviouslyActive, false,
+                "wasAlreadyUnwanted", wasAlreadyUnwanted, false,
+                nodeName);
     }
 
     /**
@@ -126,11 +253,15 @@ public class CloudProvisioningState {
     public void provisioningEndedInError(CloudProvisioningRecord provisionable, String nodeName) {
         final boolean wasPreviouslyPlanned = provisionable.removeCurrentlyPlanned(nodeName);
         final boolean wasPreviouslyActive = provisionable.removeCurrentlyActive(nodeName);
+        final boolean wasPreviouslyUnwanted = provisionable.removeCurrentlyUnwanted(nodeName);
         if (recordIsPrunable(provisionable)) {
             removeExistingRecord(provisionable);
         }
-        logStateChange(Level.INFO, "Marking {0} as failed", "wasPreviouslyPlanned", wasPreviouslyPlanned, true,
-                "wasPreviouslyActive", wasPreviouslyActive, false, nodeName);
+        logStateChange(Level.INFO, "Marking {0} as failed",
+                "wasPreviouslyPlanned", wasPreviouslyPlanned, true,
+                "wasPreviouslyActive", wasPreviouslyActive, false,
+                "wasPreviouslyUnwanted", wasPreviouslyUnwanted, false,
+                nodeName);
     }
 
     /**
@@ -167,16 +298,15 @@ public class CloudProvisioningState {
     }
 
     /**
-     * Counts all the known nodes, both active and in-progress, across all
-     * templates.
+     * Counts all the known nodes, active, in-progress and being-deleted, across
+     * all templates.
      * 
-     * @return The number of nodes that are active or soon-to-be-active.
+     * @return The number of nodes that exist (or will do).
      */
     public int countNodes() {
         int result = 0;
         for (final CloudProvisioningRecord record : records.values()) {
-            result += record.getCurrentlyPlanned().size();
-            result += record.getCurrentlyProvisioned().size();
+            result += record.size();
         }
         return result;
     }
@@ -201,6 +331,43 @@ public class CloudProvisioningState {
         return newRecord;
     }
 
+    /**
+     * Calculates the current list of "existing but unwanted" VMs, in priority
+     * order. Note: The returned data is not "live", it's a copy, so callers are
+     * free to edit the {@link List} they are given.
+     * 
+     * @return A copy of the list of VMs that we know exist but no longer want,
+     *         and which aren't in the process of being deleted by anyone.
+     */
+    public List<String> getUnwantedVMsThatNeedDeleting() {
+        // find out who needs what deleted
+        int count = 0;
+        final Map<CloudProvisioningRecord, Iterator<String>> allUnwantedVmsByRecord = new LinkedHashMap<>();
+        for (final CloudProvisioningRecord record : records.values()) {
+            final Map<String, Boolean> currentlyUnwanted = record.getCurrentlyUnwanted();
+            final List<String> vmsInNeedOfDeletionForThisRecord = new ArrayList<String>(currentlyUnwanted.size());
+            for (Map.Entry<String, Boolean> entry : currentlyUnwanted.entrySet()) {
+                if (entry.getValue() == Boolean.FALSE) {
+                    vmsInNeedOfDeletionForThisRecord.add(entry.getKey());
+                }
+            }
+            count += vmsInNeedOfDeletionForThisRecord.size();
+            allUnwantedVmsByRecord.put(record, vmsInNeedOfDeletionForThisRecord.iterator());
+        }
+        // arrange the list in a round-robin order, taking the first from each
+        // template, followed by the second from each etc.
+        final List<String> vmsInNeedOfDeletion = new ArrayList<String>(count);
+        while (vmsInNeedOfDeletion.size() < count) {
+            for (Iterator<String> i : allUnwantedVmsByRecord.values()) {
+                if (i.hasNext()) {
+                    final String nodeName = i.next();
+                    vmsInNeedOfDeletion.add(nodeName);
+                }
+            }
+        }
+        return vmsInNeedOfDeletion;
+    }
+
     private CloudProvisioningRecord getExistingRecord(final vSphereCloudSlaveTemplate template) {
         return records.get(template);
     }
@@ -213,7 +380,7 @@ public class CloudProvisioningState {
     }
 
     private boolean recordIsPrunable(CloudProvisioningRecord record) {
-        final boolean isEmpty = record.getCurrentlyProvisioned().isEmpty() && record.getCurrentlyPlanned().isEmpty();
+        final boolean isEmpty = record.isEmpty();
         if (!isEmpty) {
             return false;
         }
@@ -226,10 +393,7 @@ public class CloudProvisioningState {
     private Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> findEntryForVM(String nodeName) {
         for (final Map.Entry<vSphereCloudSlaveTemplate, CloudProvisioningRecord> entry : records.entrySet()) {
             final CloudProvisioningRecord record = entry.getValue();
-            if (record.getCurrentlyProvisioned().contains(nodeName)) {
-                return entry;
-            }
-            if (record.getCurrentlyPlanned().contains(nodeName)) {
+            if (record.contains(nodeName)) {
                 return entry;
             }
         }
@@ -261,15 +425,26 @@ public class CloudProvisioningState {
      * @param expectedSecondArgValue
      *            The expected value of actualSecondArgValue. If that's not the
      *            case, we'll complain.
+     * @param thirdArgName
+     *            What actualThirdArgValue represents - used when complaining
+     *            about its value.
+     * @param actualThirdArgValue
+     *            A state-change variable.
+     * @param expectedThirdArgValue
+     *            The expected value of actualThirdArgValue. If that's not the
+     *            case, we'll complain.
      * @param args
      *            The arguments for logMsg. Used if logMsg contains {0}, {1}
      *            etc.
      */
-    private void logStateChange(Level logLevel, String logMsg, String firstArgName, boolean actualFirstArgValue,
-            boolean expectedFirstArgValue, String secondArgName, boolean actualSecondArgValue,
-            boolean expectedSecondArgValue, Object... args) {
+    private void logStateChange(Level logLevel, String logMsg,
+            String firstArgName, boolean actualFirstArgValue, boolean expectedFirstArgValue,
+            String secondArgName, boolean actualSecondArgValue, boolean expectedSecondArgValue,
+            String thirdArgName, boolean actualThirdArgValue, boolean expectedThirdArgValue,
+            Object... args) {
         final boolean firstValid = actualFirstArgValue == expectedFirstArgValue;
         final boolean secondValid = actualSecondArgValue == expectedSecondArgValue;
+        final boolean thirdValid = actualThirdArgValue == expectedThirdArgValue;
         Level actualLevel = logLevel;
         String actualMsg = logMsg;
         if (!firstValid) {
@@ -278,6 +453,10 @@ public class CloudProvisioningState {
         }
         if (!secondValid) {
             actualMsg += " : " + secondArgName + "!=" + expectedSecondArgValue;
+            actualLevel = Level.WARNING;
+        }
+        if (!thirdValid) {
+            actualMsg += " : " + thirdArgName + "!=" + expectedThirdArgValue;
             actualLevel = Level.WARNING;
         }
         final Logger loggerToUse = logger != null ? logger : LOGGER;
