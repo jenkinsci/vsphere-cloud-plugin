@@ -1056,7 +1056,7 @@ public class VSphere {
 
     /**
      * Passes data to a VM's "extra config" object. This data can then be read
-     * back at a later stage.<br/>
+     * back at a later stage.
      * In the case of parameters whose name starts "guestinfo.", the parameter
      * can be read by the VMware Tools on the client OS.
      * <p>
