@@ -428,9 +428,21 @@ public class vSphereCloud extends Cloud {
         synchronized (templateState) {
             templateState.provisionedSlaveNowUnwanted(cloneName, true);
         }
-        attemptDeletionOfSlave("provisionedSlaveHasTerminated(" + cloneName + ")", cloneName);
-        // We should also take this opportunity to see if we've got any other
-        // slaves that need deleting.
+        // Deletion can take a long time, so we run it asynchronously because,
+        // at the point where we're called here, we've locked the remoting queue
+        // so Jenkins is largely crippled until we return.
+        // JENKINS-42187 describes the problem (for docker).
+        final Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                attemptDeletionOfSlave("provisionedSlaveHasTerminated(" + cloneName + ")", cloneName);
+            }
+        };
+        VSLOG.log(Level.INFO, "provisionedSlaveHasTerminated({0}): scheduling deletion of {0}", cloneName);
+        Computer.threadPoolForRemoting.submit(task);
+        // We also take this opportunity to see if we've got any other slaves
+        // that need deleting, and deal with at most one of those
+        // (asynchronously) as well.
         retryVMdeletionIfNecessary(1);
     }
 
@@ -440,6 +452,10 @@ public class vSphereCloud extends Cloud {
         boolean successfullyDeleted = false;
         try {
             vSphere = vSphereInstance();
+            // Note: This can block indefinitely - it only completes when
+            // vSphere tells us the deletion has completed, and if vSphere has
+            // issues (e.g. a node failure) during that process then the
+            // deletion task can hang for ages.
             vSphere.destroyVm(cloneName, false);
             successfullyDeleted = true;
             VSLOG.log(Level.FINER, "{0}: VM {1} destroyed.", new Object[]{ why, cloneName });
