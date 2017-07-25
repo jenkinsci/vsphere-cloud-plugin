@@ -10,16 +10,16 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
 
-    private final int idleMinutes;
+    private final int vsIdleMinutes;
 
     @DataBoundConstructor
-    public VSphereCloudRetentionStrategy(int idleMinutes) {
-        super(idleMinutes);
-        this.idleMinutes = idleMinutes;
+    public VSphereCloudRetentionStrategy(int vsIdleMinutes) {
+        super(vsIdleMinutes);
+        this.vsIdleMinutes = vsIdleMinutes;
     }
 
-    public int getIdleMinutes() {
-        return idleMinutes;
+    public int getVsIdleMinutes() {
+        return vsIdleMinutes;
     }
 
     @Override
