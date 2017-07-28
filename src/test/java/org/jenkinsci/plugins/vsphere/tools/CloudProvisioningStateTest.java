@@ -1,6 +1,7 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
 import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.either;
 import static org.hamcrest.CoreMatchers.any;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -14,6 +15,7 @@ import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.logging.Handler;
@@ -135,11 +137,12 @@ public class CloudProvisioningStateTest {
         // When
         instance.provisioningStarted(provisionable, nodeName);
         instance.provisionedSlaveNowActive(provisionable, nodeName);
-        instance.provisionedSlaveNowTerminated(nodeName);
+        instance.provisionedSlaveNowUnwanted(nodeName, true);
+        instance.unwantedSlaveNowDeleted(nodeName);
 
         // Then
         assertThat(loggedMessages, everyItem(logMessage(Level.FINE, expectedArgs)));
-        assertThat(loggedMessages, IsIterableWithSize.<LogRecord> iterableWithSize(3));
+        assertThat(loggedMessages, IsIterableWithSize.<LogRecord> iterableWithSize(4));
     }
 
     @SuppressWarnings("unchecked")
@@ -175,7 +178,11 @@ public class CloudProvisioningStateTest {
 
         // When/Then
         wipeLog();
-        instance.provisionedSlaveNowTerminated(nodeName);
+        instance.unwantedSlaveNowDeleted(nodeName);
+        assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
+
+        wipeLog();
+        instance.provisionedSlaveNowUnwanted(nodeName, false);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
@@ -211,11 +218,11 @@ public class CloudProvisioningStateTest {
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
-        instance.provisionedSlaveNowTerminated(nodeName);
+        instance.provisionedSlaveNowUnwanted(nodeName, false);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
 
         wipeLog();
-        instance.provisionedSlaveNowTerminated(nodeName);
+        instance.provisionedSlaveNowUnwanted(nodeName, true);
         assertThat(loggedMessages, contains(logMessage(Level.WARNING, expectedArgs)));
     }
 
@@ -235,12 +242,14 @@ public class CloudProvisioningStateTest {
         instance.provisioningStarted(deletedAndInactiveRecord, deletedAndInactiveNodeName);
         instance.provisionedSlaveNowActive(deletedAndInactiveRecord, deletedAndInactiveNodeName);
         final vSphereCloudSlaveTemplate deletedAndInactiveTemplate = deletedAndInactiveRecord.getTemplate();
-        instance.provisionedSlaveNowTerminated(deletedAndInactiveNodeName);
+        instance.provisionedSlaveNowUnwanted(deletedAndInactiveNodeName, true);
+        instance.unwantedSlaveNowDeleted(deletedAndInactiveNodeName);
         // A template which is current but has no active slaves right now
         final CloudProvisioningRecord activeRecord = createRecord(instance);
         instance.provisioningStarted(activeRecord, livedAndDiedNodeName);
         instance.provisionedSlaveNowActive(activeRecord, livedAndDiedNodeName);
-        instance.provisionedSlaveNowTerminated(livedAndDiedNodeName);
+        instance.provisionedSlaveNowUnwanted(livedAndDiedNodeName, true);
+        instance.unwantedSlaveNowDeleted(livedAndDiedNodeName);
 
         // When
         userHasDeletedSlaveTemplate(deletedButActiveRecord);
@@ -300,6 +309,21 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
+    public void countNodesGiven2UnwantedSlavesThenReturns2() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord activeRecord = createRecord(instance);
+        activeRecord.setCurrentlyUnwanted(createNodeName(), false);
+        activeRecord.setCurrentlyUnwanted(createNodeName(), false);
+
+        // When
+        final int actual = instance.countNodes();
+
+        // Then
+        assertThat(actual, equalTo(2));
+    }
+
+    @Test
     public void countNodesGiven3ActiveAnd4PendingSlavesThenReturns7() {
         // Given
         final CloudProvisioningState instance = createInstance();
@@ -318,6 +342,138 @@ public class CloudProvisioningStateTest {
 
         // Then
         assertThat(actual, equalTo(7));
+    }
+
+    @Test
+    public void getUnwantedVMsThatNeedDeletingGivenNothingNeedsDeletingThenReturnsNothing() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord recordWith2Active = createRecord(instance);
+        recordWith2Active.addCurrentlyActive(createNodeName());
+        recordWith2Active.addCurrentlyActive(createNodeName());
+        final CloudProvisioningRecord recordWith1Active1Planned = createRecord(instance);
+        recordWith1Active1Planned.addCurrentlyActive(createNodeName());
+        recordWith1Active1Planned.addCurrentlyPlanned(createNodeName());
+        final List<String> expected = Arrays.asList();
+
+        // When
+        final List<String> actual = instance.getUnwantedVMsThatNeedDeleting();
+        // Then
+        assertThat(actual, equalTo(expected));
+    }
+
+    @Test
+    public void getUnwantedVMsThatNeedDeletingGivenSeveralUnwantedThenReturnsDeletableVMsInCorrectOrder() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord r1 = createRecord(instance);
+        final String r1unwanted1 = createNodeName();
+        final String r1unwanted2alreadyBeingDeleted = createNodeName();
+        final String r1unwanted3 = createNodeName();
+        r1.setCurrentlyUnwanted(r1unwanted1, false);
+        r1.setCurrentlyUnwanted(r1unwanted2alreadyBeingDeleted, true);
+        r1.setCurrentlyUnwanted(r1unwanted3, false);
+        final CloudProvisioningRecord r2 = createRecord(instance);
+        final String r2unwanted1alreadyBeingDeleted = createNodeName();
+        final String r2unwanted2 = createNodeName();
+        r2.setCurrentlyUnwanted(r2unwanted1alreadyBeingDeleted, true);
+        r2.setCurrentlyUnwanted(r2unwanted2, false);
+        // Expect to get the first not-being-deleted record from both before the
+        // second not-being-deleted record. However we don't mind the order that
+        // the records are processed, so there are two correct answers.
+        final List<String> expectedA = Arrays.asList(r1unwanted1, r2unwanted2, r1unwanted3);
+        final List<String> expectedB = Arrays.asList(r2unwanted2, r1unwanted1, r1unwanted3);
+
+        // When
+        final List<String> actual = instance.getUnwantedVMsThatNeedDeleting();
+        // Then
+        assertThat(actual, either(equalTo(expectedA)).or(equalTo(expectedB)));
+    }
+
+    @Test
+    public void unwantedSlaveNowDeletedGivenNothingElseToDeleteThenNothingRemains() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord r1 = createRecord(instance);
+        final String r1unwanted1 = createNodeName();
+        final vSphereCloudSlaveTemplate r1t = r1.getTemplate();
+        instance.recordExistingUnwantedVM(r1t, r1unwanted1);
+        final int numberOfNodesBeforeDeletion = instance.countNodes();
+        assertThat(numberOfNodesBeforeDeletion, equalTo(1));
+        final List<String> noNodes = Arrays.asList();
+
+        // When
+        final Boolean actualIsOkToDelete = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+        instance.unwantedSlaveNowDeleted(r1unwanted1);
+        final int actualNodesAfterDeletion = instance.countNodes();
+        final List<String> actualNodesToBeDeletedNext = instance.getUnwantedVMsThatNeedDeleting();
+
+        // Then
+        assertThat(actualIsOkToDelete, equalTo(Boolean.TRUE));
+        assertThat(actualNodesAfterDeletion, equalTo(0));
+        assertThat(actualNodesToBeDeletedNext, equalTo(noNodes));
+    }
+
+    @Test
+    public void unwantedSlaveNotDeletedGivenNothingElseToDeleteThenFailedDeletionRemains() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord r1 = createRecord(instance);
+        final String r1unwanted1 = createNodeName();
+        final vSphereCloudSlaveTemplate r1t = r1.getTemplate();
+        instance.recordExistingUnwantedVM(r1t, r1unwanted1);
+        final int numberOfNodesBeforeDeletion = instance.countNodes();
+        assertThat(numberOfNodesBeforeDeletion, equalTo(1));
+        final List<String> sameNodeRemains = Arrays.asList(r1unwanted1);
+
+        // When
+        final Boolean actualIsOkToDelete = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+        instance.unwantedSlaveNotDeleted(r1unwanted1);
+        final int actualNodesAfterDeletion = instance.countNodes();
+        final List<String> actualNodesToBeDeletedNext = instance.getUnwantedVMsThatNeedDeleting();
+
+        // Then
+        assertThat(actualIsOkToDelete, equalTo(Boolean.TRUE));
+        assertThat(actualNodesAfterDeletion, equalTo(1));
+        assertThat(actualNodesToBeDeletedNext, equalTo(sameNodeRemains));
+    }
+
+    @Test
+    public void isOkToDeleteUnwantedVMGivenNobodyElseDeletingVMThenReturnsTrueOnceAndFalseThereafter() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord r1 = createRecord(instance);
+        final String r1unwanted1 = createNodeName();
+        final vSphereCloudSlaveTemplate r1t = r1.getTemplate();
+        instance.recordExistingUnwantedVM(r1t, r1unwanted1);
+
+        // When
+        final Boolean actual1 = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+        final Boolean actual2 = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+        final Boolean actual3 = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+
+        // Then
+        assertThat(actual1, equalTo(Boolean.TRUE));
+        assertThat(actual2, equalTo(Boolean.FALSE));
+        assertThat(actual3, equalTo(Boolean.FALSE));
+    }
+
+    @Test
+    public void isOkToDeleteUnwantedVMGivenDeletionInProgressVMThenReturnsFalseUntilDeletionFails() {
+        // Given
+        final CloudProvisioningState instance = createInstance();
+        final CloudProvisioningRecord r1 = createRecord(instance);
+        final String r1unwanted1 = createNodeName();
+        r1.setCurrentlyUnwanted(r1unwanted1, true);
+
+        // When
+        final Boolean actualBefore = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+        instance.unwantedSlaveNotDeleted(r1unwanted1);
+        final Boolean actualAfter = instance.isOkToDeleteUnwantedVM(r1unwanted1);
+
+        // Then
+        assertThat(actualBefore, equalTo(Boolean.FALSE));
+        assertThat(actualAfter, equalTo(Boolean.TRUE));
     }
 
     private void wipeLog() {

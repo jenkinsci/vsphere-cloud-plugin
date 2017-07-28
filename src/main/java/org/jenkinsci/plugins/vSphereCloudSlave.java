@@ -142,10 +142,12 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         return "Shutting down VSphere Cloud Slave";
                     }
                 });
-                vSphereCloud.Log(this, listener, "Disconnected computer");
+                vSphereCloud.Log(this, listener, "Disconnected computer %s", vmName);
+            } else {
+                vSphereCloud.Log(this, listener, "Can't disconnect computer for %s as there was no Computer node for it.", vmName);
             }
         } catch(Exception e) {
-            vSphereCloud.Log(this, listener, e, "Can't disconnect");
+            vSphereCloud.Log(this, listener, e, "Can't disconnect %s", vmName);
         }
     }
 

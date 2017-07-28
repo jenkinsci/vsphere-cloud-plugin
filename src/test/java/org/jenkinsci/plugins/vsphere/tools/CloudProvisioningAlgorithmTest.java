@@ -216,6 +216,51 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
+    public void findUnusedNameGivenMiddleOfThreeStillExistsThenReturnsOneThenThree() {
+        // Given
+        final CloudProvisioningRecord record = createInstance(3, 0, 0);
+        final String prefix = record.getTemplate().getCloneNamePrefix();
+        final String expected1 = prefix + "_1";
+        final String unwanted = prefix + "_2";
+        record.setCurrentlyUnwanted(unwanted, false);
+        final String expected2 = prefix + "_3";
+
+        // When
+        final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual1);
+        final String actual2 = CloudProvisioningAlgorithm.findUnusedName(record);
+        record.addCurrentlyActive(actual2);
+
+        // Then
+        assertThat(actual1, equalTo(expected1));
+        assertThat(actual2, equalTo(expected2));
+    }
+
+    @Test
+    public void findUnusedNameGivenNoSpaceThenThrowsIllegalStateException() {
+        // Given
+        final CloudProvisioningRecord record = createInstance(3, 0, 0);
+        final String prefix = record.getTemplate().getCloneNamePrefix();
+        final String unwanted = prefix + "_1";
+        final String active = prefix + "_2";
+        final String planned = prefix + "_3";
+        record.setCurrentlyUnwanted(unwanted, false);
+        record.addCurrentlyActive(active);
+        record.addCurrentlyPlanned(planned);
+        final List<CloudProvisioningRecord> records = Arrays.asList(record);
+        final CloudProvisioningRecord shouldBeNull = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(records);
+        assertThat(shouldBeNull, nullValue());
+
+        // When
+        try {
+            final String unexpected = CloudProvisioningAlgorithm.findUnusedName(record);
+            fail("Expected IllegalStateException, got '" + unexpected + "'.");
+        } catch (IllegalStateException expected) {
+            // Then passed.
+        }
+    }
+
+    @Test
     public void findUnusedNameGivenOneOfTwoHasEndedThenReturnsOne() {
         // Given
         final CloudProvisioningRecord record = createInstance(2, 0, 0);
@@ -261,7 +306,7 @@ public class CloudProvisioningAlgorithmTest {
         final CloudProvisioningRecord instance = new CloudProvisioningRecord(template);
         for (int i = 0; i < provisioned; i++) {
             final String nodeName = iNum + "provisioned#" + i;
-            instance.addCurrentlyPlanned(nodeName);
+            instance.addCurrentlyActive(nodeName);
         }
         for (int i = 0; i < planned; i++) {
             final String nodeName = iNum + "planned#" + i;
