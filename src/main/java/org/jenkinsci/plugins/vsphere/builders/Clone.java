@@ -42,7 +42,7 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
-    private final Integer TIMEOUT_DEFAULT = 60;
+    private final int TIMEOUT_DEFAULT = 60;
 
     private final String sourceName;
     private final String clone;
@@ -53,7 +53,7 @@ public class Clone extends VSphereBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
-    private final Integer timeoutInSeconds;
+    private final int timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
@@ -113,7 +113,7 @@ public class Clone extends VSphereBuildStep {
         return powerOn;
     }
     
-    public Integer getTimeoutInSeconds() {
+    public int getTimeoutInSeconds() {
         return timeoutInSeconds;
     }
 

@@ -43,7 +43,7 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
-    private final Integer TIMEOUT_DEFAULT = 60;
+    private final int TIMEOUT_DEFAULT = 60;
 
     private final String template;
     private final String clone;
@@ -54,7 +54,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
-    private final Integer timeoutInSeconds;
+    private final int timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
@@ -113,7 +113,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         return powerOn;
     }
     
-    public Integer getTimeoutInSeconds() {
+    public int getTimeoutInSeconds() {
         return timeoutInSeconds;
     }
 
