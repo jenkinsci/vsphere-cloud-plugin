@@ -195,10 +195,10 @@ public class VSphere {
         try{
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if(sourceVm==null) {
-                throw new VSphereException("VM or template \"" + sourceName + "\" not found");
+                throw new VSphereNotFoundException("VM or template", sourceName);
             }
             if(getVmByName(cloneName)!=null){
-                throw new VSphereException("VM \"" + cloneName + "\" already exists");
+                throw new VSphereDuplicateException("VM", cloneName);
             }
 
             final VirtualMachineConfigInfo vmConfig = sourceVm.getConfig();
@@ -215,7 +215,7 @@ public class VSphere {
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
-                    throw new VSphereException("Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
+                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \"" + namedSnapshot + "\".");
                 cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
@@ -223,7 +223,7 @@ public class VSphere {
             if (useCurrentSnapshot) {
                 final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
                 if(currentSnapShot==null){
-                    throw new VSphereException("Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
+                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
@@ -292,7 +292,7 @@ public class VSphere {
         	ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
 
         	if (resourcePool == null) {
-        		throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
+        		throw new VSphereNotFoundException("Resource pool", resourcePoolName);
         	}
 
         	rel.setPool(resourcePool.getMOR());
@@ -303,7 +303,7 @@ public class VSphere {
         if (datastoreName != null && !datastoreName.isEmpty()) {
             Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
             if (datastore==null){
-                throw new VSphereException("Datastore \"" + datastoreName + "\" not found!");
+                throw new VSphereNotFoundException("Datastore", datastoreName);
             }
             rel.setDatastore(datastore.getMOR());
         }
@@ -313,7 +313,7 @@ public class VSphere {
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
         VirtualMachine vm = getVmByName(name);
         if(vm==null) {
-            throw new VSphereException("No VM or template " + name + " found");
+            throw new VSphereNotFoundException("VM or template", name);
         }
         LOGGER.log(Level.FINER, "Reconfiguring VM. Please wait ...");
         try {
@@ -339,7 +339,7 @@ public class VSphere {
 		try{
 			VirtualMachine vm = getVmByName(name);
             if (vm == null) {
-                throw new VSphereException("Vm " + name + " was not found");
+                throw new VSphereNotFoundException("VM", name);
             }
 			if(isPoweredOn(vm))
 				return;
@@ -436,7 +436,7 @@ public class VSphere {
 
 		if (snap == null) {
 			LOGGER.log(Level.SEVERE, "Cannot find snapshot: '" + snapName + "' for virtual machine: '" + vm.getName()+"'");
-			throw new VSphereException("Virtual Machine snapshot cannot be found");
+			throw new VSphereNotFoundException("Snapshot", snapName);
 		}
 
 		try{
@@ -459,7 +459,7 @@ public class VSphere {
 		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
 
 		if (snap == null && failOnNoExist) {
-			throw new VSphereException("Virtual Machine snapshot cannot be found");
+			throw new VSphereNotFoundException("Snapshot", snapName);
 		}
 
 		try{
@@ -494,7 +494,7 @@ public class VSphere {
         final String message = "Could not take snapshot";
             VirtualMachine vmToSnapshot = getVmByName(vmName);
             if (vmToSnapshot == null) {
-                throw new VSphereException("Vm " + vmName + " was not found");
+                throw new VSphereNotFoundException("VM", vmName);
             }
         try {
 			Task task = vmToSnapshot.createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
@@ -771,16 +771,16 @@ public class VSphere {
 	}
 
 	/**
-	 * Detroys the VM in vSphere
+	 * Destroys the VM in vSphere
 	 * @param name - VM object to destroy
-	 * @param failOnNoExist If true and the VM does not exist then a VSphereException will be thrown.
+	 * @param failOnNoExist If true and the VM does not exist then a {@link VSphereNotFoundException} will be thrown.
 	 * @throws VSphereException If an error occurred.
 	 */
 	public void destroyVm(String name, boolean failOnNoExist) throws VSphereException{
 		try{
 			VirtualMachine vm = getVmByName(name);
 			if(vm==null){
-				if(failOnNoExist) throw new VSphereException("VM \"" + name + "\" does not exist");
+				if (failOnNoExist) throw new VSphereNotFoundException("VM", name);
 
 				LOGGER.log(Level.FINER, "VM \"" + name + "\" does not exist, or already deleted!");
 				return;
@@ -819,7 +819,7 @@ public class VSphere {
         try{
             VirtualMachine vm = getVmByName(vmName);
             if(vm==null){
-                throw new VSphereException("VM \"" + vmName + "\" does not exist");
+                throw new VSphereNotFoundException("VM", vmName);
             }
 
             VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
@@ -846,7 +846,7 @@ public class VSphere {
         try{
             VirtualMachine vm = getVmByName(oldName);
             if(vm==null){
-                throw new VSphereException("VM \"" + oldName + "\" does not exist");
+                throw new VSphereNotFoundException("VM", oldName);
             }
 
             final Task task = vm.rename_Task(newName);
@@ -1055,27 +1055,30 @@ public class VSphere {
 	}
 
     /**
-     * Passes data to a VM's "guestinfo" object. This data can then be read by
-     * the VMware Tools on the guest.
+     * Passes data to a VM's "extra config" object. This data can then be read
+     * back at a later stage.
+     * In the case of parameters whose name starts "guestinfo.", the parameter
+     * can be read by the VMware Tools on the client OS.
      * <p>
-     * e.g. a variable named "Foo" with value "Bar" could be read on the guest
-     * using the command-line <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * e.g. a variable named "guestinfo.Foo" with value "Bar" could be read on
+     * the guest using the command-line
+     * <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
      * </p>
      * 
      * @param vmName
      *            The name of the VM.
-     * @param variables
+     * @param parameters
      *            A {@link Map} of variable name to variable value.
      * @throws VSphereException
      *             If an error occurred.
      */
-    public void addGuestInfoVariable(String vmName, Map<String, String> variables) throws VSphereException {
+    public void setExtraConfigParameters(String vmName, Map<String, String> parameters) throws VSphereException {
         VirtualMachineConfigSpec cs = new VirtualMachineConfigSpec();
-        OptionValue[] ourOptionValues = new OptionValue[variables.size()];
+        OptionValue[] ourOptionValues = new OptionValue[parameters.size()];
         List<OptionValue> optionValues = new ArrayList<>();
-        for (Map.Entry<String, String> eachVariable : variables.entrySet()) {
+        for (Map.Entry<String, String> eachVariable : parameters.entrySet()) {
             OptionValue ov = new OptionValue();
-            ov.setKey("guestinfo." + eachVariable.getKey());
+            ov.setKey(eachVariable.getKey());
             ov.setValue(eachVariable.getValue());
             optionValues.add(ov);
         }
