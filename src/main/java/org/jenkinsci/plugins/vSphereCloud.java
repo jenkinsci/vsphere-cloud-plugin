@@ -7,6 +7,8 @@ package org.jenkinsci.plugins;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderProperty;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
 import com.cloudbees.hudson.plugins.folder.Folder;
+import com.timgroup.statsd.NonBlockingStatsDClient;
+import com.timgroup.statsd.StatsDClient;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.model.Descriptor.FormException;
@@ -31,15 +33,16 @@ import org.kohsuke.stapler.StaplerRequest;
 
 import javax.annotation.CheckForNull;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
+import java.util.ArrayList; 
+import java.util.Collection; 
+import java.util.Collections; 
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Future;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * @author Admin
@@ -54,6 +57,10 @@ public class vSphereCloud extends Cloud {
     @Deprecated
     private transient String password;
     private final int maxOnlineSlaves;
+    private final boolean enableStatsd;
+    private final String statsdHost;
+    private final int statsdPort;
+    
     private
     @CheckForNull
     VSphereConnectionConfig vsConnectionConfig;
@@ -66,7 +73,8 @@ public class vSphereCloud extends Cloud {
     private transient CloudProvisioningState templateState;
 
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
-
+    private transient StatsDClient statsdClient;
+    
     private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args) {
         final Level logLevel = Level.INFO;
         if (!VSLOG.isLoggable(logLevel) && listener == null)
@@ -90,7 +98,7 @@ public class vSphereCloud extends Cloud {
             VSLOG.log(logLevel, s);
         }
     }
-
+    
     public static void Log(String format, Object... args) {
         InternalLog(null, null, null, null, format, args);
     }
@@ -129,24 +137,42 @@ public class vSphereCloud extends Cloud {
 
     public static void Log(SlaveComputer slave, TaskListener listener, Throwable ex, String format, Object... args) {
         InternalLog(null, slave, listener, ex, format, args);
-    }
-
+    }  
+    
     @Deprecated
     public vSphereCloud(String vsHost, String vsDescription,
-                        String username, String password, int maxOnlineSlaves) {
-        this(null, vsDescription, maxOnlineSlaves, 0, null);
+                        String username, String password, int maxOnlineSlaves, String statsdHost, int statsdPort, boolean enableStatsd) {
+        this(null, vsDescription, maxOnlineSlaves, 0, null, statsdHost, statsdPort, enableStatsd);
     }
 
     @DataBoundConstructor
-    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates) {
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates, String statsdHost, int statsdPort, boolean enableStatsd) {
         super("vSphereCloud");
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
         this.vsConnectionConfig = vsConnectionConfig;
+        this.statsdHost = statsdHost;
+        this.statsdPort = statsdPort;
+        this.enableStatsd = enableStatsd;
+        
+        if(this.enableStatsd) {
+            try{
+                statsdClient = new NonBlockingStatsDClient(
+                            "vsphere-cloud",
+                            this.statsdHost,
+                            this.statsdPort
+                );
+                Log("Success in connecting to statsd host["+statsdHost+"] on port["+statsdPort+"].");
+            } catch(Exception e) {
+                Log("Failed to connect to statsd host["+statsdHost+"] on port["+statsdPort+"].");
+                Log(e.toString());
+            }
+        }
+        
         if (templates == null) {
             this.templates = Collections.emptyList();
         } else {
-            this.templates = templates;
+            this.templates = templates; 
         }
 
         if (instanceCap == 0) {
@@ -237,7 +263,7 @@ public class vSphereCloud extends Cloud {
         }
         return matchingTemplates;
     }
-
+    
     public
     @CheckForNull
     String getPassword() {
@@ -254,6 +280,21 @@ public class vSphereCloud extends Cloud {
         return vsDescription;
     }
 
+    public 
+    String getStatsdHost() {
+        return statsdHost;
+    }
+    
+    public 
+    int getStatsdPort() {
+        return statsdPort;
+    }
+    
+    public 
+    boolean getEnableStatsd() {
+        return enableStatsd;
+    }
+    
     public
     @CheckForNull
     String getVsHost() {
@@ -337,13 +378,16 @@ public class vSphereCloud extends Cloud {
             synchronized (templateState) {
                 templateState.pruneUnwantedRecords();
                 Integer maxSlavesToProvisionBeforeCloudCapHit = calculateMaxAdditionalSlavesPermitted();
+
                 if (maxSlavesToProvisionBeforeCloudCapHit != null && maxSlavesToProvisionBeforeCloudCapHit <= 0) {
                     return Collections.emptySet(); // no capacity due to cloud instance cap
                 }
+
                 final List<vSphereCloudSlaveTemplate> templates = getTemplates(label);
                 final List<CloudProvisioningRecord> whatWeCouldUse = templateState.calculateProvisionableTemplates(templates);
                 VSLOG.log(Level.INFO, methodCallDescription + ": " + numberOfvSphereCloudSlaves + " existing slaves (="
                         + numberOfvSphereCloudSlaveExecutors + " executors), templates available are " + whatWeCouldUse);
+
                 while (excessWorkloadSoFar > 0) {
                     if (maxSlavesToProvisionBeforeCloudCapHit != null) {
                         final int intValue = maxSlavesToProvisionBeforeCloudCapHit.intValue();
@@ -357,7 +401,7 @@ public class vSphereCloud extends Cloud {
                         break; // out of capacity due to template instance cap
                     }
                     final String nodeName = CloudProvisioningAlgorithm.findUnusedName(whatWeShouldSpinUp);
-                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, nodeName, whatWeShouldSpinUp);
+                    final PlannedNode plannedNode = VSpherePlannedNode.createInstance(templateState, nodeName, whatWeShouldSpinUp, enableStatsd, statsdClient);
                     plannedNodes.add(plannedNode);
                     excessWorkloadSoFar -= plannedNode.numExecutors;
                 }
@@ -409,20 +453,25 @@ public class vSphereCloud extends Cloud {
 
         public static VSpherePlannedNode createInstance(final CloudProvisioningState templateState,
                                                         final String nodeName,
-                                                        final CloudProvisioningRecord whatWeShouldSpinUp) {
+                                                        final CloudProvisioningRecord whatWeShouldSpinUp,
+                                                        final boolean enableStatsd,
+                                                        final StatsDClient statsdClient) {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
             final int numberOfExecutors = template.getNumberOfExecutors();
+
             final Callable<Node> provisionNodeCallable = new Callable<Node>() {
                 public Node call() throws Exception {
                     try {
                         final Node newNode = provisionNewNode(whatWeShouldSpinUp, nodeName);
                         VSLOG.log(Level.INFO, "Provisioned new slave " + nodeName);
+                        if(statsdClient != null && enableStatsd) statsdClient.incrementCounter("provision.success."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
                         synchronized (templateState) {
                             templateState.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
                         }
                         return newNode;
                     } catch (Exception ex) {
                         VSLOG.log(Level.WARNING, "Failed to provision new slave " + nodeName, ex);
+                        if(statsdClient != null && enableStatsd) statsdClient.incrementCounter("provision.failed."+whatWeShouldSpinUp.getTemplate().getMasterImageName());
                         synchronized (templateState) {
                             templateState.provisioningEndedInError(whatWeShouldSpinUp, nodeName);
                         }
@@ -430,6 +479,7 @@ public class vSphereCloud extends Cloud {
                     }
                 }
             };
+
             templateState.provisioningStarted(whatWeShouldSpinUp, nodeName);
             final Future<Node> provisionNodeTask = Computer.threadPoolForRemoting.submit(provisionNodeCallable);
             final VSpherePlannedNode result = new VSpherePlannedNode(nodeName, provisionNodeTask, numberOfExecutors);
@@ -587,6 +637,10 @@ public class vSphereCloud extends Cloud {
         @Deprecated
         int maxOnlineSlaves;
 
+        private String statsdHost;
+        private int statsdPort;
+        private boolean enableStatsd;
+
         @Override
         public String getDisplayName() {
             return "vSphere Cloud";
@@ -599,6 +653,10 @@ public class vSphereCloud extends Cloud {
             username = o.getString("username");
             password = o.getString("password");
             maxOnlineSlaves = o.getInt("maxOnlineSlaves");
+            statsdHost = o.getString("statsdHost");
+            statsdPort = o.getInt("statsdPort");
+            enableStatsd = o.getBoolean("enableStatsd");
+
             save();
             return super.configure(req, o);
         }
