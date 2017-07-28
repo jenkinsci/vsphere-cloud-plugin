@@ -196,11 +196,10 @@ public class vSphereCloud extends Cloud {
             for (final vSphereCloudProvisionedSlave n : NodeIterator.nodes(vSphereCloudProvisionedSlave.class)) {
                 final String nodeName = n.getNodeName();
                 final vSphereCloudSlaveTemplate template = getTemplateForVM(nodeName);
-                if (template != null) {
-                    final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
-                    templateState.provisioningStarted(provisionable, nodeName);
-                    templateState.provisionedSlaveNowActive(provisionable, nodeName);
-                }
+                if (template == null) continue;
+                final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
+                templateState.provisioningStarted(provisionable, nodeName);
+                templateState.provisionedSlaveNowActive(provisionable, nodeName);
             }
         }
     }
@@ -342,6 +341,7 @@ public class vSphereCloud extends Cloud {
             synchronized (this) {
                 ensureLists();
             }
+            retryVMdeletionIfNecessary(Math.max(excessWorkload, 2));
             final List<PlannedNode> plannedNodes = new ArrayList<PlannedNode>();
             synchronized (templateState) {
                 templateState.pruneUnwantedRecords();
@@ -381,6 +381,48 @@ public class vSphereCloud extends Cloud {
     }
 
     /**
+     * Has another go at deleting VMs we failed to delete earlier. It's possible
+     * that we were unable to talk to vSphere (or some other failure happened)
+     * when we decided to delete some VMs. We remember this sort of thing so we
+     * can retry later - this is where we use this information.
+     * 
+     * @param maxToRetryDeletionOn
+     *            The maximum number of VMs to try to remove this time around.
+     *            Can be {@link Integer#MAX_VALUE} for unlimited.
+     */
+    private void retryVMdeletionIfNecessary(final int maxToRetryDeletionOn) {
+        if (templateState == null) {
+            VSLOG.log(Level.INFO, "retryVMdeletionIfNecessary({0}): templateState==null", maxToRetryDeletionOn);
+            return;
+        }
+        // find all candidates and trim down the list
+        final List<String> unwantedVMsThatNeedDeleting = templateState.getUnwantedVMsThatNeedDeleting();
+        final int numberToAttemptToRetryThisTime = Math.min(maxToRetryDeletionOn, unwantedVMsThatNeedDeleting.size());
+        final List<String> nodeNamesToRetryDeletion = unwantedVMsThatNeedDeleting.subList(0,
+                numberToAttemptToRetryThisTime);
+        // now queue their deletion
+        synchronized (templateState) {
+            for (final String nodeName : nodeNamesToRetryDeletion) {
+                final Boolean isOkToDelete = templateState.isOkToDeleteUnwantedVM(nodeName);
+                if (isOkToDelete == Boolean.TRUE) {
+                    final Runnable task = new Runnable() {
+                        @Override
+                        public void run() {
+                            attemptDeletionOfSlave("retryVMdeletionIfNecessary(" + nodeName + ")", nodeName);
+                        }
+                    };
+                    VSLOG.log(Level.INFO, "retryVMdeletionIfNecessary({0}): scheduling deletion of {1}", new Object[] { maxToRetryDeletionOn, nodeName });
+                    Computer.threadPoolForRemoting.submit(task);
+                } else {
+                    VSLOG.log(Level.FINER,
+                            "retryVMdeletionIfNecessary({0}): not going to try deleting {1} as isOkToDeleteUnwantedVM({1})=={2}",
+                            new Object[]{ maxToRetryDeletionOn, nodeName, isOkToDelete });
+                }
+            }
+        }
+    }
+
+    /**
      * This is called by {@link vSphereCloudProvisionedSlave} instances once
      * they terminate, so we can take note of their passing and then destroy the
      * VM itself.
@@ -392,19 +434,52 @@ public class vSphereCloud extends Cloud {
             ensureLists();
         }
         VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): recording in our runtime state...", cloneName);
-        // once we're done, remove our cached record.
         synchronized (templateState) {
-            templateState.provisionedSlaveNowTerminated(cloneName);
+            templateState.provisionedSlaveNowUnwanted(cloneName, true);
         }
-        VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): destroying VM...", cloneName);
+        // Deletion can take a long time, so we run it asynchronously because,
+        // at the point where we're called here, we've locked the remoting queue
+        // so Jenkins is largely crippled until we return.
+        // JENKINS-42187 describes the problem (for docker).
+        final Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                attemptDeletionOfSlave("provisionedSlaveHasTerminated(" + cloneName + ")", cloneName);
+            }
+        };
+        VSLOG.log(Level.INFO, "provisionedSlaveHasTerminated({0}): scheduling deletion of {0}", cloneName);
+        Computer.threadPoolForRemoting.submit(task);
+        // We also take this opportunity to see if we've got any other slaves
+        // that need deleting, and deal with at most one of those
+        // (asynchronously) as well.
+        retryVMdeletionIfNecessary(1);
+    }
+
+    private void attemptDeletionOfSlave(final String why, final String cloneName) {
+        VSLOG.log(Level.FINER, "{0}: destroying VM {1}...", new Object[]{ why, cloneName });
         VSphere vSphere = null;
+        boolean successfullyDeleted = false;
         try {
             vSphere = vSphereInstance();
+            // Note: This can block indefinitely - it only completes when
+            // vSphere tells us the deletion has completed, and if vSphere has
+            // issues (e.g. a node failure) during that process then the
+            // deletion task can hang for ages.
             vSphere.destroyVm(cloneName, false);
-            VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): VM destroyed.", cloneName);
+            successfullyDeleted = true;
+            VSLOG.log(Level.FINER, "{0}: VM {1} destroyed.", new Object[]{ why, cloneName });
+            vSphere.disconnect();
+            vSphere = null;
         } catch (VSphereException ex) {
-            VSLOG.log(Level.SEVERE, "provisionedSlaveHasTerminated(" + cloneName + "): Exception while trying to destroy VM", ex);
+            VSLOG.log(Level.SEVERE, why + ": Exception while trying to destroy VM " + cloneName, ex);
         } finally {
+            synchronized (templateState) {
+                if (successfullyDeleted) {
+                    templateState.unwantedSlaveNowDeleted(cloneName);
+                } else {
+                    templateState.unwantedSlaveNotDeleted(cloneName);
+                }
+            }
             if (vSphere != null) {
                 vSphere.disconnect();
             }

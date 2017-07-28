@@ -64,12 +64,10 @@ public final class CloudProvisioningAlgorithm {
     public static String findUnusedName(CloudProvisioningRecord record) {
         final vSphereCloudSlaveTemplate template = record.getTemplate();
         final String cloneNamePrefix = template.getCloneNamePrefix();
-        final Set<String> existingNames = new TreeSet<String>();
-        existingNames.addAll(record.getCurrentlyPlanned());
-        existingNames.addAll(record.getCurrentlyProvisioned());
+        final Set<String> existingNames = record.getCurrentNames();
         final int templateInstanceCap = template.getTemplateInstanceCap();
         final boolean hasCap = templateInstanceCap > 0 && templateInstanceCap < Integer.MAX_VALUE;
-        final int maxAttempts = hasCap ? (templateInstanceCap + 1) : 100;
+        final int maxAttempts = hasCap ? (templateInstanceCap) : 100;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             final String suffix = hasCap ? calcSequentialSuffix(attempt) : calcRandomSuffix(attempt);
             final String nodeName = cloneNamePrefix + "_" + suffix;
