@@ -67,8 +67,7 @@ public class vSphereCloud extends Cloud {
 
     private static java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
 
-    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args) {
-        final Level logLevel = Level.INFO;
+    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, Level logLevel, String format, Object... args) {
         if (!VSLOG.isLoggable(logLevel) && listener == null)
             return;
         String s = "";
@@ -91,44 +90,54 @@ public class vSphereCloud extends Cloud {
         }
     }
 
+    /** Logs an {@link Level#INFO} message (created with {@link String#format(String, Object...)}). */
     public static void Log(String format, Object... args) {
-        InternalLog(null, null, null, null, format, args);
+        InternalLog(null, null, null, null, Level.INFO, format, args);
     }
 
+    /** Logs an {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} with stacktrace. */
     public static void Log(Throwable ex, String format, Object... args) {
-        InternalLog(null, null, null, ex, format, args);
+        InternalLog(null, null, null, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}). */
     public static void Log(TaskListener listener, String format, Object... args) {
-        InternalLog(null, null, listener, null, format, args);
+        InternalLog(null, null, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace). */
     public static void Log(TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(null, null, listener, ex, format, args);
+        InternalLog(null, null, listener, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, String format, Object... args) {
-        InternalLog(slave, null, null, null, format, args);
+        InternalLog(slave, null, null, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, Throwable ex, String format, Object... args) {
-        InternalLog(slave, null, null, ex, format, args);
+        InternalLog(slave, null, null, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, TaskListener listener, String format, Object... args) {
-        InternalLog(slave, null, listener, null, format, args);
+        InternalLog(slave, null, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(slave, null, listener, ex, format, args);
+        InternalLog(slave, null, listener, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link SlaveComputer} name. */
     public static void Log(SlaveComputer slave, TaskListener listener, String format, Object... args) {
-        InternalLog(null, slave, listener, null, format, args);
+        InternalLog(null, slave, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link SlaveComputer} name. */
     public static void Log(SlaveComputer slave, TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(null, slave, listener, ex, format, args);
+        InternalLog(null, slave, listener, ex, Level.SEVERE, format, args);
     }
 
     @Deprecated

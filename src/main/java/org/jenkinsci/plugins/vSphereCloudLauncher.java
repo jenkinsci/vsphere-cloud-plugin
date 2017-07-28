@@ -111,6 +111,15 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         return this;
     }
 
+    /**
+     * Find the {@link vSphereCloud} for this {@link vSphereCloudLauncher}, or
+     * dies trying.
+     * 
+     * @return The {@link vSphereCloud}. It will not return null.
+     * @throws RuntimeException
+     *             if it cannot find the {@link vSphereCloud} - e.g. if it's
+     *             been deleted or the description has changed.
+     */
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
             for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
