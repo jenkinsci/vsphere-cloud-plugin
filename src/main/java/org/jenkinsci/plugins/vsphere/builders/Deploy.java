@@ -43,29 +43,35 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
+	private final int TIMEOUT_DEFAULT = 60;
+
 	private final String template;
 	private final String clone;
 	private final boolean linkedClone;
 	private final String resourcePool;
 	private final String cluster;
-    private final String datastore;
-    private final String folder;
-    private final String customizationSpec;
-    private final boolean powerOn;
+	private final String datastore;
+  private final String folder;
+  private final String customizationSpec;
+  private final boolean powerOn;
+  private Integer timeoutInSeconds = new Integer(TIMEOUT_DEFAULT);
 	private String IP;
 
 	@DataBoundConstructor
 	public Deploy(String template, String clone, boolean linkedClone,
-		      String resourcePool, String cluster, String datastore, String folder, String customizationSpec, boolean powerOn) throws VSphereException {
+		      String resourcePool, String cluster, String datastore, String folder, String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
 		this.template = template;
 		this.clone = clone;
 		this.linkedClone = linkedClone;
 		this.resourcePool= (resourcePool != null) ? resourcePool : "";
 		this.cluster=cluster;
-        this.datastore=datastore;
-        this.folder=folder;
-        this.customizationSpec=customizationSpec;
+    this.datastore=datastore;
+    this.folder=folder;
+    this.customizationSpec=customizationSpec;
 		this.powerOn=powerOn;
+		if(timeoutInSeconds != null){
+			this.timeoutInSeconds=timeoutInSeconds;
+		}
 	}
 
 	public String getTemplate() {
@@ -91,7 +97,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }
@@ -101,7 +107,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     public boolean isPowerOn() {
-	return powerOn;
+				return powerOn;
+    }
+
+		public Integer getTimeoutInSeconds() {
+      	return timeoutInSeconds;
     }
 
 	@Override
@@ -189,7 +199,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 		if (!powerOn) {
 			return true; // don't try to obtain IP if VM isn't being turned on.
 		}
-		IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
+		VSphereLogger.vsLogger(jLogger, "Trying to get the IP-Address of \""+expandedClone+"\" for the next "+timeoutInSeconds+" seconds.");
+		IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSeconds);
 
 		if(IP!=null) {
 			VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedClone + "\" : " + IP);

@@ -39,6 +39,8 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
+    private final int TIMEOUT_DEFAULT = 60;
+
     private final String sourceName;
     private final String clone;
     private final boolean linkedClone;
@@ -48,12 +50,13 @@ public class Clone extends VSphereBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
+    private Integer timeoutInSeconds = new Integer(TIMEOUT_DEFAULT);
     private String IP;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
                  String resourcePool, String cluster, String datastore, String folder,
-                 boolean powerOn, String customizationSpec) throws VSphereException {
+                 boolean powerOn, Integer timeoutInSeconds, String customizationSpec) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -61,8 +64,12 @@ public class Clone extends VSphereBuildStep {
         this.cluster=cluster;
         this.datastore=datastore;
         this.folder=folder;
-	this.customizationSpec=customizationSpec;
+        this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
+        if(timeoutInSeconds != null){
+          this.timeoutInSeconds=timeoutInSeconds;
+        }
+
     }
 
     public String getSourceName() {
@@ -88,7 +95,7 @@ public class Clone extends VSphereBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }
@@ -99,6 +106,10 @@ public class Clone extends VSphereBuildStep {
 
     public boolean isPowerOn() {
         return powerOn;
+    }
+
+    public Integer getTimeoutInSeconds() {
+      return timeoutInSeconds;
     }
 
     @Override
@@ -156,7 +167,8 @@ public class Clone extends VSphereBuildStep {
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
         if (powerOn) {
-            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
+            VSphereLogger.vsLogger(jLogger, "Trying to get the IP-Address of \""+expandedClone+"\" for the next "+timeoutInSeconds+" seconds.");
+            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSeconds);
         }
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
 
