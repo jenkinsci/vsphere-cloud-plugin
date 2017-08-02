@@ -36,4 +36,9 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
             return "vSphere Keep-Until-Idle Retention Strategy";
         }
     }
+    
+    private Object readResolve() {
+        // without this, super.idleMinutes is not restored from persistence
+        return new VSphereCloudRetentionStrategy(idleMinutes);
+    }
 }
