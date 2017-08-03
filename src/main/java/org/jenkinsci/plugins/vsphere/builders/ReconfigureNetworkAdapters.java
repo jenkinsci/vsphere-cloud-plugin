@@ -49,17 +49,16 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
     @DataBoundConstructor
     public ReconfigureNetworkAdapters(DeviceAction deviceAction, String deviceLabel, String macAddress,
-				      boolean standardSwitch,String portGroup, boolean distributedSwitch,
-				      String distributedPortGroup, String distributedPortId) throws VSphereException {
-
-	this.deviceAction = deviceAction;
+            boolean standardSwitch,String portGroup, boolean distributedSwitch,
+            String distributedPortGroup, String distributedPortId) throws VSphereException {
+        this.deviceAction = deviceAction;
         this.deviceLabel = deviceLabel;
         this.macAddress = macAddress;
-	this.standardSwitch = standardSwitch;
-	this.portGroup = standardSwitch ? portGroup : null;
-	this.distributedSwitch = distributedSwitch;
-	this.distributedPortGroup = distributedSwitch ? distributedPortGroup : null;
-	this.distributedPortId = distributedSwitch ? distributedPortId : null;
+        this.standardSwitch = standardSwitch;
+        this.portGroup = standardSwitch ? portGroup : null;
+        this.distributedSwitch = distributedSwitch;
+        this.distributedPortGroup = distributedSwitch ? distributedPortGroup : null;
+        this.distributedPortId = distributedSwitch ? distributedPortId : null;
     }
 
     public DeviceAction getDeviceAction() {
@@ -67,7 +66,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     public String getDeviceLabel() {
-	return deviceLabel;
+        return deviceLabel;
     }
 
     public String getMacAddress() {
@@ -75,11 +74,11 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     public boolean isStandardSwitch() {
-	return standardSwitch;
+        return standardSwitch;
     }
 
     public boolean isDistributedSwitch() {
-	return distributedSwitch;
+        return distributedSwitch;
     }
 
     public String getPortGroup() {
@@ -116,7 +115,6 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
-
         PrintStream jLogger = listener.getLogger();
         String expandedDeviceLabel = deviceLabel;
         String expandedMacAddress = macAddress;
@@ -162,66 +160,65 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             vEth.setMacAddress(expandedMacAddress);
         }
 
-
         // extract backing from ethernet virtual card, always available
-	VirtualDeviceBackingInfo virtualDeviceBackingInfo = vEth.getBacking();
+        VirtualDeviceBackingInfo virtualDeviceBackingInfo = vEth.getBacking();
 
         // change our port group
         if (standardSwitch && !expandedPortGroup.isEmpty()) {
             VSphereLogger.vsLogger(jLogger, "Reconfiguring Network Port Group -> " + expandedPortGroup);
 
-	    if (virtualDeviceBackingInfo instanceof VirtualEthernetCardNetworkBackingInfo) {
-		VirtualEthernetCardNetworkBackingInfo backing = (VirtualEthernetCardNetworkBackingInfo) virtualDeviceBackingInfo;
+            if (virtualDeviceBackingInfo instanceof VirtualEthernetCardNetworkBackingInfo) {
+                VirtualEthernetCardNetworkBackingInfo backing = (VirtualEthernetCardNetworkBackingInfo) virtualDeviceBackingInfo;
+    
+                Network networkPortGroup = getVsphere().getNetworkPortGroupByName(getVM(), expandedPortGroup);
+                if (networkPortGroup != null) {
+                    backing.deviceName = expandedPortGroup;
+                }
+                else {
+                    VSphereLogger.vsLogger(jLogger, "Failed to find Network for Port Group -> " + expandedPortGroup);
+                }
+            }
+            else {
+                VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't standard switch");
+            }
+        }
+        // change out distributed switch port group
+        else if (distributedSwitch && !expandedDistributedPortGroup.isEmpty()) {
+        VSphereLogger.vsLogger(jLogger, "Reconfiguring Distributed Switch Port Group -> " + expandedDistributedPortGroup +
+                   " Port Id -> " + expandedDistributedPortId);
 
-		Network networkPortGroup = getVsphere().getNetworkPortGroupByName(getVM(), expandedPortGroup);
-		if (networkPortGroup != null) {
-		    backing.deviceName = expandedPortGroup;
-		}
-		else {
-		    VSphereLogger.vsLogger(jLogger, "Failed to find Network for Port Group -> " + expandedPortGroup);
-		}
-	    }
-	    else {
-		VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't standard switch");
-	    }
-	}
-	// change out distributed switch port group
-	else if (distributedSwitch && !expandedDistributedPortGroup.isEmpty()) {
-	    VSphereLogger.vsLogger(jLogger, "Reconfiguring Distributed Switch Port Group -> " + expandedDistributedPortGroup +
-				   " Port Id -> " + expandedDistributedPortId);
-
-          if (virtualDeviceBackingInfo instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo) {
-
-              VirtualEthernetCardDistributedVirtualPortBackingInfo virtualEthernetCardDistributedVirtualPortBackingInfo =
-		  (VirtualEthernetCardDistributedVirtualPortBackingInfo) virtualDeviceBackingInfo;
-
-              DistributedVirtualPortgroup distributedVirtualPortgroup =
-		  getVsphere().getDistributedVirtualPortGroupByName(getVM(), expandedDistributedPortGroup);
-
-              if (distributedVirtualPortgroup != null) {
-                  DistributedVirtualSwitch distributedVirtualSwitch =
-		      getVsphere().getDistributedVirtualSwitchByPortGroup(distributedVirtualPortgroup);
-
-                  DistributedVirtualSwitchPortConnection distributedVirtualSwitchPortConnection =
-		      new DistributedVirtualSwitchPortConnection();
-
-                  distributedVirtualSwitchPortConnection.setSwitchUuid(distributedVirtualSwitch.getUuid());
-                  distributedVirtualSwitchPortConnection.setPortgroupKey(distributedVirtualPortgroup.getKey());
-                  distributedVirtualSwitchPortConnection.setPortKey(expandedDistributedPortId);
-
-                  virtualEthernetCardDistributedVirtualPortBackingInfo.setPort(distributedVirtualSwitchPortConnection);
-
-                  VSphereLogger.vsLogger(jLogger, "Distributed Switch Port Group -> " + expandedDistributedPortGroup +
-                          "Port Id -> " + expandedDistributedPortId + " successfully configured!");
-              }
-              else {
-                  VSphereLogger.vsLogger(jLogger, "Failed to find Distributed Virtual Portgroup for Port Group -> " +
-					 expandedDistributedPortGroup);
-              }
-          }
-          else {
-              VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't distributed switch");
-          }
+            if (virtualDeviceBackingInfo instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo) {
+          
+                VirtualEthernetCardDistributedVirtualPortBackingInfo virtualEthernetCardDistributedVirtualPortBackingInfo =
+                        (VirtualEthernetCardDistributedVirtualPortBackingInfo) virtualDeviceBackingInfo;
+          
+                DistributedVirtualPortgroup distributedVirtualPortgroup =
+                        getVsphere().getDistributedVirtualPortGroupByName(getVM(), expandedDistributedPortGroup);
+          
+                if (distributedVirtualPortgroup != null) {
+                    DistributedVirtualSwitch distributedVirtualSwitch =
+                            getVsphere().getDistributedVirtualSwitchByPortGroup(distributedVirtualPortgroup);
+          
+                    DistributedVirtualSwitchPortConnection distributedVirtualSwitchPortConnection =
+                            new DistributedVirtualSwitchPortConnection();
+          
+                    distributedVirtualSwitchPortConnection.setSwitchUuid(distributedVirtualSwitch.getUuid());
+                    distributedVirtualSwitchPortConnection.setPortgroupKey(distributedVirtualPortgroup.getKey());
+                    distributedVirtualSwitchPortConnection.setPortKey(expandedDistributedPortId);
+          
+                    virtualEthernetCardDistributedVirtualPortBackingInfo.setPort(distributedVirtualSwitchPortConnection);
+          
+                    VSphereLogger.vsLogger(jLogger, "Distributed Switch Port Group -> " + expandedDistributedPortGroup +
+                            "Port Id -> " + expandedDistributedPortId + " successfully configured!");
+                }
+                else {
+                    VSphereLogger.vsLogger(jLogger, "Failed to find Distributed Virtual Portgroup for Port Group -> " +
+                       expandedDistributedPortGroup);
+                }
+            }
+            else {
+                VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't distributed switch");
+            }
         }
 
         VirtualDeviceConfigSpec vdspec = new VirtualDeviceConfigSpec();
@@ -245,7 +242,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
-	}
+    }
 
     private VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
         for (VirtualDevice vd : devices) {
@@ -259,35 +256,34 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     @Extension
     public static final class ReconfigureNetworkAdaptersDescriptor extends ReconfigureStepDescriptor {
 
-	public ReconfigureNetworkAdaptersDescriptor() {
-	    load();
-	}
-
+        public ReconfigureNetworkAdaptersDescriptor() {
+            load();
+        }
+    
         public FormValidation doCheckMacAddress(@QueryParameter String value)
-	    throws IOException, ServletException {
-
+                throws IOException, ServletException {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
         }
-
-	@Override
-	public String getDisplayName() {
-	    return Messages.vm_title_ReconfigureNetworkAdapter();
-	}
-
-	public FormValidation doTestData(@QueryParameter DeviceAction deviceAction, @QueryParameter String deviceLabel,
-					 @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
-                                         @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
-                                         @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
-	    try {
-		if (standardSwitch && distributedSwitch) {
+    
+        @Override
+        public String getDisplayName() {
+            return Messages.vm_title_ReconfigureNetworkAdapter();
+        }
+    
+        public FormValidation doTestData(@QueryParameter DeviceAction deviceAction, @QueryParameter String deviceLabel,
+                @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
+                @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
+                @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
+            try {
+                if (standardSwitch && distributedSwitch) {
                     return FormValidation.error(Messages.validation_wrongSwitchSelection());
                 }
-		return doCheckMacAddress(macAddress);
-	    } catch (Exception e) {
-		throw new RuntimeException(e);
-	    }
-	}
+                return doCheckMacAddress(macAddress);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 }

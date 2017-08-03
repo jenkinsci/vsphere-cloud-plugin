@@ -18,21 +18,21 @@ import java.io.PrintStream;
 
 public class VSphereLogger {
 
-	/**
-	 * This is simply a wrapper method to clean up this class.  This method
-	 * checks the verboseOutput flag and writes to the logger as appropriate.
-	 * 
+    /**
+     * This is simply a wrapper method to clean up this class.  This method
+     * checks the verboseOutput flag and writes to the logger as appropriate.
+     * 
      * @param logger - logger that should receive the information
      * @param str - The text to be logged.
-	 */
-	public static void vsLogger(PrintStream logger, String str){
-		if(logger!=null){
-			logger.println("["+Messages.VSphereLogger_title()+"] "+str);
-		}
-	}
+     */
+    public static void vsLogger(PrintStream logger, String str) {
+        if (logger!=null) {
+            logger.println("["+Messages.VSphereLogger_title()+"] "+str);
+        }
+    }
 
-    public static void vsLogger(PrintStream logger, Exception e){
-        if(logger == null) {
+    public static void vsLogger(PrintStream logger, Exception e) {
+        if (logger == null) {
             return;
         }
 

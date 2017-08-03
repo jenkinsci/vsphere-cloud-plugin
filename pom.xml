@@ -18,7 +18,7 @@
             <name>Jason Swager</name>
             <email>jswager@alohaoi.com</email>
         </developer>
-			<developer>
+        <developer>
             <id>elordahl</id>
             <name>Eric Lordahl</name>
             <email>elordahl@vt.edu</email>
@@ -26,10 +26,10 @@
     </developers>
     <licenses>
         <license>
-	    <name>The Apache Software License, Version 2.0</name>
-	    <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-	    <distribution>repo</distribution>
-	    <comments>A business-friendly OSS license</comments>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+            <comments>A business-friendly OSS license</comments>
         </license>
      </licenses>
  

@@ -200,7 +200,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 if (property instanceof FolderVSphereCloudProperty) {
 
                     FolderVSphereCloudProperty vSphereCloudProperty = (FolderVSphereCloudProperty) property;
-                    for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : ((FolderVSphereCloudProperty) property).getClouds()) {
+                    for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : vSphereCloudProperty.getClouds()) {
                         select.add(vSphereCloud.getVsDescription());
                     }
                     hasVsphereClouds = true;

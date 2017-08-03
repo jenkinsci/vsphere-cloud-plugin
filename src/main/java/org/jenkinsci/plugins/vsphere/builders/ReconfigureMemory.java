@@ -14,10 +14,6 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.ResourceAllocationInfo;
-import com.vmware.vim25.SharesInfo;
-import com.vmware.vim25.VirtualDevice;
-import com.vmware.vim25.VirtualEthernetCard;
 import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
