@@ -14,7 +14,6 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.*;
 import hudson.*;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
@@ -31,7 +30,6 @@ import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Arrays;
 
 public class ReconfigureCpu extends ReconfigureStep {
 

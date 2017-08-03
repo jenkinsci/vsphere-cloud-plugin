@@ -29,7 +29,6 @@ import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.StringUtils;
 
-import com.vmware.vim25.CustomizationSpec;
 import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.InvalidProperty;

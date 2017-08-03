@@ -14,7 +14,6 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.StringExpression;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
@@ -25,7 +24,6 @@ import java.io.PrintStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
@@ -39,7 +37,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
