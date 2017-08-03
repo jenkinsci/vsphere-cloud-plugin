@@ -16,17 +16,14 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import hudson.*;
 import hudson.model.*;
-import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.Collection;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
 
-import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;

@@ -60,7 +60,6 @@ import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
-import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;

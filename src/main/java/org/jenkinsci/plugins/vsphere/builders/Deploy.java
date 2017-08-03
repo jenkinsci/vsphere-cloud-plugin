@@ -14,7 +14,6 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.StringExpression;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
@@ -25,7 +24,6 @@ import java.io.PrintStream;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
@@ -39,7 +37,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
@@ -59,7 +56,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
     @DataBoundConstructor
     public Deploy(String template, String clone, boolean linkedClone,
-              String resourcePool, String cluster, String datastore, String folder, String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
+            String resourcePool, String cluster, String datastore, String folder, String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
         this.template = template;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -100,7 +97,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }
@@ -112,7 +109,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     public boolean isPowerOn() {
         return powerOn;
     }
-    
+
     public int getTimeoutInSeconds() {
         return timeoutInSeconds;
     }
@@ -291,6 +288,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             }
         }
     }
+
     /**
      * This class is used to inject the IP value into the build environment
      * as a variable so that it can be used with other plugins. (Copied from PowerOn builder)
