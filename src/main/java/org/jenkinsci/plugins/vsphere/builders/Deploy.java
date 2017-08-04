@@ -40,7 +40,7 @@ import com.vmware.vim25.mo.VirtualMachine;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
-    private final int TIMEOUT_DEFAULT = 60;
+    private static final int TIMEOUT_DEFAULT = 60;
 
     private final String template;
     private final String clone;
@@ -51,12 +51,14 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
-    private final int timeoutInSeconds;
+    /** null means use default, zero or negative means don't even try at all. */
+    private final Integer timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
     public Deploy(String template, String clone, boolean linkedClone,
-            String resourcePool, String cluster, String datastore, String folder, String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
+            String resourcePool, String cluster, String datastore, String folder,
+            String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
         this.template = template;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -66,12 +68,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.folder=folder;
         this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
-        if (timeoutInSeconds != null) {
-            this.timeoutInSeconds = timeoutInSeconds;
-        }
-        else {
-            this.timeoutInSeconds = TIMEOUT_DEFAULT;
-        }
+        this.timeoutInSeconds = timeoutInSeconds;
     }
 
     public String getTemplate() {
@@ -111,7 +108,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     public int getTimeoutInSeconds() {
-        return timeoutInSeconds;
+        if (timeoutInSeconds==null) {
+            return TIMEOUT_DEFAULT;
+        }
+        return timeoutInSeconds.intValue();
     }
 
     @Override
@@ -199,10 +199,14 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         if (!powerOn) {
             return true; // don't try to obtain IP if VM isn't being turned on.
         }
-        VSphereLogger.vsLogger(jLogger, "Trying to get the IP address of \""+expandedClone+"\" for the next "+timeoutInSeconds+" seconds.");
-        IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSeconds);
+        final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
+        if (timeoutInSecondsForGetIp<=0) {
+            return true; // don't try to obtain IP if disabled
+        }
+        VSphereLogger.vsLogger(jLogger, "Trying to get the IP address of \""+expandedClone+"\" for the next "+timeoutInSecondsForGetIp+" seconds.");
+        IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
 
-        if(IP!=null) {
+        if (IP!=null) {
             VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedClone + "\" : " + IP);
             VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
 
@@ -211,10 +215,9 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 envAction.add("VSPHERE_IP", IP);
                 run.addAction(envAction);
             }
-
             return true;
         } else {
-            VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting 60 seconds to get IP for \""+expandedClone+"\" ");
+            VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting "+timeoutInSecondsForGetIp+" seconds to get IP for \""+expandedClone+"\" ");
             return false;
         }
     }
@@ -229,6 +232,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         @Override
         public String getDisplayName() {
             return Messages.vm_title_Deploy();
+        }
+
+        public static int getDefaultTimeoutInSeconds() {
+            return TIMEOUT_DEFAULT;
         }
 
         public FormValidation doCheckTemplate(@QueryParameter String value)
@@ -255,6 +262,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
+        }
+
+        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
+                throws IOException, ServletException {
+            return FormValidation.validateNonNegativeInteger(value);
         }
 
         public FormValidation doTestData(@QueryParameter String serverName,

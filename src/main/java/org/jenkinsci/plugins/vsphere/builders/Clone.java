@@ -41,7 +41,7 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
-    private final int TIMEOUT_DEFAULT = 60;
+    private static final int TIMEOUT_DEFAULT = 60;
 
     private final String sourceName;
     private final String clone;
@@ -52,7 +52,8 @@ public class Clone extends VSphereBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
-    private final int timeoutInSeconds;
+    /** null means use default, zero or negative means don't even try at all. */
+    private final Integer timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
@@ -68,12 +69,7 @@ public class Clone extends VSphereBuildStep {
         this.folder=folder;
         this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
-        if (timeoutInSeconds != null) {
-            this.timeoutInSeconds = timeoutInSeconds;
-        }
-        else {
-            this.timeoutInSeconds = TIMEOUT_DEFAULT;
-        }
+        this.timeoutInSeconds = timeoutInSeconds;
     }
 
     public String getSourceName() {
@@ -111,9 +107,12 @@ public class Clone extends VSphereBuildStep {
     public boolean isPowerOn() {
         return powerOn;
     }
-    
+
     public int getTimeoutInSeconds() {
-        return timeoutInSeconds;
+        if (timeoutInSeconds==null) {
+            return TIMEOUT_DEFAULT;
+        }
+        return timeoutInSeconds.intValue();
     }
 
     @Override
@@ -179,9 +178,10 @@ public class Clone extends VSphereBuildStep {
         }
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
-        if (powerOn) {
-            VSphereLogger.vsLogger(jLogger, "Powering on VM \""+expandedClone+"\" for the next "+timeoutInSeconds+" seconds.");
-            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSeconds);
+        final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
+        if (powerOn && timeoutInSecondsForGetIp>0) {
+            VSphereLogger.vsLogger(jLogger, "Powering on VM \""+expandedClone+"\".  Waiting for its IP for the next "+timeoutInSecondsForGetIp+" seconds.");
+            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
         }
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");
 
@@ -198,6 +198,10 @@ public class Clone extends VSphereBuildStep {
         @Override
         public String getDisplayName() {
             return Messages.vm_title_Clone();
+        }
+
+        public static int getDefaultTimeoutInSeconds() {
+            return TIMEOUT_DEFAULT;
         }
 
         public FormValidation doCheckSource(@QueryParameter String value)
@@ -247,6 +251,11 @@ public class Clone extends VSphereBuildStep {
         public FormValidation doCheckCustomizationSpec(@QueryParameter String value)
                 throws IOException, ServletException {
             return FormValidation.ok();
+        }
+
+        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
+                throws IOException, ServletException {
+            return FormValidation.validateNonNegativeInteger(value);
         }
 
         public FormValidation doTestData(@QueryParameter String serverName,
