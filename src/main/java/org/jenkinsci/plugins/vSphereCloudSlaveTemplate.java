@@ -357,9 +357,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
-        vSphereCloudProvisionedSlave slave = null;
         final PrintStream logger = listener.getLogger();
+        final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
+        final vSphereCloudProvisionedSlave slave;
+        try {
+            slave = provision(cloneName, logger, resolvedExtraConfigParameters, vSphere);
+        } finally {
+            vSphere.disconnect();
+        }
+        return slave;
+    }
+
+    private vSphereCloudProvisionedSlave provision(final String cloneName, final PrintStream logger, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
         final boolean POWER_ON = true;
         final boolean useCurrentSnapshot;
         final String snapshotToUse;
@@ -377,7 +387,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             snapshotToUse = null;
         }
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, this.customizationSpec, logger);
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
@@ -392,13 +402,21 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it doesn't belong to this Jenkins server: it belongs to {1}.  You MUST reconfigure one of these Jenkins servers to use a different naming strategy so that we no longer get clashes within vSphere host {2}. i.e. change the cloneNamePrefix on one/both to ensure uniqueness.", new Object[]{ cloneName, vmJenkinsUrl, this.getParent().getVsHost() } );
                 throw ex;
             }
-        }
-        try {
-            final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
-            if( !resolvedExtraConfigParameters.isEmpty() ) {
-                LOGGER.log(Level.FINE, "Provisioning slave {0} with guestinfo properties {1}", new Object[]{ cloneName, resolvedExtraConfigParameters });
-                vSphere.setExtraConfigParameters(cloneName, resolvedExtraConfigParameters);
+        } catch (VSphereException ex) {
+            // if anything else went wrong, attempt to tidy up
+            try {
+                vSphere.destroyVm(cloneName, false);
+            } catch (Exception logOnly) {
+                LOGGER.log(Level.SEVERE,
+                        "Unable to create and power-on new VM " + cloneName + " (cloned from image "
+                                + this.masterImageName
+                                + ") and, worse, bits of the VM may still exist as the attempt to delete the remains also failed.",
+                        logOnly);
             }
+            throw ex;
+        }
+        vSphereCloudProvisionedSlave slave = null;
+        try {
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
             final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
@@ -410,7 +428,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 vSphere.destroyVm(cloneName, false);
             }
         }
-        vSphere.disconnect();
         return slave;
     }
 
