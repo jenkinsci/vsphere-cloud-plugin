@@ -127,8 +127,9 @@ public class VSphere {
     public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
+        final Map<String, String> extraConfigParameters = null;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
     /**
@@ -149,8 +150,9 @@ public class VSphere {
     public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
+        final Map<String, String> extraConfigParameters = null;
         logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
     /**
@@ -183,6 +185,14 @@ public class VSphere {
      * @param powerOn
      *            If true then the new VM will be switched on after it has been
      *            created.
+     * @param extraConfigParameters
+     *            (Optional) parameters to set in the VM's "extra config"
+     *            object. This data can then be read back at a later stage.In
+     *            the case of parameters whose name starts "guestinfo.", the
+     *            parameter can be read by the VMware Tools on the client OS.
+     *            e.g. a variable named "guestinfo.Foo" with value "Bar" could
+     *            be read on the guest using the command-line
+     *            <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
      * @param customizationSpec
      *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
@@ -190,7 +200,7 @@ public class VSphere {
      * @throws VSphereException
      *             if anything goes wrong.
      */
-    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, PrintStream jLogger) throws VSphereException {
         try {
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if (sourceVm==null) {
@@ -227,7 +237,11 @@ public class VSphere {
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
             }
-
+            if (extraConfigParameters != null && !extraConfigParameters.isEmpty()) {
+                logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will have extra configuration parameters " + extraConfigParameters + ".");
+                VirtualMachineConfigSpec cs = createVMConfigSpecFromExtraConfigParameters(extraConfigParameters);
+                cloneSpec.setConfig(cs);
+            }
             if (customizationSpec != null && customizationSpec.length() > 0) {
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will use customization specification \"" + customizationSpec + "\".");
                 CustomizationSpecItem spec = getCustomizationSpecByName(customizationSpec);
@@ -1052,6 +1066,11 @@ public class VSphere {
      *             If an error occurred.
      */
     public void setExtraConfigParameters(String vmName, Map<String, String> parameters) throws VSphereException {
+        VirtualMachineConfigSpec cs = createVMConfigSpecFromExtraConfigParameters(parameters);
+        reconfigureVm(vmName, cs);
+    }
+
+    private static VirtualMachineConfigSpec createVMConfigSpecFromExtraConfigParameters(Map<String, String> parameters) {
         VirtualMachineConfigSpec cs = new VirtualMachineConfigSpec();
         OptionValue[] ourOptionValues = new OptionValue[parameters.size()];
         List<OptionValue> optionValues = new ArrayList<>();
@@ -1065,7 +1084,7 @@ public class VSphere {
             ourOptionValues[i] = optionValues.get(i);
         }
         cs.setExtraConfig(ourOptionValues);
-        reconfigureVm(vmName, cs);
+        return cs;
     }
 
     private void logMessage(PrintStream jLogger, String message) {
