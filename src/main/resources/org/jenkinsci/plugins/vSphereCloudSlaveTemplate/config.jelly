@@ -4,120 +4,130 @@
             <f:textbox/>
         </f:entry>
 
-        <f:entry title="${%Master Image Name}" field="masterImageName">
-            <f:textbox/>
-        </f:entry>
-
-        <f:optionalBlock title="${%Use Snapshot}" field="useSnapshot" inline="true">
-            <f:entry title="${%Snapshot Name}" field="snapshotName">
-                <f:textbox field="snapshotName"/>
-            </f:entry>
-        </f:optionalBlock>
-
-        <f:entry title="${%Linked Clone}" field="linkedClone">
-            <f:checkbox/>
-        </f:entry>
-        <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,vsDescription,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName"/>
-
-        <f:entry title="${%Cluster}" field="cluster">
-            <f:textbox/>
-        </f:entry>
-
-        <f:entry title="${%Resource Pool}" field="resourcePool">
-            <f:textbox/>
-        </f:entry>
-
-        <f:entry title="${%Datastore}" field="datastore">
-            <f:textbox/>
-        </f:entry>
-        
-        <f:entry title="${%Folder}" field="folder">
-            <f:textbox/>
-        </f:entry>
-
-        <f:entry title="${%Customization Specification}" field="customizationSpec">
-            <f:textbox/>
-        </f:entry>
-
-        <f:entry title="${%Description}" field="templateDescription">
-            <f:textbox/>
-        </f:entry>
-
-        <f:entry title="${%Instance Cap}" field="templateInstanceCap" description="The maximum number of clones to make of this master.  0 = unlimited">
-            <f:textbox clazz="required number" default="0"/>
-        </f:entry>
-
-        <f:entry title="${%# of Executors}" field="numberOfExecutors">
-            <f:textbox clazz="required positive-number" default="1"/>
-        </f:entry>
-
-        <f:entry title="${%Remote FS Root}" field="remoteFS">
-            <f:textbox/>
-        </f:entry>
-
         <f:entry title="${%Labels}" field="labelString">
             <f:textbox/>
         </f:entry>
 
-        <f:slave-mode name="mode" node="${instance}"/>
+        <f:advanced>
 
-        <f:entry title="${%Force VM Launch}" field="forceVMLaunch">
-            <f:checkbox/>
+            <f:entry title="${%Master Image Name}" field="masterImageName">
+                <f:textbox/>
+            </f:entry>
+
+            <f:optionalBlock title="${%Use Snapshot}" field="useSnapshot" inline="true">
+                <f:entry title="${%Snapshot Name}" field="snapshotName">
+                    <f:textbox field="snapshotName"/>
+                </f:entry>
+            </f:optionalBlock>
+
+            <f:entry title="${%Linked Clone}" field="linkedClone">
+                <f:checkbox/>
+            </f:entry>
+            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,vsDescription,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName"/>
+
+            <f:entry title="${%Cluster}" field="cluster">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Resource Pool}" field="resourcePool">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Datastore}" field="datastore">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Folder}" field="folder">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Customization Specification}" field="customizationSpec">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Description}" field="templateDescription">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Instance Cap}" field="templateInstanceCap" description="The maximum number of clones to make of this master.  0 = unlimited">
+                <f:textbox clazz="required number" default="0"/>
+            </f:entry>
+
+            <f:entry title="${%# of Executors}" field="numberOfExecutors">
+                <f:textbox clazz="required positive-number" default="1"/>
+            </f:entry>
+
+            <f:entry title="${%Remote FS Root}" field="remoteFS">
+                <f:textbox/>
+            </f:entry>
+
+            <f:slave-mode name="mode" node="${instance}"/>
+
+            <f:entry title="${%Force VM Launch}" field="forceVMLaunch">
+                <f:checkbox/>
+            </f:entry>
+
+            <f:entry title="${%Wait for VMTools}" field="waitForVMTools">
+                <f:checkbox/>
+            </f:entry>
+
+            <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
+                <f:textbox clazz="required number" default="60"/>
+            </f:entry>
+
+            <f:entry title="${%Disconnect After Limited Builds}" field="limitedRunCount" description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
+                <f:textbox clazz="required number" default="1"/>
+            </f:entry>
+
+            <f:entry title="${%GuestInfo Properties}" help="${descriptor.getHelpFile('guestInfoProperties')}">
+                <f:repeatable field="guestInfoProperties" add="${%Add}">
+                    <st:include page="config.jelly" class="${descriptor.clazz}"/>
+                    <div align="right">
+                        <f:repeatableDeleteButton value="${%Delete}"/>
+                    </div>
+                </f:repeatable>
+            </f:entry>
+
+            <f:dropdownList name="launcher" title="${%Launch method}"
+                             help="${descriptor.getHelpFile('launcher')}">
+                <j:forEach var="d" items="${descriptor.getLauncherDescriptors()}">
+                    <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                          selected="${instance.launcher!=null and d.equals(instance.launcher.descriptor)}"
+                                          title="${d.displayName}">
+                        <j:set var="descriptor" value="${d}"/>
+                        <j:set var="instance" value="${(instance.launcher!=null and d.equals(instance.launcher.descriptor)) ? instance.launcher : null}"/>
+                        <f:invisibleEntry>
+                            <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                        </f:invisibleEntry>
+                        <st:include from="${d}" page="${d.configPage}" optional="true"/>
+                    </f:dropdownListBlock>
+                </j:forEach>
+            </f:dropdownList>
+
+            <f:dropdownList name="retentionStrategy" title="${%Retention Strategy}"
+                             help="${descriptor.getHelpFile('retentionStrategy')}">
+                <j:forEach var="d" items="${descriptor.getRetentionStrategyDescriptors()}">
+                    <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
+                                          selected="${instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)}"
+                                          title="${d.displayName}">
+                        <j:set var="descriptor" value="${d}"/>
+                        <j:set var="instance" value="${(instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)) ? instance.retentionStrategy : null}"/>
+                        <f:invisibleEntry>
+                             <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
+                        </f:invisibleEntry>
+                        <st:include from="${d}" page="${d.configPage}" optional="true"/>
+                    </f:dropdownListBlock>
+                </j:forEach>
+            </f:dropdownList>
+
+            <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+        </f:advanced>
+
+        <f:entry title="">
+            <div align="right">
+                <f:repeatableDeleteButton value="${%Delete vSphere Template}"/>
+            </div>
         </f:entry>
 
-        <f:entry title="${%Wait for VMTools}" field="waitForVMTools">
-            <f:checkbox/>
-        </f:entry>
-
-        <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
-            <f:textbox clazz="required number" default="60"/>
-        </f:entry>
-
-        <f:entry title="${%Disconnect After Limited Builds}" field="limitedRunCount" description="${%Number of builds to allow before disconnecting the agent; use 0 for NEVER.}">
-            <f:textbox clazz="required number" default="1"/>
-        </f:entry>
-
-        <f:entry title="${%GuestInfo Properties}" help="${descriptor.getHelpFile('guestInfoProperties')}">
-            <f:repeatable field="guestInfoProperties" add="${%Add}">
-                <st:include page="config.jelly" class="${descriptor.clazz}"/>
-                <div align="right">
-                    <f:repeatableDeleteButton value="${%Delete}"/>
-                </div>
-            </f:repeatable>
-        </f:entry>
-
-        <f:dropdownList name="launcher" title="${%Launch method}"
-                         help="${descriptor.getHelpFile('launcher')}">
-            <j:forEach var="d" items="${descriptor.getLauncherDescriptors()}">
-                <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
-                                      selected="${instance.launcher!=null and d.equals(instance.launcher.descriptor)}"
-                                      title="${d.displayName}">
-                    <j:set var="descriptor" value="${d}"/>
-                    <j:set var="instance" value="${(instance.launcher!=null and d.equals(instance.launcher.descriptor)) ? instance.launcher : null}"/>
-                    <f:invisibleEntry>
-                        <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                    </f:invisibleEntry>
-                    <st:include from="${d}" page="${d.configPage}" optional="true"/>
-                </f:dropdownListBlock>
-            </j:forEach>
-        </f:dropdownList>
-
-        <f:dropdownList name="retentionStrategy" title="${%Retention Strategy}"
-                         help="${descriptor.getHelpFile('retentionStrategy')}">
-            <j:forEach var="d" items="${descriptor.getRetentionStrategyDescriptors()}">
-                <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
-                                      selected="${instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)}"
-                                      title="${d.displayName}">
-                    <j:set var="descriptor" value="${d}"/>
-                    <j:set var="instance" value="${(instance.retentionStrategy!=null and d.equals(instance.retentionStrategy.descriptor)) ? instance.retentionStrategy : null}"/>
-                    <f:invisibleEntry>
-                         <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                    </f:invisibleEntry>
-                    <st:include from="${d}" page="${d.configPage}" optional="true"/>
-                </f:dropdownListBlock>
-            </j:forEach>
-        </f:dropdownList>
-
-        <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
     </table>
 </j:jelly>

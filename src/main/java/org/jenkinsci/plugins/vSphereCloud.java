@@ -19,7 +19,6 @@ import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import net.sf.json.JSONObject;
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -687,58 +686,16 @@ public class vSphereCloud extends Cloud {
             return super.configure(req, o);
         }
 
-        /**
-         * For UI.
-         *
-         * @param vsHost        From UI.
-         * @param vsDescription From UI.
-         * @param credentialsId From UI.
-         * @return Result of the validation.
-         */
-        public FormValidation doTestConnection(@QueryParameter String vsHost,
-                                               @QueryParameter String vsDescription,
-                                               @QueryParameter String credentialsId) {
-            try {
-                /* We know that these objects are not null */
-                if (vsHost.length() == 0) {
-                    return FormValidation.error("vSphere Host is not specified");
-                } else {
-                    /* Perform other sanity checks. */
-                    if (!vsHost.startsWith("https://")) {
-                        return FormValidation.error("vSphere host must start with https://");
-                    } else if (vsHost.endsWith("/")) {
-                        return FormValidation.error("vSphere host name must NOT end with a trailing slash");
-                    }
-                }
-
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
-                final String effectiveUsername = config.getUsername();
-                final String effectivePassword = config.getPassword();
-
-                if (StringUtils.isEmpty(effectiveUsername)) {
-                    return FormValidation.error("Username is not specified");
-                }
-
-                if (StringUtils.isEmpty(effectivePassword)) {
-                    return FormValidation.error("Password is not specified");
-                }
-
-                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
-
-                return FormValidation.ok("Connected successfully");
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+        public FormValidation doCheckVsDescription(@QueryParameter String value) {
+            return FormValidation.validateRequired(value);
         }
 
-        public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String maxOnlineSlaves) {
-            return FormValidation.validateNonNegativeInteger(maxOnlineSlaves);
+        public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
         }
 
-        public FormValidation doCheckInstanceCap(@QueryParameter String instanceCap) {
-            return FormValidation.validateNonNegativeInteger(instanceCap);
+        public FormValidation doCheckInstanceCap(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
         }
     }
 }
