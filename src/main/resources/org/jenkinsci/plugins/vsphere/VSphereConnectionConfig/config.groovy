@@ -16,3 +16,5 @@ f.entry(title:_("Credentials"), field:"credentialsId") {
             r = null;
     }""" /* workaround for JENKINS-19124 */)
 }
+
+f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,credentialsId")
