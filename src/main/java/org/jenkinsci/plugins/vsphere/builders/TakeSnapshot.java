@@ -79,6 +79,7 @@ public class TakeSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 		return false;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener)  {
 		boolean retVal = false;
 		try {

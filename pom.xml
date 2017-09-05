@@ -3,7 +3,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>2.6</version>
+        <version>2.22</version>
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -37,27 +37,27 @@
         <connection>scm:git:https://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
         <developerConnection>scm:git:https://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
-      <tag>HEAD</tag>
-  </scm>    
+        <tag>HEAD</tag>
+    </scm>    
   
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
- <repositories>
-    <repository>
-      <id>repo.jenkins-ci.org</id>
-      <name>Jenkins Repository</name>
-      <url>http://repo.jenkins-ci.org/public/</url>
-    </repository>
-  </repositories>
+    <repositories>
+        <repository>
+            <id>repo.jenkins-ci.org</id>
+            <name>Jenkins Repository</name>
+            <url>http://repo.jenkins-ci.org/public/</url>
+        </repository>
+    </repositories>
 
-  <pluginRepositories>
-     <pluginRepository>
-        <id>repo.jenkins-ci.org</id>
-        <url>http://repo.jenkins-ci.org/public/</url>
-     </pluginRepository>
-  </pluginRepositories>
+    <pluginRepositories>
+        <pluginRepository>
+            <id>repo.jenkins-ci.org</id>
+            <url>http://repo.jenkins-ci.org/public/</url>
+        </pluginRepository>
+    </pluginRepositories>
     
     <dependencies>
         <dependency>
@@ -119,4 +119,3 @@
         </plugins>
     </build>
 </project>
-

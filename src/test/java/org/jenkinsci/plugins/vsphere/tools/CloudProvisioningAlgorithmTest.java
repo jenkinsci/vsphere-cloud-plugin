@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
-import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.junit.Before;
 import org.junit.Test;
 
