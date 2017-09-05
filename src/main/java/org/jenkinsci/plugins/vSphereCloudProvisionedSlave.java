@@ -57,13 +57,20 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
         super._terminate(listener);
-        final vSphereCloudLauncher launcher = (vSphereCloudLauncher) getLauncher();
-        if (launcher != null) {
-            final vSphereCloud cloud = launcher.findOurVsInstance();
-            if (cloud != null) {
+        try {
+            final ComputerLauncher l = getLauncher();
+            final vSphereCloudLauncher launcher = l instanceof vSphereCloudLauncher ? (vSphereCloudLauncher) l : null;
+            if (launcher != null) {
+                final vSphereCloud cloud = launcher.findOurVsInstance();
                 final String cloneName = this.getComputer().getName();
                 cloud.provisionedSlaveHasTerminated(cloneName);
+            } else {
+                vSphereCloud.Log(listener, "%1s._terminate for vmName %2s failed as getLauncher() returned %3s",
+                        getClass().getSimpleName(), getVmName(), l);
             }
+        } catch (RuntimeException ex) {
+            vSphereCloud.Log(listener, ex, "%1s._terminate for vmName %2s failed",
+                    getClass().getSimpleName(), getVmName());
         }
     }
 

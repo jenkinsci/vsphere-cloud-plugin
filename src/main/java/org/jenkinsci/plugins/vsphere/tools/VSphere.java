@@ -64,35 +64,35 @@ import com.vmware.vim25.mo.DistributedVirtualPortgroup;
 import com.vmware.vim25.mo.DistributedVirtualSwitch;
 
 public class VSphere {
-	private final URL url;
-	private final String session;
-	private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
+    private final URL url;
+    private final String session;
+    private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
-	private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException{
-		try {
-			//TODO - change ignoreCert to be configurable
-			this.url = new URL(url);
-			this.session = (new ServiceInstance(this.url, user, pw, true)).getServerConnection().getSessionStr();
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-	}
+    private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+        try {
+            //TODO - change ignoreCert to be configurable
+            this.url = new URL(url);
+            this.session = (new ServiceInstance(this.url, user, pw, true)).getServerConnection().getSessionStr();
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
 
-	private ServiceInstance getServiceInstance() throws RemoteException, MalformedURLException{
-		return new ServiceInstance(url, session, true);
-	}
+    private ServiceInstance getServiceInstance() throws RemoteException, MalformedURLException {
+        return new ServiceInstance(url, session, true);
+    }
 
-	/**
-	 * Initiates Connection to vSphere Server
-         * @param server Server URL
-	 * @param user Username.
-	 * @param pw Password.
-	 * @throws VSphereException If an error occurred.
-	 * @return A connected instance.
-	 */
-	public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
-		return new VSphere(server, user, pw);
-	}
+    /**
+     * Initiates Connection to vSphere Server
+     * @param server Server URL
+     * @param user Username.
+     * @param pw Password.
+     * @throws VSphereException If an error occurred.
+     * @return A connected instance.
+     */
+    public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+        return new VSphere(server, user, pw);
+    }
 
     /**
      * Disconnect from vSphere server.
@@ -127,8 +127,9 @@ public class VSphere {
     public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
+        final Map<String, String> extraConfigParameters = null;
         logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
     /**
@@ -149,8 +150,9 @@ public class VSphere {
     public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
+        final Map<String, String> extraConfigParameters = null;
         logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
     /**
@@ -183,6 +185,14 @@ public class VSphere {
      * @param powerOn
      *            If true then the new VM will be switched on after it has been
      *            created.
+     * @param extraConfigParameters
+     *            (Optional) parameters to set in the VM's "extra config"
+     *            object. This data can then be read back at a later stage.In
+     *            the case of parameters whose name starts "guestinfo.", the
+     *            parameter can be read by the VMware Tools on the client OS.
+     *            e.g. a variable named "guestinfo.Foo" with value "Bar" could
+     *            be read on the guest using the command-line
+     *            <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
      * @param customizationSpec
      *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
@@ -190,14 +200,14 @@ public class VSphere {
      * @throws VSphereException
      *             if anything goes wrong.
      */
-    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
-        try{
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        try {
             final VirtualMachine sourceVm = getVmByName(sourceName);
-            if(sourceVm==null) {
-                throw new VSphereException("VM or template \"" + sourceName + "\" not found");
+            if (sourceVm==null) {
+                throw new VSphereNotFoundException("VM or template", sourceName);
             }
-            if(getVmByName(cloneName)!=null){
-                throw new VSphereException("VM \"" + cloneName + "\" already exists");
+            if (getVmByName(cloneName)!=null) {
+                throw new VSphereDuplicateException("VM", cloneName);
             }
 
             final VirtualMachineConfigInfo vmConfig = sourceVm.getConfig();
@@ -214,21 +224,25 @@ public class VSphere {
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
-                    throw new VSphereException("Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
+                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \"" + namedSnapshot + "\".");
                 cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
             }
             if (useCurrentSnapshot) {
                 final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
-                if(currentSnapShot==null){
-                    throw new VSphereException("Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
+                if (currentSnapShot==null) {
+                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
             }
-
-            if(customizationSpec != null && customizationSpec.length() > 0) {
+            if (extraConfigParameters != null && !extraConfigParameters.isEmpty()) {
+                logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will have extra configuration parameters " + extraConfigParameters + ".");
+                VirtualMachineConfigSpec cs = createVMConfigSpecFromExtraConfigParameters(extraConfigParameters);
+                cloneSpec.setConfig(cs);
+            }
+            if (customizationSpec != null && customizationSpec.length() > 0) {
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will use customization specification \"" + customizationSpec + "\".");
                 CustomizationSpecItem spec = getCustomizationSpecByName(customizationSpec);
                 cloneSpec.setCustomization(spec.getSpec());
@@ -250,14 +264,14 @@ public class VSphere {
             logMessage(jLogger, "Started cloning of " + sourceType + " \"" + sourceName + "\". Please wait ...");
 
             final String status = task.waitForTask();
-            if(!TaskInfoState.success.toString().equals(status)) {
+            if (!TaskInfoState.success.toString().equals(status)) {
                 throw newVSphereException(task.getTaskInfo(), "Couldn't clone \""+ sourceName +"\". " +
                         "Clone task ended with status " + status + ".");
             }
             logMessage(jLogger, "Successfully cloned VM \"" + sourceName + "\" to create \"" + cloneName + "\".");
-        } catch(RuntimeException | VSphereException e){
+        } catch(RuntimeException | VSphereException e) {
             throw e;
-        } catch(Exception e){
+        } catch(Exception e) {
             throw new VSphereException(e);
         }
     }
@@ -271,12 +285,12 @@ public class VSphere {
     }
 
     private VirtualMachineRelocateSpec createRelocateSpec(PrintStream jLogger, boolean linkedClone, String resourcePoolName,
-                                                          String cluster, String datastoreName, boolean isResourcePoolRequired) throws RemoteException, MalformedURLException, VSphereException {
+            String cluster, String datastoreName, boolean isResourcePoolRequired) throws RemoteException, MalformedURLException, VSphereException {
         VirtualMachineRelocateSpec rel  = new VirtualMachineRelocateSpec();
 
-        if(linkedClone){
+        if (linkedClone) {
             rel.setDiskMoveType("createNewChildDiskBacking");
-        }else{
+        } else {
             rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
         }
 
@@ -288,21 +302,19 @@ public class VSphere {
         }
 
         if (resourcePoolName != null && !resourcePoolName.isEmpty()) {
-        	ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
-
-        	if (resourcePool == null) {
-        		throw new VSphereException("Resource pool \"" + resourcePoolName + "\" not found");
-        	}
-
-        	rel.setPool(resourcePool.getMOR());
+            ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
+            if (resourcePool == null) {
+                throw new VSphereNotFoundException("Resource pool", resourcePoolName);
+            }
+            rel.setPool(resourcePool.getMOR());
         } else if (isResourcePoolRequired) {
-    		throw new VSphereException("You must specify a resource  pool  when using a template");
+            throw new VSphereException("You must specify a resource  pool  when using a template");
         }
 
         if (datastoreName != null && !datastoreName.isEmpty()) {
             Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
-            if (datastore==null){
-                throw new VSphereException("Datastore \"" + datastoreName + "\" not found!");
+            if (datastore==null) {
+                throw new VSphereNotFoundException("Datastore", datastoreName);
             }
             rel.setDatastore(datastore.getMOR());
         }
@@ -311,319 +323,314 @@ public class VSphere {
 
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
         VirtualMachine vm = getVmByName(name);
-        if(vm==null) {
-            throw new VSphereException("No VM or template " + name + " found");
+        if (vm==null) {
+            throw new VSphereNotFoundException("VM or template", name);
         }
         LOGGER.log(Level.FINER, "Reconfiguring VM. Please wait ...");
         try {
             Task task = vm.reconfigVM_Task(spec);
             String status = task.waitForTask();
-            if(status.equals(TaskInfoState.success.toString())) {
+            if (status.equals(TaskInfoState.success.toString())) {
                 return;
             }
             throw newVSphereException(task.getTaskInfo(), "Couldn't reconfigure \""+ name +"\"!");
-        } catch(RuntimeException | VSphereException e){
+        } catch(RuntimeException | VSphereException e) {
             throw e;
-        } catch(Exception e){
+        } catch(Exception e) {
             throw new VSphereException("VM cannot be reconfigured:" + e.getMessage(), e);
         }
     }
 
-	/**
-	 * @param name - Name of VM to start
-	 * @param timeoutInSeconds How long to wait for the VM to be running.
-	 * @throws VSphereException If an error occurred.
-	 */
-	public void startVm(String name, int timeoutInSeconds) throws VSphereException {
-		try{
-			VirtualMachine vm = getVmByName(name);
+    /**
+     * @param name - Name of VM to start
+     * @param timeoutInSeconds How long to wait for the VM to be running.
+     * @throws VSphereException If an error occurred.
+     */
+    public void startVm(String name, int timeoutInSeconds) throws VSphereException {
+        try {
+            VirtualMachine vm = getVmByName(name);
             if (vm == null) {
-                throw new VSphereException("Vm " + name + " was not found");
+                throw new VSphereNotFoundException("VM", name);
             }
-			if(isPoweredOn(vm))
-				return;
+            if (isPoweredOn(vm))
+                return;
 
-			if(vm.getConfig().template)
-				throw new VSphereException("VM represents a template!");
+            if (vm.getConfig().template)
+                throw new VSphereException("VM represents a template!");
 
-			Task task = vm.powerOnVM_Task(null);
+            Task task = vm.powerOnVM_Task(null);
 
             int timesToCheck = timeoutInSeconds / 5;
             // add one extra time for remainder
             timesToCheck++;
             LOGGER.log(Level.FINER, "Checking " + timesToCheck + " times for vm to be powered on");
 
-			for (int i=0; i<timesToCheck; i++){
-
-				if(task.getTaskInfo().getState()==TaskInfoState.success){
+            for (int i=0; i<timesToCheck; i++) {
+                if (task.getTaskInfo().getState()==TaskInfoState.success) {
                     LOGGER.log(Level.FINER, "VM was powered up successfully.");
                     return;
-				}
-
-				if (task.getTaskInfo().getState()==TaskInfoState.running ||
-						task.getTaskInfo().getState()==TaskInfoState.queued){
-					Thread.sleep(5000);
-				}
-
-				//Check for copied/moved question
-				VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
-				if(q!=null && q.getId().equals("_vmx1")){
-					vm.answerVM(q.getId(), q.getChoice().getDefaultIndex().toString());
+                }
+                if (task.getTaskInfo().getState()==TaskInfoState.running ||
+                        task.getTaskInfo().getState()==TaskInfoState.queued) {
+                    Thread.sleep(5000);
+                }
+                //Check for copied/moved question
+                VirtualMachineQuestionInfo q = vm.getRuntime().getQuestion();
+                if (q!=null && q.getId().equals("_vmx1")) {
+                    vm.answerVM(q.getId(), q.getChoice().getDefaultIndex().toString());
                     return;
-				}
-			}
-		}catch(InterruptedException e){ // build aborted
-			Thread.currentThread().interrupt(); // pass interrupt upwards
-			throw new VSphereException("VM cannot be started: " + e.getMessage(), e);
-		}catch(Exception e){
-			throw new VSphereException("VM cannot be started: " + e.getMessage(), e);
-		}
+                }
+            }
+        } catch(InterruptedException e) { // build aborted
+            Thread.currentThread().interrupt(); // pass interrupt upwards
+            throw new VSphereException("VM cannot be started: " + e.getMessage(), e);
+        } catch(Exception e) {
+            throw new VSphereException("VM cannot be started: " + e.getMessage(), e);
+        }
 
-		throw new VSphereException("VM cannot be started");
-	}
+        throw new VSphereException("VM cannot be started");
+    }
 
-	private ManagedObjectReference findSnapshotInTree(
-			VirtualMachineSnapshotTree[] snapTree, String snapName) {
-		LOGGER.log(Level.FINER, "Looking for snapshot " + snapName);
-		for (VirtualMachineSnapshotTree node : snapTree) {
-			if (snapName.equals(node.getName())) {
-				return node.getSnapshot();
-			} else {
-				VirtualMachineSnapshotTree[] childTree =
-						node.getChildSnapshotList();
-				if (childTree != null) {
-					ManagedObjectReference mor = findSnapshotInTree(
-							childTree, snapName);
-					if (mor != null) {
-						return mor;
-					}
-				}
-			}
-		}
-		return null;
-	}
+    private ManagedObjectReference findSnapshotInTree(
+            VirtualMachineSnapshotTree[] snapTree, String snapName) {
+        LOGGER.log(Level.FINER, "Looking for snapshot " + snapName);
+        for (VirtualMachineSnapshotTree node : snapTree) {
+            if (snapName.equals(node.getName())) {
+                return node.getSnapshot();
+            } else {
+                VirtualMachineSnapshotTree[] childTree =
+                        node.getChildSnapshotList();
+                if (childTree != null) {
+                    ManagedObjectReference mor = findSnapshotInTree(
+                            childTree, snapName);
+                    if (mor != null) {
+                        return mor;
+                    }
+                }
+            }
+        }
+        return null;
+    }
 
-	public VirtualMachineSnapshot getSnapshotInTree(
-			VirtualMachine vm, String snapName) {
-		if (vm == null || snapName == null) {
-			return null;
-		}
+    public VirtualMachineSnapshot getSnapshotInTree(
+            VirtualMachine vm, String snapName) {
+        if (vm == null || snapName == null) {
+            return null;
+        }
 
-		LOGGER.log(Level.FINER, "Looking for snapshot " + snapName + " in " + vm.getName() );
-		VirtualMachineSnapshotInfo info = vm.getSnapshot();
-		if (info != null)
-		{
-			VirtualMachineSnapshotTree[] snapTree =
-					info.getRootSnapshotList();
-			if (snapTree != null) {
-				ManagedObjectReference mor = findSnapshotInTree(
-						snapTree, snapName);
-				if (mor != null) {
-					return new VirtualMachineSnapshot(
-							vm.getServerConnection(), mor);
-				}
-			}
-		}
+        LOGGER.log(Level.FINER, "Looking for snapshot " + snapName + " in " + vm.getName() );
+        VirtualMachineSnapshotInfo info = vm.getSnapshot();
+        if (info != null) {
+            VirtualMachineSnapshotTree[] snapTree =
+                    info.getRootSnapshotList();
+            if (snapTree != null) {
+                ManagedObjectReference mor = findSnapshotInTree(
+                        snapTree, snapName);
+                if (mor != null) {
+                    return new VirtualMachineSnapshot(
+                            vm.getServerConnection(), mor);
+                }
+            }
+        }
 
-		return null;
-	}
+        return null;
+    }
 
-	public void revertToSnapshot(String vmName, String snapName) throws VSphereException{
+    public void revertToSnapshot(String vmName, String snapName) throws VSphereException {
 
-		VirtualMachine vm = getVmByName(vmName);
-		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
+        VirtualMachine vm = getVmByName(vmName);
+        VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
 
-		if (snap == null) {
-			LOGGER.log(Level.SEVERE, "Cannot find snapshot: '" + snapName + "' for virtual machine: '" + vm.getName()+"'");
-			throw new VSphereException("Virtual Machine snapshot cannot be found");
-		}
+        if (snap == null) {
+            LOGGER.log(Level.SEVERE, "Cannot find snapshot: '" + snapName + "' for virtual machine: '" + vm.getName()+"'");
+            throw new VSphereNotFoundException("Snapshot", snapName);
+        }
 
-		try{
-			Task task = snap.revertToSnapshot_Task(null);
-			if (!task.waitForTask().equals(Task.SUCCESS)) {
-				final String msg = "Could not revert to snapshot '" + snap.toString() + "' for virtual machine:'" + vm.getName()+"'";
-				LOGGER.log(Level.SEVERE, msg);
-				throw newVSphereException(task.getTaskInfo(), msg);
-			}
-		} catch(RuntimeException | VSphereException e){
-			throw e;
-		}catch(Exception e){
-			throw new VSphereException(e);
-		}
-	}
+        try {
+            Task task = snap.revertToSnapshot_Task(null);
+            if (!task.waitForTask().equals(Task.SUCCESS)) {
+                final String msg = "Could not revert to snapshot '" + snap.toString() + "' for virtual machine:'" + vm.getName()+"'";
+                LOGGER.log(Level.SEVERE, msg);
+                throw newVSphereException(task.getTaskInfo(), msg);
+            }
+        } catch(RuntimeException | VSphereException e) {
+            throw e;
+        } catch(Exception e) {
+            throw new VSphereException(e);
+        }
+    }
 
-	public void deleteSnapshot(String vmName, String snapName, boolean consolidate, boolean failOnNoExist) throws VSphereException{
+    public void deleteSnapshot(String vmName, String snapName, boolean consolidate, boolean failOnNoExist) throws VSphereException {
 
-		VirtualMachine vm = getVmByName(vmName);
-		VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
+        VirtualMachine vm = getVmByName(vmName);
+        VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
 
-		if (snap == null && failOnNoExist) {
-			throw new VSphereException("Virtual Machine snapshot cannot be found");
-		}
+        if (snap == null && failOnNoExist) {
+            throw new VSphereNotFoundException("Snapshot", snapName);
+        }
 
-		try{
+        try {
+            Task task;
+            if (snap!=null) {
+                //Does not delete subtree; Implicitly consolidates disk
+                task = snap.removeSnapshot_Task(false);
+                if (!task.waitForTask().equals(Task.SUCCESS)) {
+                    throw newVSphereException(task.getTaskInfo(), "Could not delete snapshot");
+                }
+            }
 
-			Task task;
-			if (snap!=null){
-				//Does not delete subtree; Implicitly consolidates disk
-				task = snap.removeSnapshot_Task(false);
-				if (!task.waitForTask().equals(Task.SUCCESS)) {
-					throw newVSphereException(task.getTaskInfo(), "Could not delete snapshot");
-				}
-			}
+            if (!consolidate)
+                return;
 
-			if(!consolidate)
-				return;
+            //This might be redundant, but I think it consolidates all disks,
+            //where as the removeSnapshot only consolidates the individual disk
+            task = vm.consolidateVMDisks_Task();
+            if (!task.waitForTask().equals(Task.SUCCESS)) {
+                throw newVSphereException(task.getTaskInfo(), "Could not consolidate VM disks");
+            }
+        } catch(RuntimeException | VSphereException e) {
+            throw e;
+        } catch(Exception e) {
+            throw new VSphereException(e);
+        }
+    }
 
-			//This might be redundant, but I think it consolidates all disks,
-			//where as the removeSnapshot only consolidates the individual disk
-			task = vm.consolidateVMDisks_Task();
-			if (!task.waitForTask().equals(Task.SUCCESS)) {
-				throw newVSphereException(task.getTaskInfo(), "Could not consolidate VM disks");
-			}
-		} catch(RuntimeException | VSphereException e){
-			throw e;
-		}catch(Exception e){
-			throw new VSphereException(e);
-		}
-	}
-
-	public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException{
+    public void takeSnapshot(String vmName, String snapshot, String description, boolean snapMemory) throws VSphereException {
 
         final String message = "Could not take snapshot";
-            VirtualMachine vmToSnapshot = getVmByName(vmName);
-            if (vmToSnapshot == null) {
-                throw new VSphereException("Vm " + vmName + " was not found");
-            }
+        VirtualMachine vmToSnapshot = getVmByName(vmName);
+        if (vmToSnapshot == null) {
+            throw new VSphereNotFoundException("VM", vmName);
+        }
         try {
-			Task task = vmToSnapshot.createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
-			if (task.waitForTask().equals(Task.SUCCESS)) {
-				return;
-			}
-			throw newVSphereException(task.getTaskInfo(), message);
-		} catch(RuntimeException | VSphereException e){
-			throw e;
-		} catch (Exception e) {
+            Task task = vmToSnapshot.createSnapshot_Task(snapshot, description, snapMemory, !snapMemory);
+            if (task.waitForTask().equals(Task.SUCCESS)) {
+                return;
+            }
+            throw newVSphereException(task.getTaskInfo(), message);
+        } catch(RuntimeException | VSphereException e) {
+            throw e;
+        } catch (Exception e) {
             throw new VSphereException(message, e);
         }
-	}
+    }
 
-	public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
+    public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
 
-		final String message = "Could not mark as Template. Check it's power state or select \"force.\"";
-		try{
-			VirtualMachine vm = getVmByName(vmName);
-			if(vm.getConfig().template)
-				return;
+        final String message = "Could not mark as Template. Check it's power state or select \"force.\"";
+        try {
+            VirtualMachine vm = getVmByName(vmName);
+            if (vm.getConfig().template)
+                return;
 
-			if(isPoweredOff(vm) || force){
-				powerOffVm(vm, force, false);
-				vm.markAsTemplate();
-				return;
-			}
-		}catch(Exception e){
-			throw new VSphereException(message, e);
-		}
-		throw new VSphereException(message);
-	}
+            if (isPoweredOff(vm) || force) {
+                powerOffVm(vm, force, false);
+                vm.markAsTemplate();
+                return;
+            }
+        } catch(Exception e) {
+            throw new VSphereException(message, e);
+        }
+        throw new VSphereException(message);
+    }
 
-	public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException{
-		try{
-			VirtualMachine vm = getVmByName(name);
-			if(vm.getConfig().template){
-				vm.markAsVirtualMachine(
-						getResourcePoolByName(resourcePool, getClusterByName(cluster)),
-						null
-						);
-			}
-		}catch(Exception e){
-			throw new VSphereException("Could not convert to VM", e);
-		}
-	}
+    public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException {
+        try {
+            VirtualMachine vm = getVmByName(name);
+            if (vm.getConfig().template) {
+                vm.markAsVirtualMachine(
+                        getResourcePoolByName(resourcePool, getClusterByName(cluster)),
+                        null
+                        );
+            }
+        } catch(Exception e) {
+            throw new VSphereException("Could not convert to VM", e);
+        }
+    }
 
-	/**
-	 * Asks vSphere for the IP address used by a VM.
-	 * 
-	 * @param vm VirtualMachine name whose IP is to be returned.
-	 * @param timeout How long to wait (in seconds) for the IP address to known to vSphere.
-	 * @return String containing IP address.
-	 * @throws VSphereException If an error occurred.
-	 */
-	public String getIp(VirtualMachine vm, int timeout) throws VSphereException {
+    /**
+     * Asks vSphere for the IP address used by a VM.
+     * 
+     * @param vm VirtualMachine name whose IP is to be returned.
+     * @param timeout How long to wait (in seconds) for the IP address to known to vSphere.
+     * @return String containing IP address.
+     * @throws VSphereException If an error occurred.
+     */
+    public String getIp(VirtualMachine vm, int timeout) throws VSphereException {
 
-		if (vm==null)
-			throw new VSphereException("VM is null");
+        if (vm==null)
+            throw new VSphereException("VM is null");
 
-		//Determine how many attempts will be made to fetch the IP address
-		final int waitSeconds = 5;
-		final int maxTries;
-		if (timeout<=waitSeconds)
-			maxTries = 1;
-		else
-			maxTries = (int) Math.round((double)timeout / waitSeconds);
+        //Determine how many attempts will be made to fetch the IP address
+        final int waitSeconds = 5;
+        final int maxTries;
+        if (timeout<=waitSeconds)
+            maxTries = 1;
+        else
+            maxTries = (int) Math.round((double)timeout / waitSeconds);
 
-		for(int count=0; count<maxTries; count++){
+        for(int count=0; count<maxTries; count++) {
 
             GuestInfo guestInfo = vm.getGuest();
 
             // guest info can be null sometimes
-			if (guestInfo != null && guestInfo.getIpAddress() != null){
-				return guestInfo.getIpAddress();
-			}
-
-			try {
-				//wait
-				Thread.sleep(waitSeconds * 1000);
-			} catch (InterruptedException e) { // build aborted
-				Thread.currentThread().interrupt(); // pass interrupt upwards
-				break; // and abort our activities now.
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * @param vmName - name of VM object to retrieve
-	 * @return - VirtualMachine object
-	 * @throws VSphereException If an error occurred.
-	 */
-	public VirtualMachine getVmByName(String vmName) throws VSphereException {
-		try {
-			return (VirtualMachine) new InventoryNavigator(
-					getServiceInstance().getRootFolder()).searchManagedEntity(
-							"VirtualMachine", vmName);
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-	}
-
-        public int countVms() throws VSphereException {
-            int count = 0;
-            try {
-                final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
-                final ManagedEntity[] entities = navigator.searchManagedEntities(false);
-                count = entities.length;
-            } catch (Exception ex) {
-                throw new VSphereException(ex);
+            if (guestInfo != null && guestInfo.getIpAddress() != null) {
+                return guestInfo.getIpAddress();
             }
-            return count;
-        }
 
-        public int countVmsByPrefix(final String prefix) throws VSphereException {
-            int count = 0;
             try {
-                final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
-                final ManagedEntity[] entities = navigator.searchManagedEntities(false);
-                for(final ManagedEntity entity : entities) {
-                    if(entity.getName().startsWith(prefix)) {
-                        ++count;
-                    }
+                //wait
+                Thread.sleep(waitSeconds * 1000);
+            } catch (InterruptedException e) { // build aborted
+                Thread.currentThread().interrupt(); // pass interrupt upwards
+                break; // and abort our activities now.
+            }
+        }
+        return null;
+    }
+
+    /**
+     * @param vmName - name of VM object to retrieve
+     * @return - VirtualMachine object
+     * @throws VSphereException If an error occurred.
+     */
+    public VirtualMachine getVmByName(String vmName) throws VSphereException {
+        try {
+            return (VirtualMachine) new InventoryNavigator(
+                    getServiceInstance().getRootFolder()).searchManagedEntity(
+                            "VirtualMachine", vmName);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    public int countVms() throws VSphereException {
+        int count = 0;
+        try {
+            final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
+            final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+            count = entities.length;
+        } catch (Exception ex) {
+            throw new VSphereException(ex);
+        }
+        return count;
+    }
+
+    public int countVmsByPrefix(final String prefix) throws VSphereException {
+        int count = 0;
+        try {
+            final InventoryNavigator navigator = new InventoryNavigator(getServiceInstance().getRootFolder());
+            final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+            for(final ManagedEntity entity : entities) {
+                if (entity.getName().startsWith(prefix)) {
+                    ++count;
                 }
-            } catch (Exception ex) {
-                throw new VSphereException(ex);
             }
-            return count;
+        } catch (Exception ex) {
+            throw new VSphereException(ex);
         }
+        return count;
+    }
 
     private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity) throws RemoteException, MalformedURLException {
         if (rootEntity == null) {
@@ -707,104 +714,102 @@ public class VSphere {
         }
     }
 
-	/**
-	 * @return - ManagedEntity array of Datastore
-	 * @throws VSphereException If an error occurred.
-	 */
-	public ManagedEntity[] getDatastores() throws VSphereException {
-		try {
-			return new InventoryNavigator(
-					getServiceInstance().getRootFolder()).searchManagedEntities(
-							"Datastore");
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-	}
+    /**
+     * @return - ManagedEntity array of Datastore
+     * @throws VSphereException If an error occurred.
+     */
+    public ManagedEntity[] getDatastores() throws VSphereException {
+        try {
+            return new InventoryNavigator(
+                    getServiceInstance().getRootFolder()).searchManagedEntities(
+                            "Datastore");
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
 
-	/**
-	 * @param poolName - Name of pool to use
-	 * @return - ResourcePool object
-	 * @throws InvalidProperty
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws MalformedURLException
-	 * @throws VSphereException
-	 */
-	private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
-		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
+    /**
+     * @param poolName - Name of pool to use
+     * @return - ResourcePool object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException
+     * @throws VSphereException
+     */
+    private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
 
-		return (ResourcePool) new InventoryNavigator(
-				rootEntity).searchManagedEntity(
-						"ResourcePool", poolName);
-	}
+        return (ResourcePool) new InventoryNavigator(
+                rootEntity).searchManagedEntity(
+                        "ResourcePool", poolName);
+    }
 
-	/**
-	 * @param clusterName - Name of cluster name to find
-	 * @param rootEntity - managed entity to search
-	 * @return - ClusterComputeResource object
-	 * @throws InvalidProperty
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws MalformedURLException 
-	 * @throws VSphereException 
-	 */
-	private ClusterComputeResource getClusterByName(final String clusterName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
-		if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
+    /**
+     * @param clusterName - Name of cluster name to find
+     * @param rootEntity - managed entity to search
+     * @return - ClusterComputeResource object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException 
+     * @throws VSphereException 
+     */
+    private ClusterComputeResource getClusterByName(final String clusterName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity==null) rootEntity=getServiceInstance().getRootFolder();
 
-		return (ClusterComputeResource) new InventoryNavigator(
-				rootEntity).searchManagedEntity(
-						"ClusterComputeResource", clusterName);
-	}
+        return (ClusterComputeResource) new InventoryNavigator(
+                rootEntity).searchManagedEntity(
+                        "ClusterComputeResource", clusterName);
+    }
 
-	/**
-	 * @param clusterName - Name of cluster name to find
-	 * @return - ClusterComputeResource object
-	 * @throws InvalidProperty
-	 * @throws RuntimeFault
-	 * @throws RemoteException
-	 * @throws MalformedURLException 
-	 * @throws VSphereException 
-	 */
-	private ClusterComputeResource getClusterByName(final String clusterName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
-		return getClusterByName(clusterName, null);
-	}
+    /**
+     * @param clusterName - Name of cluster name to find
+     * @return - ClusterComputeResource object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException 
+     * @throws VSphereException 
+     */
+    private ClusterComputeResource getClusterByName(final String clusterName) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        return getClusterByName(clusterName, null);
+    }
 
-	/**
-	 * Detroys the VM in vSphere
-	 * @param name - VM object to destroy
-	 * @param failOnNoExist If true and the VM does not exist then a VSphereException will be thrown.
-	 * @throws VSphereException If an error occurred.
-	 */
-	public void destroyVm(String name, boolean failOnNoExist) throws VSphereException{
-		try{
-			VirtualMachine vm = getVmByName(name);
-			if(vm==null){
-				if(failOnNoExist) throw new VSphereException("VM \"" + name + "\" does not exist");
+    /**
+     * Destroys the VM in vSphere
+     * @param name - VM object to destroy
+     * @param failOnNoExist If true and the VM does not exist then a {@link VSphereNotFoundException} will be thrown.
+     * @throws VSphereException If an error occurred.
+     */
+    public void destroyVm(String name, boolean failOnNoExist) throws VSphereException {
+        try {
+            VirtualMachine vm = getVmByName(name);
+            if (vm==null) {
+                if (failOnNoExist) throw new VSphereNotFoundException("VM", name);
 
-				LOGGER.log(Level.FINER, "VM \"" + name + "\" does not exist, or already deleted!");
-				return;
-			}
+                LOGGER.log(Level.FINER, "VM \"" + name + "\" does not exist, or already deleted!");
+                return;
+            }
 
-
-			if(!vm.getConfig().template) {
+            if (!vm.getConfig().template) {
                 powerOffVm(vm, true, false);
             }
 
-			final Task task = vm.destroy_Task();
-			String status = task.waitForTask();
-			if(status.equals(Task.SUCCESS))
-			{
-				LOGGER.log(Level.FINER, "VM \"" + name + "\" was deleted successfully.");
-				return;
-			}
-			throw newVSphereException(task.getTaskInfo(), "Could not delete VM \""+ name +"\"!");
+            final Task task = vm.destroy_Task();
+            String status = task.waitForTask();
+            if (status.equals(Task.SUCCESS)) {
+                LOGGER.log(Level.FINER, "VM \"" + name + "\" was deleted successfully.");
+                return;
+            }
+            throw newVSphereException(task.getTaskInfo(), "Could not delete VM \""+ name +"\"!");
 
-		} catch(RuntimeException | VSphereException e){
-			throw e;
-		}catch(Exception e){
-			throw new VSphereException(e.getMessage(), e);
-		}
-	}
+        } catch(RuntimeException | VSphereException e) {
+            throw e;
+        } catch(Exception e) {
+            throw new VSphereException(e.getMessage(), e);
+        }
+    }
 
     /**
      * Renames a VM Snapshot
@@ -814,11 +819,11 @@ public class VSphere {
      * @param newDescription the new description of the VM's snapshot.
      * @throws VSphereException If an error occurred.
      */
-    public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription) throws VSphereException{
-        try{
+    public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription) throws VSphereException {
+        try {
             VirtualMachine vm = getVmByName(vmName);
-            if(vm==null){
-                throw new VSphereException("VM \"" + vmName + "\" does not exist");
+            if (vm==null) {
+                throw new VSphereNotFoundException("VM", vmName);
             }
 
             VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
@@ -828,9 +833,9 @@ public class VSphere {
             LOGGER.log(Level.FINER, "VM Snapshot was renamed successfully.");
             return;
 
-        } catch(RuntimeException | VSphereException e){
+        } catch(RuntimeException | VSphereException e) {
             throw e;
-        }catch(Exception e){
+        } catch(Exception e) {
             throw new VSphereException(e.getMessage(), e);
         }
     }
@@ -841,56 +846,55 @@ public class VSphere {
      * @param newName the new name of the vm
      * @throws VSphereException If an error occurred.
      */
-    public void renameVm(String oldName, String newName) throws VSphereException{
-        try{
+    public void renameVm(String oldName, String newName) throws VSphereException {
+        try {
             VirtualMachine vm = getVmByName(oldName);
-            if(vm==null){
-                throw new VSphereException("VM \"" + oldName + "\" does not exist");
+            if (vm==null) {
+                throw new VSphereNotFoundException("VM", oldName);
             }
 
             final Task task = vm.rename_Task(newName);
             final String status = task.waitForTask();
-            if(status.equals(Task.SUCCESS))
-            {
+            if (status.equals(Task.SUCCESS)) {
                 LOGGER.log(Level.FINER, "VM was renamed successfully.");
                 return;
             }
             throw newVSphereException(task.getTaskInfo(), "Could not rename VM \""+ oldName +"\"!");
 
-        } catch(RuntimeException | VSphereException e){
+        } catch(RuntimeException | VSphereException e) {
             throw e;
-        }catch(Exception e){
+        } catch(Exception e) {
             throw new VSphereException(e.getMessage(), e);
         }
     }
 
-	private boolean isSuspended(VirtualMachine vm){
-		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.suspended);
-	}
+    private boolean isSuspended(VirtualMachine vm) {
+        return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.suspended);
+    }
 
-	private boolean isPoweredOn(VirtualMachine vm){
-		return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOn);
-	}
+    private boolean isPoweredOn(VirtualMachine vm) {
+        return (vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOn);
+    }
 
-	private boolean isPoweredOff(VirtualMachine vm){
-		return (vm.getRuntime() != null && vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
-	}
+    private boolean isPoweredOff(VirtualMachine vm) {
+        return (vm.getRuntime() != null && vm.getRuntime().getPowerState() ==  VirtualMachinePowerState.poweredOff);
+    }
 
     public boolean vmToolIsEnabled(VirtualMachine vm) {
         VirtualMachineToolsStatus status = vm.getGuest().toolsStatus;
         return ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld));
     }
 
-	public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, boolean shutdownGracefully) throws VSphereException{
+    public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, boolean shutdownGracefully) throws VSphereException {
 
-		if(vm.getConfig().template)
-			throw new VSphereException("VM represents a template!");
+        if (vm.getConfig().template)
+            throw new VSphereException("VM represents a template!");
 
-		if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
+        if (isPoweredOn(vm) || (evenIfSuspended && isSuspended(vm))) {
             boolean doHardShutdown = true;
 
             String status;
-			try {
+            try {
                 if (!isSuspended(vm) && shutdownGracefully && vmToolIsEnabled(vm)) {
                     LOGGER.log(Level.FINER, "Requesting guest shutdown");
                     vm.shutdownGuest();
@@ -916,165 +920,163 @@ public class VSphere {
                     final Task task = vm.powerOffVM_Task();
                     status = task.waitForTask();
 
-                    if(status.equals(Task.SUCCESS)) {
+                    if (status.equals(Task.SUCCESS)) {
                         LOGGER.log(Level.FINER, "VM was powered down successfully.");
                         return;
                     }
                     throw newVSphereException(task.getTaskInfo(), "Machine could not be powered down!");
                 }
-            } catch(RuntimeException | VSphereException e){
+            } catch(RuntimeException | VSphereException e) {
                 throw e;
-			} catch (Exception e) {
-				throw new VSphereException(e);
-			}
-		}
-		else if (isPoweredOff(vm)){
-			LOGGER.log(Level.FINER, "Machine is already off.");
-			return;
-		}
+            } catch (Exception e) {
+                throw new VSphereException(e);
+            }
+        }
+        else if (isPoweredOff(vm)) {
+            LOGGER.log(Level.FINER, "Machine is already off.");
+            return;
+        }
 
-		throw new VSphereException("Machine could not be powered down!");
-	}
+        throw new VSphereException("Machine could not be powered down!");
+    }
 
-	public void suspendVm(VirtualMachine vm) throws VSphereException{
-		if (isPoweredOn(vm)) {
-			try {
-				//TODO is this better?
-				//vm.shutdownGuest()
-				final Task task = vm.suspendVM_Task();
-				final String status = task.waitForTask();
-				if(Task.SUCCESS.equals(status)) {
-					LOGGER.log(Level.FINER, "VM was suspended successfully.");
-					return;
-				}
-				throw newVSphereException(task.getTaskInfo(), "Machine could not be suspended!");
-			} catch(RuntimeException | VSphereException e){
-				throw e;
-			} catch (Exception e) {
-				throw new VSphereException(e);
-			}
-		}
-		else {
-			LOGGER.log(Level.FINER, "Machine not powered on.");
-			return;
-		}
-	}
-
-	/**
-	 * Private helper functions that finds the datanceter a VirtualMachine belongs to
-	 * @param managedEntity - VM object
-	 * @return returns Datacenter object
-	 */
-	private Datacenter getDataCenter(ManagedEntity managedEntity)
-	{
-		if (managedEntity != null) {
-			ManagedEntity parent = managedEntity.getParent();
-			if (parent.getMOR().getType().equals("Datacenter")) {
-				return (Datacenter) parent;
-			} else {
-				return getDataCenter(managedEntity.getParent());
-			}
-		} else {
-			return null;
-		}
-	}
-
-	/**
-	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
-	 * @param virtualMachine - VM object
-	 * @param name - the name of the Port Group
-	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
-	 * @throws VSphereException If an error occurred.
-	 */
-	public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
-														String name) throws VSphereException
-	{
-		try {
-			Datacenter datacenter = getDataCenter(virtualMachine);
-			for (Network network : datacenter.getNetworks())
-			{
-				if (network instanceof Network &&
-						(name.isEmpty() || network.getName().contentEquals(name)))
-				{
-					return network;
-				}
-			}
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-		return null;
-	}
-
-	/**
-	 * Find Distributed Virtual Port Group name in the same Datacenter as the VM
-	 * @param virtualMachine - VM object
-	 * @param name - the name of the Port Group
-	 * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
-	 * @throws VSphereException If an error occurred.
-	 */
-	public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
-																			 String name) throws VSphereException
-	{
-		try {
-			Datacenter datacenter = getDataCenter(virtualMachine);
-			for (Network network : datacenter.getNetworks())
-			{
-				if (network instanceof DistributedVirtualPortgroup &&
-						(name.isEmpty() || network.getName().contentEquals(name)))
-				{
-					return (DistributedVirtualPortgroup)network;
-				}
-			}
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-		return null;
-	}
-
-	/**
-	 * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
-	 * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
-	 * @return returns DistributedVirtualSwitch object that represents the vDS Switch
-	 * @throws VSphereException If an error occurred.
-	 */
-	public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
-			DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException
-	{
-		try
-		{
-			ManagedObjectReference managedObjectReference = new ManagedObjectReference();
-			managedObjectReference.setType("DistributedVirtualSwitch");
-			managedObjectReference.setVal(distributedVirtualPortgroup.getConfig().getDistributedVirtualSwitch().getVal());
-			return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
-		}
-		catch (Exception e)
-		{
-			throw new VSphereException(e);
-		}
-	}
+    public void suspendVm(VirtualMachine vm) throws VSphereException {
+        if (isPoweredOn(vm)) {
+            try {
+                //TODO is this better?
+                //vm.shutdownGuest()
+                final Task task = vm.suspendVM_Task();
+                final String status = task.waitForTask();
+                if (Task.SUCCESS.equals(status)) {
+                    LOGGER.log(Level.FINER, "VM was suspended successfully.");
+                    return;
+                }
+                throw newVSphereException(task.getTaskInfo(), "Machine could not be suspended!");
+            } catch(RuntimeException | VSphereException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new VSphereException(e);
+            }
+        }
+        else {
+            LOGGER.log(Level.FINER, "Machine not powered on.");
+            return;
+        }
+    }
 
     /**
-     * Passes data to a VM's "guestinfo" object. This data can then be read by
-     * the VMware Tools on the guest.
+     * Private helper functions that finds the datanceter a VirtualMachine belongs to
+     * @param managedEntity - VM object
+     * @return returns Datacenter object
+     */
+    private Datacenter getDataCenter(ManagedEntity managedEntity) {
+        if (managedEntity != null) {
+            ManagedEntity parent = managedEntity.getParent();
+            if (parent.getMOR().getType().equals("Datacenter")) {
+                return (Datacenter) parent;
+            } else {
+                return getDataCenter(managedEntity.getParent());
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+     * @param virtualMachine - VM object
+     * @param name - the name of the Port Group
+     * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @throws VSphereException If an error occurred.
+     */
+    public Network getNetworkPortGroupByName(VirtualMachine virtualMachine,
+            String name) throws VSphereException {
+        try {
+            Datacenter datacenter = getDataCenter(virtualMachine);
+            for (Network network : datacenter.getNetworks()) {
+                if (network instanceof Network &&
+                        (name.isEmpty() || network.getName().contentEquals(name))) {
+                    return network;
+                }
+            }
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+        return null;
+    }
+
+    /**
+     * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+     * @param virtualMachine - VM object
+     * @param name - the name of the Port Group
+     * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @throws VSphereException If an error occurred.
+     */
+    public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine,
+            String name) throws VSphereException {
+        try {
+            Datacenter datacenter = getDataCenter(virtualMachine);
+            for (Network network : datacenter.getNetworks()) {
+                if (network instanceof DistributedVirtualPortgroup &&
+                        (name.isEmpty() || network.getName().contentEquals(name))) {
+                    return (DistributedVirtualPortgroup)network;
+                }
+            }
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+        return null;
+    }
+
+    /**
+     * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
+     * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @return returns DistributedVirtualSwitch object that represents the vDS Switch
+     * @throws VSphereException If an error occurred.
+     */
+    public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
+            DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException {
+        try {
+            ManagedObjectReference managedObjectReference = new ManagedObjectReference();
+            managedObjectReference.setType("DistributedVirtualSwitch");
+            managedObjectReference.setVal(distributedVirtualPortgroup.getConfig().getDistributedVirtualSwitch().getVal());
+            return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
+        }
+        catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * Passes data to a VM's "extra config" object. This data can then be read
+     * back at a later stage.
+     * In the case of parameters whose name starts "guestinfo.", the parameter
+     * can be read by the VMware Tools on the client OS.
      * <p>
-     * e.g. a variable named "Foo" with value "Bar" could be read on the guest
-     * using the command-line <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * e.g. a variable named "guestinfo.Foo" with value "Bar" could be read on
+     * the guest using the command-line
+     * <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
      * </p>
      * 
      * @param vmName
      *            The name of the VM.
-     * @param variables
+     * @param parameters
      *            A {@link Map} of variable name to variable value.
      * @throws VSphereException
      *             If an error occurred.
      */
-    public void addGuestInfoVariable(String vmName, Map<String, String> variables) throws VSphereException {
+    public void setExtraConfigParameters(String vmName, Map<String, String> parameters) throws VSphereException {
+        VirtualMachineConfigSpec cs = createVMConfigSpecFromExtraConfigParameters(parameters);
+        reconfigureVm(vmName, cs);
+    }
+
+    private static VirtualMachineConfigSpec createVMConfigSpecFromExtraConfigParameters(Map<String, String> parameters) {
         VirtualMachineConfigSpec cs = new VirtualMachineConfigSpec();
-        OptionValue[] ourOptionValues = new OptionValue[variables.size()];
+        OptionValue[] ourOptionValues = new OptionValue[parameters.size()];
         List<OptionValue> optionValues = new ArrayList<>();
-        for (Map.Entry<String, String> eachVariable : variables.entrySet()) {
+        for (Map.Entry<String, String> eachVariable : parameters.entrySet()) {
             OptionValue ov = new OptionValue();
-            ov.setKey("guestinfo." + eachVariable.getKey());
+            ov.setKey(eachVariable.getKey());
             ov.setValue(eachVariable.getValue());
             optionValues.add(ov);
         }
@@ -1082,7 +1084,7 @@ public class VSphere {
             ourOptionValues[i] = optionValues.get(i);
         }
         cs.setExtraConfig(ourOptionValues);
-        reconfigureVm(vmName, cs);
+        return cs;
     }
 
     private void logMessage(PrintStream jLogger, String message) {

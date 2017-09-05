@@ -192,16 +192,16 @@ public class PowerOn extends VSphereBuildStep {
 			data.put(key, val);
 		}
 
-                @Override
+		@Override
 		public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
 			if (data!=null) env.putAll(data);
 		}
 
-                @Override
+		@Override
 		public String getIconFileName() { return null; }
-                @Override
+		@Override
 		public String getDisplayName() { return null; }
-                @Override
+		@Override
 		public String getUrlName() { return null; }
 	}
 }

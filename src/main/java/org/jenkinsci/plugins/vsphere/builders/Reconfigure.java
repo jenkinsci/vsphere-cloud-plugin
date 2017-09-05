@@ -20,6 +20,7 @@ import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
+import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;

@@ -57,7 +57,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 
 	public abstract void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
 
-        @Override
+	@Override
 	public VSphereBuildStepDescriptor getDescriptor() {
 		return (VSphereBuildStepDescriptor) Jenkins.getInstance().getDescriptor(getClass());
 	}

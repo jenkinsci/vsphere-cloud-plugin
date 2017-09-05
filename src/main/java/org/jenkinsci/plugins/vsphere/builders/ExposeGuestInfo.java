@@ -40,7 +40,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
     private final Boolean waitForIp4;
     private String resolvedEnvVariablePrefix = null;
     private String IP;
-    private final Map <String, String> envVars = new HashMap<>();
+    private final Map<String, String> envVars = new HashMap<>();
 
     @DataBoundConstructor
     public ExposeGuestInfo(final String vm, final String envVariablePrefix, Boolean waitForIp4) throws VSphereException {

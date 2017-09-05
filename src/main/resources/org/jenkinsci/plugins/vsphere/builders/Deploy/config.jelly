@@ -40,14 +40,15 @@ limitations under the License.
     <f:textbox  />
   </f:entry>
 
-  <f:entry title="${%Folder}" field="Folder">
+  <f:entry title="${%Folder}" field="folder">
     <f:textbox  />
   </f:entry>
 
-  <f:entry title="${%Power on?}" field="powerOn">
-    <f:checkbox  />
-  </f:entry>
-
+  <f:optionalBlock title="${%Power on?}" field="powerOn" inline="true">
+    <f:entry title="${%Max time to wait for IP}" field="timeoutInSeconds">
+      <f:number clazz="required non-negative-number" default="${descriptor.defaultTimeoutInSeconds}" />
+    </f:entry>
+  </f:optionalBlock>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster"/>
 </j:jelly>

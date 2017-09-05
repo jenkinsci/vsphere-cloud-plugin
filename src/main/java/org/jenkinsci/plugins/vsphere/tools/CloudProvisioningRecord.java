@@ -1,6 +1,8 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
 import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -11,16 +13,21 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
  * it asks us to provision some) and when those nodes appear in vSphere and in
  * Jenkins, so we need to keep a record of what's in progress so we don't
  * over-commit.
+ * Similarly there's also a delay between when we decide to delete some and
+ * when we successfully delete the VMs, and so we need to know what VMs we need
+ * to delete, and also what ones we're in the process of deleting.
  */
 public final class CloudProvisioningRecord {
     private final vSphereCloudSlaveTemplate template;
     private final Set<String> currentlyProvisioned;
-    private Set<String> currentlyPlanned;
+    private final Set<String> currentlyPlanned;
+    private final Map<String, Boolean> currentlyUnwanted;
 
     CloudProvisioningRecord(vSphereCloudSlaveTemplate template) {
         this.template = template;
         this.currentlyProvisioned = new TreeSet<String>();
         this.currentlyPlanned = new TreeSet<String>();
+        this.currentlyUnwanted = new LinkedHashMap<String, Boolean>();
     }
 
     public vSphereCloudSlaveTemplate getTemplate() {
@@ -29,8 +36,12 @@ public final class CloudProvisioningRecord {
 
     @Override
     public String toString() {
-        return String.format("Template[prefix=%s, provisioned=%s, planned=%s, max=%d, fullness=%.3f%%]", getTemplate()
-                .getCloneNamePrefix(), getCurrentlyProvisioned(), getCurrentlyPlanned(), calcMaxToProvision(),
+        return String.format("Template[prefix=%s, provisioned=%s, planned=%s, unwanted=%s, max=%d, fullness=%.3f%%]",
+                getTemplate().getCloneNamePrefix(),
+                getCurrentlyProvisioned(),
+                getCurrentlyPlanned(),
+                getCurrentlyUnwanted(),
+                calcMaxToProvision(),
                 calcFullness() * 100.0);
     }
 
@@ -58,6 +69,46 @@ public final class CloudProvisioningRecord {
         return currentlyPlanned.remove(nodeName);
     }
 
+    Map<String, Boolean> getCurrentlyUnwanted() {
+        return currentlyUnwanted;
+    }
+
+    Boolean isCurrentlyUnwanted(String nodeName) {
+        return currentlyUnwanted.get(nodeName);
+    }
+
+    Boolean setCurrentlyUnwanted(String nodeName, boolean beingDeleted) {
+        // ensure this node gets pushed to the end of the map by doing a remove then a put.
+        final Boolean oldValue = currentlyUnwanted.remove(nodeName);
+        currentlyUnwanted.put(nodeName, Boolean.valueOf(beingDeleted));
+        return oldValue;
+    }
+
+    boolean removeCurrentlyUnwanted(String nodeName) {
+        return currentlyUnwanted.remove(nodeName) != null;
+    }
+
+    Set<String> getCurrentNames() {
+        final Set<String> existingNames = new TreeSet<String>();
+        existingNames.addAll(getCurrentlyPlanned());
+        existingNames.addAll(getCurrentlyProvisioned());
+        existingNames.addAll(getCurrentlyUnwanted().keySet());
+        return existingNames;
+    }
+
+    boolean contains(String nodeName) {
+        return currentlyProvisioned.contains(nodeName) || currentlyPlanned.contains(nodeName)
+                || currentlyUnwanted.containsKey(nodeName);
+    }
+
+    int size() {
+        return currentlyProvisioned.size() + currentlyPlanned.size() + currentlyUnwanted.size();
+    }
+
+    boolean isEmpty() {
+        return currentlyProvisioned.isEmpty() && currentlyPlanned.isEmpty() && currentlyUnwanted.isEmpty();
+    }
+
     private int calcMaxToProvision() {
         final int templateInstanceCap = template.getTemplateInstanceCap();
         final int maxToProvision = templateInstanceCap == 0 ? Integer.MAX_VALUE : templateInstanceCap;
@@ -82,7 +133,7 @@ public final class CloudProvisioningRecord {
     }
 
     private int calcCurrentCommitment() {
-        return currentlyProvisioned.size() + currentlyPlanned.size();
+        return currentlyProvisioned.size() + currentlyPlanned.size() + currentlyUnwanted.size();
     }
 
     /**

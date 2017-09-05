@@ -19,7 +19,6 @@ import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import net.sf.json.JSONObject;
-import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -67,8 +66,7 @@ public class vSphereCloud extends Cloud {
 
     private static final java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
 
-    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, String format, Object... args) {
-        final Level logLevel = Level.INFO;
+    private static void InternalLog(Slave slave, SlaveComputer slaveComputer, TaskListener listener, Throwable ex, Level logLevel, String format, Object... args) {
         if (!VSLOG.isLoggable(logLevel) && listener == null)
             return;
         String s = "";
@@ -91,44 +89,54 @@ public class vSphereCloud extends Cloud {
         }
     }
 
+    /** Logs an {@link Level#INFO} message (created with {@link String#format(String, Object...)}). */
     public static void Log(String format, Object... args) {
-        InternalLog(null, null, null, null, format, args);
+        InternalLog(null, null, null, null, Level.INFO, format, args);
     }
 
+    /** Logs an {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} with stacktrace. */
     public static void Log(Throwable ex, String format, Object... args) {
-        InternalLog(null, null, null, ex, format, args);
+        InternalLog(null, null, null, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}). */
     public static void Log(TaskListener listener, String format, Object... args) {
-        InternalLog(null, null, listener, null, format, args);
+        InternalLog(null, null, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace). */
     public static void Log(TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(null, null, listener, ex, format, args);
+        InternalLog(null, null, listener, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, String format, Object... args) {
-        InternalLog(slave, null, null, null, format, args);
+        InternalLog(slave, null, null, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, Throwable ex, String format, Object... args) {
-        InternalLog(slave, null, null, ex, format, args);
+        InternalLog(slave, null, null, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, TaskListener listener, String format, Object... args) {
-        InternalLog(slave, null, listener, null, format, args);
+        InternalLog(slave, null, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link Slave} name. */
     public static void Log(Slave slave, TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(slave, null, listener, ex, format, args);
+        InternalLog(slave, null, listener, ex, Level.SEVERE, format, args);
     }
 
+    /** Logs a {@link Level#INFO} message (created with {@link String#format(String, Object...)}), prefixed by the {@link SlaveComputer} name. */
     public static void Log(SlaveComputer slave, TaskListener listener, String format, Object... args) {
-        InternalLog(null, slave, listener, null, format, args);
+        InternalLog(null, slave, listener, null, Level.INFO, format, args);
     }
 
+    /** Logs a {@link Level#SEVERE} message (created with {@link String#format(String, Object...)}) and a {@link Throwable} (with stacktrace), prefixed by the {@link SlaveComputer} name. */
     public static void Log(SlaveComputer slave, TaskListener listener, Throwable ex, String format, Object... args) {
-        InternalLog(null, slave, listener, ex, format, args);
+        InternalLog(null, slave, listener, ex, Level.SEVERE, format, args);
     }
 
     @Deprecated
@@ -187,11 +195,10 @@ public class vSphereCloud extends Cloud {
             for (final vSphereCloudProvisionedSlave n : NodeIterator.nodes(vSphereCloudProvisionedSlave.class)) {
                 final String nodeName = n.getNodeName();
                 final vSphereCloudSlaveTemplate template = getTemplateForVM(nodeName);
-                if (template != null) {
-                    final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
-                    templateState.provisioningStarted(provisionable, nodeName);
-                    templateState.provisionedSlaveNowActive(provisionable, nodeName);
-                }
+                if (template == null) continue;
+                final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
+                templateState.provisioningStarted(provisionable, nodeName);
+                templateState.provisionedSlaveNowActive(provisionable, nodeName);
             }
         }
     }
@@ -333,6 +340,7 @@ public class vSphereCloud extends Cloud {
             synchronized (this) {
                 ensureLists();
             }
+            retryVMdeletionIfNecessary(Math.max(excessWorkload, 2));
             final List<PlannedNode> plannedNodes = new ArrayList<PlannedNode>();
             synchronized (templateState) {
                 templateState.pruneUnwantedRecords();
@@ -372,6 +380,48 @@ public class vSphereCloud extends Cloud {
     }
 
     /**
+     * Has another go at deleting VMs we failed to delete earlier. It's possible
+     * that we were unable to talk to vSphere (or some other failure happened)
+     * when we decided to delete some VMs. We remember this sort of thing so we
+     * can retry later - this is where we use this information.
+     * 
+     * @param maxToRetryDeletionOn
+     *            The maximum number of VMs to try to remove this time around.
+     *            Can be {@link Integer#MAX_VALUE} for unlimited.
+     */
+    private void retryVMdeletionIfNecessary(final int maxToRetryDeletionOn) {
+        if (templateState == null) {
+            VSLOG.log(Level.INFO, "retryVMdeletionIfNecessary({0}): templateState==null", maxToRetryDeletionOn);
+            return;
+        }
+        // find all candidates and trim down the list
+        final List<String> unwantedVMsThatNeedDeleting = templateState.getUnwantedVMsThatNeedDeleting();
+        final int numberToAttemptToRetryThisTime = Math.min(maxToRetryDeletionOn, unwantedVMsThatNeedDeleting.size());
+        final List<String> nodeNamesToRetryDeletion = unwantedVMsThatNeedDeleting.subList(0,
+                numberToAttemptToRetryThisTime);
+        // now queue their deletion
+        synchronized (templateState) {
+            for (final String nodeName : nodeNamesToRetryDeletion) {
+                final Boolean isOkToDelete = templateState.isOkToDeleteUnwantedVM(nodeName);
+                if (isOkToDelete == Boolean.TRUE) {
+                    final Runnable task = new Runnable() {
+                        @Override
+                        public void run() {
+                            attemptDeletionOfSlave("retryVMdeletionIfNecessary(" + nodeName + ")", nodeName);
+                        }
+                    };
+                    VSLOG.log(Level.INFO, "retryVMdeletionIfNecessary({0}): scheduling deletion of {1}", new Object[] { maxToRetryDeletionOn, nodeName });
+                    Computer.threadPoolForRemoting.submit(task);
+                } else {
+                    VSLOG.log(Level.FINER,
+                            "retryVMdeletionIfNecessary({0}): not going to try deleting {1} as isOkToDeleteUnwantedVM({1})=={2}",
+                            new Object[]{ maxToRetryDeletionOn, nodeName, isOkToDelete });
+                }
+            }
+        }
+    }
+
+    /**
      * This is called by {@link vSphereCloudProvisionedSlave} instances once
      * they terminate, so we can take note of their passing and then destroy the
      * VM itself.
@@ -383,19 +433,52 @@ public class vSphereCloud extends Cloud {
             ensureLists();
         }
         VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): recording in our runtime state...", cloneName);
-        // once we're done, remove our cached record.
         synchronized (templateState) {
-            templateState.provisionedSlaveNowTerminated(cloneName);
+            templateState.provisionedSlaveNowUnwanted(cloneName, true);
         }
-        VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): destroying VM...", cloneName);
+        // Deletion can take a long time, so we run it asynchronously because,
+        // at the point where we're called here, we've locked the remoting queue
+        // so Jenkins is largely crippled until we return.
+        // JENKINS-42187 describes the problem (for docker).
+        final Runnable task = new Runnable() {
+            @Override
+            public void run() {
+                attemptDeletionOfSlave("provisionedSlaveHasTerminated(" + cloneName + ")", cloneName);
+            }
+        };
+        VSLOG.log(Level.INFO, "provisionedSlaveHasTerminated({0}): scheduling deletion of {0}", cloneName);
+        Computer.threadPoolForRemoting.submit(task);
+        // We also take this opportunity to see if we've got any other slaves
+        // that need deleting, and deal with at most one of those
+        // (asynchronously) as well.
+        retryVMdeletionIfNecessary(1);
+    }
+
+    private void attemptDeletionOfSlave(final String why, final String cloneName) {
+        VSLOG.log(Level.FINER, "{0}: destroying VM {1}...", new Object[]{ why, cloneName });
         VSphere vSphere = null;
+        boolean successfullyDeleted = false;
         try {
             vSphere = vSphereInstance();
+            // Note: This can block indefinitely - it only completes when
+            // vSphere tells us the deletion has completed, and if vSphere has
+            // issues (e.g. a node failure) during that process then the
+            // deletion task can hang for ages.
             vSphere.destroyVm(cloneName, false);
-            VSLOG.log(Level.FINER, "provisionedSlaveHasTerminated({0}): VM destroyed.", cloneName);
+            successfullyDeleted = true;
+            VSLOG.log(Level.FINER, "{0}: VM {1} destroyed.", new Object[]{ why, cloneName });
+            vSphere.disconnect();
+            vSphere = null;
         } catch (VSphereException ex) {
-            VSLOG.log(Level.SEVERE, "provisionedSlaveHasTerminated(" + cloneName + "): Exception while trying to destroy VM", ex);
+            VSLOG.log(Level.SEVERE, why + ": Exception while trying to destroy VM " + cloneName, ex);
         } finally {
+            synchronized (templateState) {
+                if (successfullyDeleted) {
+                    templateState.unwantedSlaveNowDeleted(cloneName);
+                } else {
+                    templateState.unwantedSlaveNotDeleted(cloneName);
+                }
+            }
             if (vSphere != null) {
                 vSphere.disconnect();
             }
@@ -416,7 +499,7 @@ public class vSphereCloud extends Cloud {
                 @Override
                 public Node call() throws Exception {
                     try {
-                        final Node newNode = provisionNewNode(templateState, whatWeShouldSpinUp, nodeName);
+                        final Node newNode = provisionNewNode(whatWeShouldSpinUp, nodeName);
                         VSLOG.log(Level.INFO, "Provisioned new slave " + nodeName);
                         synchronized (templateState) {
                             templateState.provisionedSlaveNowActive(whatWeShouldSpinUp, nodeName);
@@ -437,10 +520,10 @@ public class vSphereCloud extends Cloud {
             return result;
         }
 
-        private static Node provisionNewNode(final CloudProvisioningState algorithm, final CloudProvisioningRecord whatWeShouldSpinUp, final String cloneName)
+        private static Node provisionNewNode(final CloudProvisioningRecord whatWeShouldSpinUp, final String cloneName)
                 throws VSphereException, FormException, IOException, InterruptedException {
             final vSphereCloudSlaveTemplate template = whatWeShouldSpinUp.getTemplate();
-            final vSphereCloudProvisionedSlave slave = template.provision(algorithm, cloneName, StreamTaskListener.fromStdout());
+            final vSphereCloudProvisionedSlave slave = template.provision(cloneName, StreamTaskListener.fromStdout());
             // ensure Jenkins knows about us before we forget what we're doing,
             // otherwise it'll just ask for more.
             Jenkins.getInstance().addNode(slave);
@@ -604,58 +687,16 @@ public class vSphereCloud extends Cloud {
             return super.configure(req, o);
         }
 
-        /**
-         * For UI.
-         *
-         * @param vsHost        From UI.
-         * @param vsDescription From UI.
-         * @param credentialsId From UI.
-         * @return Result of the validation.
-         */
-        public FormValidation doTestConnection(@QueryParameter String vsHost,
-                                               @QueryParameter String vsDescription,
-                                               @QueryParameter String credentialsId) {
-            try {
-                /* We know that these objects are not null */
-                if (vsHost.length() == 0) {
-                    return FormValidation.error("vSphere Host is not specified");
-                } else {
-                    /* Perform other sanity checks. */
-                    if (!vsHost.startsWith("https://")) {
-                        return FormValidation.error("vSphere host must start with https://");
-                    } else if (vsHost.endsWith("/")) {
-                        return FormValidation.error("vSphere host name must NOT end with a trailing slash");
-                    }
-                }
-
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
-                final String effectiveUsername = config.getUsername();
-                final String effectivePassword = config.getPassword();
-
-                if (StringUtils.isEmpty(effectiveUsername)) {
-                    return FormValidation.error("Username is not specified");
-                }
-
-                if (StringUtils.isEmpty(effectivePassword)) {
-                    return FormValidation.error("Password is not specified");
-                }
-
-                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
-
-                return FormValidation.ok("Connected successfully");
-            } catch (RuntimeException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+        public FormValidation doCheckVsDescription(@QueryParameter String value) {
+            return FormValidation.validateRequired(value);
         }
 
-        public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String maxOnlineSlaves) {
-            return FormValidation.validateNonNegativeInteger(maxOnlineSlaves);
+        public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
         }
 
-        public FormValidation doCheckInstanceCap(@QueryParameter String instanceCap) {
-            return FormValidation.validateNonNegativeInteger(instanceCap);
+        public FormValidation doCheckInstanceCap(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
         }
     }
 }

@@ -121,6 +121,15 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         return this;
     }
 
+    /**
+     * Find the {@link vSphereCloud} for this {@link vSphereCloudLauncher}, or
+     * dies trying.
+     * 
+     * @return The {@link vSphereCloud}. It will not return null.
+     * @throws RuntimeException
+     *             if it cannot find the {@link vSphereCloud} - e.g. if it's
+     *             been deleted or the description has changed.
+     */
     public vSphereCloud findOurVsInstance() throws RuntimeException {
         if (vsDescription != null && vmName != null) {
             for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
@@ -303,16 +312,21 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             super.afterDisconnect(slaveComputer, taskListener);
-            vSphereCloud.Log(slaveComputer, taskListener, "Shutting down Virtual Machine...");
             MACHINE_ACTION localIdle = idleAction;
             if (localIdle == null) {
                 localIdle = MACHINE_ACTION.SHUTDOWN;
             }
-            vSphereCloud vsC = findOurVsInstance();
+            vSphereCloud.Log(slaveComputer, taskListener, "Disconnect done.  Performing idle action %s...", localIdle);
+            final vSphereCloud vsC = findOurVsInstance();
             vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
-            v = vsC.vSphereInstance();
-            VirtualMachine vm = v.getVmByName(vmName);
-            if (vm != null && !MACHINE_ACTION.NOTHING.equals(localIdle)) {
+            final VirtualMachine vm;
+            if( !MACHINE_ACTION.NOTHING.equals(localIdle) ) {
+                v = vsC.vSphereInstance();
+                vm = v.getVmByName(vmName);
+            } else {
+                vm = null;
+            }
+            if (vm != null ) {
                 //VirtualMachinePowerState power = vm.getRuntime().getPowerState();
                 VirtualMachinePowerState power = vm.getSummary().getRuntime().powerState;
                 if (power == VirtualMachinePowerState.poweredOn) {
@@ -355,13 +369,15 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         // VM is already powered down.
                 }
             }
-            if (v != null) {
-                v.disconnect();
-            }
+            vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, t, "Got an exception");
             taskListener.fatalError(t.getMessage(), t);
         } finally {
+            if (v != null) {
+                v.disconnect();
+                v = null;
+            }
             vsSlave.slaveIsDisconnecting = Boolean.FALSE;
             vsSlave.slaveIsStarting = Boolean.FALSE;
         }

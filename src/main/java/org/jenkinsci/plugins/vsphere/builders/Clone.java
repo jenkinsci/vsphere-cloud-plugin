@@ -23,6 +23,8 @@ import hudson.util.FormValidation;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 import javax.annotation.Nonnull;
 import javax.servlet.ServletException;
@@ -39,6 +41,8 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
+    private static final int TIMEOUT_DEFAULT = 60;
+
     private final String sourceName;
     private final String clone;
     private final boolean linkedClone;
@@ -48,12 +52,14 @@ public class Clone extends VSphereBuildStep {
     private final String folder;
     private final String customizationSpec;
     private final boolean powerOn;
+    /** null means use default, zero or negative means don't even try at all. */
+    private final Integer timeoutInSeconds;
     private String IP;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
                  String resourcePool, String cluster, String datastore, String folder,
-                 boolean powerOn, String customizationSpec) throws VSphereException {
+                 boolean powerOn, Integer timeoutInSeconds, String customizationSpec) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -61,8 +67,9 @@ public class Clone extends VSphereBuildStep {
         this.cluster=cluster;
         this.datastore=datastore;
         this.folder=folder;
-	this.customizationSpec=customizationSpec;
+        this.customizationSpec=customizationSpec;
         this.powerOn=powerOn;
+        this.timeoutInSeconds = timeoutInSeconds;
     }
 
     public String getSourceName() {
@@ -101,6 +108,13 @@ public class Clone extends VSphereBuildStep {
         return powerOn;
     }
 
+    public int getTimeoutInSeconds() {
+        if (timeoutInSeconds==null) {
+            return TIMEOUT_DEFAULT;
+        }
+        return timeoutInSeconds.intValue();
+    }
+
     @Override
     public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         try {
@@ -116,15 +130,24 @@ public class Clone extends VSphereBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws AbortException {
         boolean retVal = false;
         try {
             retVal = cloneFromSource(build, launcher, listener);
         } catch (Exception e) {
-            e.printStackTrace();
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            e.printStackTrace(pw);
+            VSphereLogger.vsLogger(listener.getLogger(), "Error cloning VM or template\n" + sw.toString());
+
+            try {
+                sw.close();
+            } catch (Exception ex) {
+                // ignore
+            }
+            throw new AbortException(e.getMessage());
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
     }
 
     private boolean cloneFromSource(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
@@ -155,10 +178,12 @@ public class Clone extends VSphereBuildStep {
         }
         vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
-        if (powerOn) {
-            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), 60);
+        final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
+        if (powerOn && timeoutInSecondsForGetIp>0) {
+            VSphereLogger.vsLogger(jLogger, "Powering on VM \""+expandedClone+"\".  Waiting for its IP for the next "+timeoutInSecondsForGetIp+" seconds.");
+            IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
         }
-        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned!");
+        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");
 
         return true;
     }
@@ -173,6 +198,10 @@ public class Clone extends VSphereBuildStep {
         @Override
         public String getDisplayName() {
             return Messages.vm_title_Clone();
+        }
+
+        public static int getDefaultTimeoutInSeconds() {
+            return TIMEOUT_DEFAULT;
         }
 
         public FormValidation doCheckSource(@QueryParameter String value)
@@ -224,6 +253,11 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
+        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
+                throws IOException, ServletException {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
         public FormValidation doTestData(@QueryParameter String serverName,
                                          @QueryParameter String sourceName, @QueryParameter String clone,
                                          @QueryParameter String resourcePool, @QueryParameter String cluster,
@@ -251,7 +285,7 @@ public class Clone extends VSphereBuildStep {
                 if (snap == null)
                     return FormValidation.error(Messages.validation_noSnapshots());
 
-                if(customizationSpec.length() > 0 &&
+                if(customizationSpec != null && customizationSpec.length() > 0 &&
                         vsphere.getCustomizationSpecByName(customizationSpec) == null) {
                     return FormValidation.error(Messages.validation_notFound("customizationSpec"));
                 }

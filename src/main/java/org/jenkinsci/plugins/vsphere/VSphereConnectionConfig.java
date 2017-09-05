@@ -36,6 +36,9 @@ import hudson.util.Secret;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
+
+import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
@@ -92,8 +95,20 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         public String getDisplayName() {
             return "N/A";
         }
-        
-        public ListBoxModel doFillCredentialsIdItems( @QueryParameter String vsHost) {
+
+        public FormValidation doCheckVsHost(@QueryParameter String value) {
+            if (value!=null && value.length() != 0) {
+                if (!value.startsWith("https://")) {
+                    return FormValidation.error("vSphere host must start with https://");
+                }
+                if (value.endsWith("/")) {
+                    return FormValidation.error("vSphere host name must NOT end with a trailing slash");
+                }
+            }
+            return FormValidation.validateRequired(value);
+        }
+
+        public ListBoxModel doFillCredentialsIdItems(@QueryParameter String vsHost) {
             final Jenkins instance = Jenkins.getInstance(); 
             if (instance != null && instance.hasPermission(Jenkins.ADMINISTER)) {
                 return new StandardListBoxModel().withEmptySelection().withMatching(
@@ -130,6 +145,36 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             }
 
             return FormValidation.ok();
+        }
+
+        /**
+         * For UI.
+         *
+         * @param vsHost        From UI.
+         * @param credentialsId From UI.
+         * @return Result of the validation.
+         */
+        public FormValidation doTestConnection(@QueryParameter String vsHost,
+                                               @QueryParameter String credentialsId) {
+            try {
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
+                final String effectiveUsername = config.getUsername();
+                final String effectivePassword = config.getPassword();
+
+                if (StringUtils.isEmpty(effectiveUsername)) {
+                    return FormValidation.error("Username is not specified");
+                }
+
+                if (effectivePassword == null) {
+                    return FormValidation.error("Password is not specified");
+                }
+
+                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
+
+                return FormValidation.ok("Connected successfully");
+            } catch (Exception e) {
+                return FormValidation.error(e, "Failed to connect");
+            }
         }
 
         // Support on login/password authentication
