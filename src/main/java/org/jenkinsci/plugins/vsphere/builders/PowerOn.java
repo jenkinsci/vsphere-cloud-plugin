@@ -185,19 +185,23 @@ public class PowerOn extends VSphereBuildStep {
 	 */
 	private static class VSphereEnvAction implements EnvironmentContributingAction {
 		// Decided not to record this data in build.xml, so marked transient:
-		private transient Map<String,String> data = new HashMap<String,String>();
+		private final transient Map<String,String> data = new HashMap<String,String>();
 
 		private void add(String key, String val) {
 			if (data==null) return;
 			data.put(key, val);
 		}
 
+		@Override
 		public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
 			if (data!=null) env.putAll(data);
 		}
 
+		@Override
 		public String getIconFileName() { return null; }
+		@Override
 		public String getDisplayName() { return null; }
+		@Override
 		public String getUrlName() { return null; }
 	}
 }

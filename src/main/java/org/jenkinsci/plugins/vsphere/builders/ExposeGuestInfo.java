@@ -40,7 +40,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
     private final Boolean waitForIp4;
     private String resolvedEnvVariablePrefix = null;
     private String IP;
-    private Map <String, String> envVars = new HashMap<>();
+    private final Map<String, String> envVars = new HashMap<>();
 
     @DataBoundConstructor
     public ExposeGuestInfo(final String vm, final String envVariablePrefix, Boolean waitForIp4) throws VSphereException {
@@ -259,12 +259,16 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
             data.put(key, val);
         }
 
+        @Override
         public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
             if (data!=null) env.putAll(data);
         }
 
+        @Override
         public String getIconFileName() { return null; }
+        @Override
         public String getDisplayName() { return null; }
+        @Override
         public String getUrlName() { return null; }
     }
 }

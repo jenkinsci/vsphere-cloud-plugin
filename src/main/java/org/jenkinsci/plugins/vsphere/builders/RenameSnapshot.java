@@ -78,6 +78,7 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 		return false;
 	}
 
+	@Override
 	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
 		boolean retVal = false;
 		try {

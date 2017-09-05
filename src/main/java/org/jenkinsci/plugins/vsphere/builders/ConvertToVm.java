@@ -70,6 +70,7 @@ public class ConvertToVm extends VSphereBuildStep {
         }
     }
 
+    @Override
     public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
         boolean retVal = false;
         try {

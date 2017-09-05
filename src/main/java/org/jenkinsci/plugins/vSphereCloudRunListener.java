@@ -23,7 +23,7 @@ import java.util.List;
 @Extension
 public final class vSphereCloudRunListener extends RunListener<Run> {
     
-    private List<Run> LimitedRuns = new ArrayList<Run>();
+    private final List<Run> LimitedRuns = new ArrayList<Run>();
 
     public vSphereCloudRunListener() {
     }
