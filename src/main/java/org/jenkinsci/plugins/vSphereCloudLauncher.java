@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package org.jenkinsci.plugins;
 
 import hudson.Util;
@@ -356,7 +352,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                                 // Some time is needed for the VMWare Tools to reactivate
                                 Thread.sleep(60000);
                                 shutdownVM(vm, slaveComputer, taskListener);
-                            }   powerOnVM(vm, slaveComputer, taskListener);
+                            }
+                            powerOnVM(vm, slaveComputer, taskListener);
                             break;
                         case REVERT_AND_RESET:
                             revertVM(vm, vsC, slaveComputer, taskListener);

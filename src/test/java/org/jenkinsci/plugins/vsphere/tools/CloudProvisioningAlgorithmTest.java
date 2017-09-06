@@ -323,8 +323,8 @@ public class CloudProvisioningAlgorithmTest {
     private static String toHexString(byte[] bytes) {
         final StringBuilder s = new StringBuilder("0x");
         for (final byte b : bytes) {
-            final int highDigit = (((int) b) >> 8) & 15;
-            final int lowDigit = ((int) b) & 15;
+            final int highDigit = (b >> 8) & 15;
+            final int lowDigit = b & 15;
             s.append(Integer.toString(highDigit, 16));
             s.append(Integer.toString(lowDigit, 16));
         }

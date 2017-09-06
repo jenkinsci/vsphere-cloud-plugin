@@ -14,14 +14,15 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 -->
- 
+<?jelly escape-by-default='true'?>
+
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
     <f:entry title="${%VM Name}" field="vm">
         <f:textbox  />
     </f:entry>
 
-	<f:entry title="${%Old Snapshot Name}" field="oldName">
-      <f:textbox  />
+    <f:entry title="${%Old Snapshot Name}" field="oldName">
+        <f:textbox  />
     </f:entry>
 
     <f:entry title="${%New Snapshot Name}" field="newName">
@@ -31,6 +32,6 @@ limitations under the License.
     <f:entry title="${%New Snapshot Description}" field="newDescription">
         <f:textarea />
     </f:entry>
-    
-	<f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm,oldName,newName"/>
+
+    <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm,oldName,newName"/>
 </j:jelly>
