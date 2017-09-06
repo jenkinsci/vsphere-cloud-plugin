@@ -1,6 +1,7 @@
+<?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout"
          xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-             
+
     <f:entry title="${%vSphere Cloud Instance}" field="vsDescription">
         <select class="setting-input" name="vsDescription" value="${it.vsDescription}" >
             <option>Select a vSphere Cloud instance...</option>
@@ -18,7 +19,7 @@
     <f:entry title="${%Snapshot Name}" field="snapName">
         <f:textbox />
     </f:entry>
-    
+
     <f:validateButton title="${%Test VM Connection}" progress="${%Testing...}" method="testConnection" with="vsDescription,vmName,snapName"/>
 
     <f:entry title="${%Description}" help="/help/system-config/master-slave/description.html">
@@ -48,7 +49,7 @@
        description="${%Wait for VMTools in the VM to start up.}" >
         <f:checkbox />
     </f:entry>
-    
+
     <f:entry title="${%Delay between launch and boot complete}" field="launchDelay"
     description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as a slave.}" >
         <f:textbox default="60" />

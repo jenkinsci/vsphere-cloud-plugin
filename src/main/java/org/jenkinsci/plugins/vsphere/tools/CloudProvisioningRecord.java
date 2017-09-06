@@ -123,7 +123,7 @@ public final class CloudProvisioningRecord {
 
     private double calcFullness() {
         final int maxToProvision = calcMaxToProvision();
-        return ((double) calcCurrentCommitment()) / (double) maxToProvision;
+        return calcCurrentCommitment() / (double) maxToProvision;
     }
 
     boolean hasCapacityForMore() {

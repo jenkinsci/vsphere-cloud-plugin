@@ -1,7 +1,3 @@
-/*
- * To change this template, choose Tools | Templates
- * and open the template in the editor.
- */
 package org.jenkinsci.plugins;
 
 import hudson.Util;
@@ -66,20 +62,30 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         this.waitForVMTools = waitForVMTools;
         this.snapName = snapName;
         this.launchDelay = Util.tryParseNumber(launchDelay, 60).intValue();
-        if ("Shutdown".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.SHUTDOWN;
-        } else if ("Shutdown and Revert".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.REVERT;
-        } else if ("Revert and Restart".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.REVERT_AND_RESTART;
-        } else if ("Revert and Reset".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.REVERT_AND_RESET;
-        } else if ("Reset".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.RESET;
-        } else if ("Suspend".equals(idleOption)) {
-            idleAction = MACHINE_ACTION.SUSPEND;
-        } else {
+        if (null == idleOption) {
             idleAction = MACHINE_ACTION.NOTHING;
+        } else switch (idleOption) {
+            case "Shutdown":
+                idleAction = MACHINE_ACTION.SHUTDOWN;
+                break;
+            case "Shutdown and Revert":
+                idleAction = MACHINE_ACTION.REVERT;
+                break;
+            case "Revert and Restart":
+                idleAction = MACHINE_ACTION.REVERT_AND_RESTART;
+                break;
+            case "Revert and Reset":
+                idleAction = MACHINE_ACTION.REVERT_AND_RESET;
+                break;
+            case "Reset":
+                idleAction = MACHINE_ACTION.RESET;
+                break;
+            case "Suspend":
+                idleAction = MACHINE_ACTION.SUSPEND;
+                break;
+            default:
+                idleAction = MACHINE_ACTION.NOTHING;
+                break;
         }
         this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
     }
@@ -336,19 +342,25 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         case NOTHING:
                             break;
                     }
-                    if (localIdle == MACHINE_ACTION.REVERT) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
-                    } else if (localIdle == MACHINE_ACTION.REVERT_AND_RESTART) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
-                        if (power == VirtualMachinePowerState.poweredOn) {
-                             // Some time is needed for the VMWare Tools to reactivate
-                            Thread.sleep(60000);
-                            shutdownVM(vm, slaveComputer, taskListener);
-                        }
-                        powerOnVM(vm, slaveComputer, taskListener);
-                    } else if (localIdle == MACHINE_ACTION.REVERT_AND_RESET) {
-                        revertVM(vm, vsC, slaveComputer, taskListener);
-                        resetVM(vm, slaveComputer, taskListener);
+                    switch (localIdle) {
+                        case REVERT:
+                            revertVM(vm, vsC, slaveComputer, taskListener);
+                            break;
+                        case REVERT_AND_RESTART:
+                            revertVM(vm, vsC, slaveComputer, taskListener);
+                            if (power == VirtualMachinePowerState.poweredOn) {
+                                // Some time is needed for the VMWare Tools to reactivate
+                                Thread.sleep(60000);
+                                shutdownVM(vm, slaveComputer, taskListener);
+                            }
+                            powerOnVM(vm, slaveComputer, taskListener);
+                            break;
+                        case REVERT_AND_RESET:
+                            revertVM(vm, vsC, slaveComputer, taskListener);
+                            resetVM(vm, slaveComputer, taskListener);
+                            break;
+                        default:
+                            break;
                     }
                 } else {
                         // VM is already powered down.
