@@ -35,6 +35,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 import java.util.List;
+import jenkins.model.Jenkins;
 
 public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep{
 
@@ -128,7 +129,7 @@ public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep{
 		return true;
 	}
 
-	@Override
+    @Override
     public ReconfigureDescriptor getDescriptor() {
         return (ReconfigureDescriptor) Jenkins.getInstance().getDescriptor(getClass());
     }
