@@ -1,5 +1,7 @@
 package org.jenkinsci.plugins;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
+
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Functions;
@@ -17,13 +19,16 @@ import hudson.util.FormValidation;
 
 import java.io.IOException;
 
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 import hudson.model.Executor;
+import hudson.model.ItemGroup;
 import hudson.model.Queue;
 
 import java.util.ArrayList;
@@ -410,23 +415,24 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return FormValidation.validatePositiveInteger(value);
         }
 
-        public FormValidation doTestConnection(@QueryParameter String vsDescription,
+        @RequirePOST
+        public FormValidation doTestConnection(@AncestorInPath ItemGroup<?> context,
+                @QueryParameter String vsDescription,
                 @QueryParameter String vmName,
                 @QueryParameter String snapName) {
+            throwUnlessUserHasPermissionToConfigureSlave(context);
             try {
                 vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
                 VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
                 if (vm == null) {
                     return FormValidation.error("Virtual Machine was not found");
                 }
-
                 if (!snapName.isEmpty()) {
                     VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
                     if (snap == null) {
                         return FormValidation.error("Virtual Machine snapshot was not found");
                     }
                 }
-
                 return FormValidation.ok("Virtual Machine found successfully");
             } catch (Exception e) {
                 throw new RuntimeException(e);

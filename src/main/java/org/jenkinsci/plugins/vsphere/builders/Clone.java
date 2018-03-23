@@ -14,8 +14,11 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import hudson.*;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -27,14 +30,15 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 
 import javax.annotation.Nonnull;
-import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
@@ -204,24 +208,24 @@ public class Clone extends VSphereBuildStep {
             return TIMEOUT_DEFAULT;
         }
 
-        public FormValidation doCheckSource(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckSource(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error("Please enter the sourceName name");
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckClone(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckClone(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the clone name"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckResourcePool(@QueryParameter String value,
+        @RequirePOST
+        public FormValidation doCheckResourcePool(@AncestorInPath Item context,
+                                                  @QueryParameter String value,
                                                   @QueryParameter String serverName,
-                                                  @QueryParameter String sourceName)
-                throws IOException, ServletException {
+                                                  @QueryParameter String sourceName) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (serverName == null){
                     return FormValidation.error(Messages.validation_required("serverName"));
@@ -241,27 +245,27 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckCluster(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckCluster(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckCustomizationSpec(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckCustomizationSpec(@QueryParameter String value) {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
         }
 
-        public FormValidation doTestData(@QueryParameter String serverName,
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context,
+                                         @QueryParameter String serverName,
                                          @QueryParameter String sourceName, @QueryParameter String clone,
                                          @QueryParameter String resourcePool, @QueryParameter String cluster,
                                          @QueryParameter String customizationSpec) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
                         || cluster.length()==0 )

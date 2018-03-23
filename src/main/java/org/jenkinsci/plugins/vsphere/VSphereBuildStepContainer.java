@@ -14,6 +14,8 @@
  */
 package org.jenkinsci.plugins.vsphere;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import com.cloudbees.hudson.plugins.folder.AbstractFolderProperty;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
 import com.cloudbees.hudson.plugins.folder.Folder;
@@ -35,6 +37,7 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.Stapler;
 import org.slf4j.Logger;
@@ -143,7 +146,8 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             return true;
         }
 
-        public ListBoxModel doFillServerNameItems() {
+        public ListBoxModel doFillServerNameItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
 
             boolean hasVsphereClouds = false;
             ListBoxModel select = new ListBoxModel();

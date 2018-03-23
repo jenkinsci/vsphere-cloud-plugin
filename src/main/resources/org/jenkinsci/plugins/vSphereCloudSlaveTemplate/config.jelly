@@ -24,7 +24,7 @@
             <f:entry title="${%Linked Clone}" field="linkedClone">
                 <f:checkbox/>
             </f:entry>
-            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,vsDescription,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName"/>
+            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,allowUntrustedCertificate,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName"/>
 
             <f:entry title="${%Cluster}" field="cluster">
                 <f:textbox/>

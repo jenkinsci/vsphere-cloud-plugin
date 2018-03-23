@@ -1,0 +1,23 @@
+<div>
+If this checkbox is ticked, this disables HTTPS Certificate verification, allowing <i>any</i> certificate to be accepted as genuine.
+<br/>
+<b>WARNING:</b> Enabling this opens up a man-in-the-middle security vulnerability.
+<p/></p>
+If connections to vSphere fail and the details mention
+"<samp>PKIX path building failed</samp>"
+and/or
+"<samp>unable to find valid certification path</samp>"
+then <i>either</i>
+the vSphere host that was connected to is an impostor
+(e.g. someone is intercepting your network traffic)
+<i>or</i>
+your vSphere host uses a certificate that is not trusted by the JVM that is running Jenkins
+(e.g. your vSphere host is using a self-signed certificate).
+<br/>
+If your vSphere host uses a certificate that is not trusted by the JVM that is running Jenkins
+then you should add that certificate to the JVM's list of trusted certificates so that it becomes trusted
+(typically using the Java <samp>keytool</samp> utility).
+If (and only if) you are unable to do this (and you accept the risks that this entails) then you could tick this box.
+<p/>
+This option is disabled by default.
+</div>

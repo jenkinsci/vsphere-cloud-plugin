@@ -14,6 +14,8 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import hudson.*;
 import hudson.model.*;
 import hudson.util.FormValidation;
@@ -22,14 +24,15 @@ import java.io.IOException;
 import java.io.PrintStream;
 
 import javax.annotation.Nonnull;
-import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import com.vmware.vim25.mo.VirtualMachine;
 
@@ -110,9 +113,7 @@ public class Delete extends VSphereBuildStep {
 			load();
 		}
 
-		public FormValidation doCheckVm(@QueryParameter String value)
-				throws IOException, ServletException {
-
+		public FormValidation doCheckVm(@QueryParameter String value) {
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();
@@ -123,10 +124,12 @@ public class Delete extends VSphereBuildStep {
 			return Messages.vm_title_Delete();
 		}
 
-		public FormValidation doTestData(@QueryParameter String serverName,
+        @RequirePOST
+		public FormValidation doTestData(@AncestorInPath Item context,
+                @QueryParameter String serverName,
 				@QueryParameter String vm) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
 			try {
-
 				if (serverName.length() == 0 || vm.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 

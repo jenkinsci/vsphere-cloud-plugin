@@ -7,6 +7,10 @@ f.entry(title:_("vSphere Host"), field:"vsHost") {
     f.textbox()
 }
 
+f.entry(title:_("Disable Certificate Verification"), field:"allowUntrustedCertificate") {
+    f.checkbox()
+}
+
 f.entry(title:_("Credentials"), field:"credentialsId") {
     c.select(onchange="""{
             var self = this.targetElement ? this.targetElement : this;
@@ -17,4 +21,4 @@ f.entry(title:_("Credentials"), field:"credentialsId") {
     }""" /* workaround for JENKINS-19124 */)
 }
 
-f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,credentialsId")
+f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,allowUntrustedCertificate,credentialsId")

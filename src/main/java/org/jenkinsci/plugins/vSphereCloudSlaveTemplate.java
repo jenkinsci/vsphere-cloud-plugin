@@ -16,29 +16,25 @@
 
 package org.jenkinsci.plugins;
 
-import static com.cloudbees.plugins.credentials.CredentialsProvider.lookupCredentials;
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
+
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.Describable;
-import hudson.model.ItemGroup;
 import hudson.model.TaskListener;
-import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Label;
 import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.security.ACL;
-import hudson.security.AccessControlled;
 import hudson.slaves.NodeProperty;
 import hudson.slaves.CommandLauncher;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
-import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -66,9 +62,9 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
-import com.cloudbees.plugins.credentials.common.StandardUsernameListBoxModel;
+import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
 import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.VirtualMachineConfigInfo;
@@ -498,15 +494,17 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return FormValidation.validateNonNegativeInteger(launchDelay);
         }
 
-        public FormValidation doTestCloneParameters(@QueryParameter String vsHost, @QueryParameter String vsDescription,
+        @RequirePOST
+        public FormValidation doTestCloneParameters(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String vsHost,
+                @QueryParameter boolean allowUntrustedCertificate,
                 @QueryParameter String credentialsId, @QueryParameter String masterImageName,
                 @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot,
                 @QueryParameter String snapshotName) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
-                final String effectiveUsername = config.getUsername();
-                final String effectivePassword = config.getPassword();
-                final VSphere vsphere = VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword);
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
+                final VSphere vsphere = VSphere.connect(config);
                 try {
                     final VirtualMachine vm = vsphere.getVmByName(masterImageName);
                     if (vm == null) {
@@ -538,14 +536,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             } catch (Exception e) {
                 return FormValidation.error(e, "Problem validating");
             }
-        }
-
-        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath ItemGroup<?> context) {
-            if(!(context instanceof AccessControlled ? (AccessControlled) context : Jenkins.getInstance()).hasPermission(Computer.CONFIGURE)) {
-                return new ListBoxModel();
-            }
-            final List<StandardUsernameCredentials> credentials = lookupCredentials(StandardUsernameCredentials.class, context, ACL.SYSTEM, HTTP_SCHEME, HTTPS_SCHEME);
-            return new StandardUsernameListBoxModel().withAll(credentials);
         }
 
         public static List<Descriptor<ComputerLauncher>> getLauncherDescriptors() {

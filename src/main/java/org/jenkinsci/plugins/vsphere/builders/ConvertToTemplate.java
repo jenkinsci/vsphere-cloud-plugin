@@ -14,8 +14,11 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import hudson.*;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -27,14 +30,15 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 import javax.annotation.Nonnull;
-import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 public class ConvertToTemplate extends VSphereBuildStep {
 
@@ -116,15 +120,17 @@ public class ConvertToTemplate extends VSphereBuildStep {
             return Messages.vm_title_ConvertToTemplate();
         }
 
-        public FormValidation doCheckVm(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckVm(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }
 
-        public FormValidation doTestData(@QueryParameter String serverName,
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context,
+                                         @QueryParameter String serverName,
                                          @QueryParameter String vm) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (serverName == null){
                     return FormValidation.error(Messages.validation_required("serverName"));

@@ -1,5 +1,7 @@
 package org.jenkinsci.plugins.folder;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
+
 import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderProperty;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
@@ -9,8 +11,10 @@ import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import java.util.List;
 
@@ -62,9 +66,13 @@ public class FolderVSphereCloudProperty extends AbstractFolderProperty<AbstractF
          * @param credentialsId From UI.
          * @return Result of the validation.
          */
-        public FormValidation doTestConnection(@QueryParameter String vsHost,
+        @RequirePOST
+        public FormValidation doTestConnection(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                                               @QueryParameter String vsHost,
+                                               @QueryParameter boolean allowUntrustedCertificate,
                                                @QueryParameter String vsDescription,
                                                @QueryParameter String credentialsId) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
                 /* We know that these objects are not null */
                 if (vsHost.length() == 0) {
@@ -78,7 +86,7 @@ public class FolderVSphereCloudProperty extends AbstractFolderProperty<AbstractF
                     }
                 }
 
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
                 final String effectiveUsername = config.getUsername();
                 final String effectivePassword = config.getPassword();
 
@@ -90,7 +98,7 @@ public class FolderVSphereCloudProperty extends AbstractFolderProperty<AbstractF
                     return FormValidation.error("Password is not specified");
                 }
 
-                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
+                VSphere.connect(config).disconnect();
 
                 return FormValidation.ok("Connected successfully");
             } catch (RuntimeException e) {

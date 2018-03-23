@@ -14,8 +14,11 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import hudson.*;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -25,14 +28,15 @@ import java.io.IOException;
 import java.io.PrintStream;
 
 import javax.annotation.Nonnull;
-import javax.servlet.ServletException;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import com.vmware.vim25.mo.VirtualMachine;
 
@@ -121,30 +125,30 @@ public class ConvertToVm extends VSphereBuildStep {
             return Messages.vm_title_ConvertToVM();
         }
 
-        public FormValidation doCheckTemplate(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckTemplate(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the Template name"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckResourcePool(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckResourcePool(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the resource pool"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckCluster(@QueryParameter String value)
-                throws IOException, ServletException {
+        public FormValidation doCheckCluster(@QueryParameter String value) {
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
         }
 
-        public FormValidation doTestData(@QueryParameter String serverName,
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context,
+                                         @QueryParameter String serverName,
                                          @QueryParameter String template, @QueryParameter String resourcePool,
                                          @QueryParameter String cluster) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
 
                 if (serverName.length() == 0 || template.length() == 0

@@ -28,6 +28,7 @@ import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 
 import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
 import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
@@ -68,11 +69,12 @@ public class VSphere {
     private final String session;
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
-    private VSphere(@Nonnull String url, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    private VSphere(@Nonnull String url, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
         try {
-            //TODO - change ignoreCert to be configurable
             this.url = new URL(url);
-            this.session = (new ServiceInstance(this.url, user, pw, true)).getServerConnection().getSessionStr();
+            final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
+            final ServerConnection serverConnection = serviceInstance.getServerConnection();
+            this.session = serverConnection.getSessionStr();
         } catch (Exception e) {
             throw new VSphereException(e);
         }
@@ -84,14 +86,31 @@ public class VSphere {
 
     /**
      * Initiates Connection to vSphere Server
+     * @param connectionDetails Contains all the details we need to connect.
+     * @throws VSphereException If an error occurred.
+     * @return A connected instance.
+     */
+    public static VSphere connect(@Nonnull VSphereConnectionConfig connectionDetails) throws VSphereException {
+        final String server = connectionDetails.getVsHost() + "/sdk";
+        final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
+        final String user = connectionDetails.getUsername();
+        final String pw = connectionDetails.getPassword();
+        return new VSphere(server, ignoreCert, user, pw);
+    }
+
+    /**
+     * Initiates Connection to vSphere Server
      * @param server Server URL
+     * @param ignoreCert If true then we disable certificate verification, allowing the use of untrusted certificates but risk man-in-the-middle attacks.
      * @param user Username.
      * @param pw Password.
      * @throws VSphereException If an error occurred.
      * @return A connected instance.
+     * @deprecated Use {@link #connect(VSphereConnectionConfig)} instead.
      */
-    public static VSphere connect(@Nonnull String server, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
-        return new VSphere(server, user, pw);
+    @Deprecated
+    public static VSphere connect(@Nonnull String server, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+        return new VSphere(server, ignoreCert, user, pw);
     }
 
     /**

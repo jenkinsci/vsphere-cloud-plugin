@@ -267,6 +267,10 @@ public class vSphereCloud extends Cloud {
         return vsConnectionConfig != null ? vsConnectionConfig.getVsHost() : null;
     }
 
+    public boolean getAllowUntrustedCertificate() {
+        return vsConnectionConfig != null ? vsConnectionConfig.getAllowUntrustedCertificate() : false;
+    }
+
     public
     @CheckForNull
     VSphereConnectionConfig getVsConnectionConfig() {
@@ -282,16 +286,20 @@ public class vSphereCloud extends Cloud {
 
     public VSphere vSphereInstance() throws VSphereException {
         // TODO: validate configs
-        final String effectiveVsHost = getVsHost();
+        final VSphereConnectionConfig connectionConfig = getVsConnectionConfig();
+        if (connectionConfig == null) {
+            throw new VSphereException("vSphere connection configuration is not specified");
+        }
+        final String effectiveVsHost = connectionConfig.getVsHost();
         if (effectiveVsHost == null) {
             throw new VSphereException("vSphere host is not specified");
         }
-        final String effectiveUserName = getUsername();
+        final String effectiveUserName = connectionConfig.getUsername();
         if (effectiveUserName == null) {
             throw new VSphereException("vSphere username is not specified");
         }
 
-        return VSphere.connect(effectiveVsHost + "/sdk", effectiveUserName, getPassword());
+        return VSphere.connect(connectionConfig);
     }
 
     @Override

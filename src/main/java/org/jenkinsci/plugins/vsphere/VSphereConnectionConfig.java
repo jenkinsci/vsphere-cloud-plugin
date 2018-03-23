@@ -16,6 +16,9 @@
 
 package org.jenkinsci.plugins.vsphere;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
+
+import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.plugins.credentials.CredentialsMatcher;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
@@ -39,8 +42,11 @@ import jenkins.model.Jenkins;
 
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 /**
  *
@@ -49,6 +55,7 @@ import org.kohsuke.stapler.QueryParameter;
 public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConnectionConfig> {
     
     private final @CheckForNull String vsHost;
+    private /*final*/ boolean allowUntrustedCertificate;
     private final @CheckForNull String credentialsId;
     
     @DataBoundConstructor
@@ -57,8 +64,23 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         this.credentialsId = credentialsId;
     }
 
+    /** Full constructor for internal use, initializes all fields */
+    public VSphereConnectionConfig(String vsHost, boolean allowUntrustedCertificate, String credentialsId) {
+        this(vsHost, credentialsId);
+        setAllowUntrustedCertificate(allowUntrustedCertificate);
+    }
+
     public @CheckForNull String getVsHost() {
         return vsHost;
+    }
+
+    @DataBoundSetter
+    public void setAllowUntrustedCertificate(boolean allowUntrustedCertificate) {
+        this.allowUntrustedCertificate = allowUntrustedCertificate;
+    }
+
+    public boolean getAllowUntrustedCertificate() {
+        return allowUntrustedCertificate;
     }
  
     public @CheckForNull String getCredentialsId() {
@@ -108,26 +130,30 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return FormValidation.validateRequired(value);
         }
 
-        public ListBoxModel doFillCredentialsIdItems(@QueryParameter String vsHost) {
+        public FormValidation doCheckAllowUntrustedCertificate(@QueryParameter boolean value) {
+            if (value) {
+                return FormValidation.warning("Warning: This is not secure.");
+            }
+            return FormValidation.ok();
+        }
+
+        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String vsHost) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             final Jenkins instance = Jenkins.getInstance(); 
-            if (instance != null && instance.hasPermission(Jenkins.ADMINISTER)) {
+            if (instance != null) {
                 return new StandardListBoxModel().withEmptySelection().withMatching(
                     CREDENTIALS_MATCHER, CredentialsProvider.lookupCredentials(StandardCredentials.class,
                     instance, ACL.SYSTEM, getDomainRequirement(vsHost))
                 );
-            } else {
-                return new StandardListBoxModel();
-            }              
+            }
+            return new StandardListBoxModel();
         }
 
-        public FormValidation doCheckCredentialsId(@QueryParameter String vsHost,
+        public FormValidation doCheckCredentialsId(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                                                   @QueryParameter String vsHost,
                                                    @QueryParameter String value) {
-            final Jenkins instance = Jenkins.getInstance(); 
-            if (instance != null && instance.hasPermission(Jenkins.ADMINISTER)) {
-                // nop
-            } else {
-                return FormValidation.ok();
-            }
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
 
             value = Util.fixEmptyAndTrim(value);
             if (value == null) {
@@ -154,10 +180,14 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
          * @param credentialsId From UI.
          * @return Result of the validation.
          */
-        public FormValidation doTestConnection(@QueryParameter String vsHost,
+        @RequirePOST
+        public FormValidation doTestConnection(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                                               @QueryParameter String vsHost,
+                                               @QueryParameter boolean allowUntrustedCertificate,
                                                @QueryParameter String credentialsId) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, credentialsId);
+                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
                 final String effectiveUsername = config.getUsername();
                 final String effectivePassword = config.getPassword();
 
@@ -169,7 +199,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                     return FormValidation.error("Password is not specified");
                 }
 
-                VSphere.connect(vsHost + "/sdk", effectiveUsername, effectivePassword).disconnect();
+                VSphere.connect(config).disconnect();
 
                 return FormValidation.ok("Connected successfully");
             } catch (Exception e) {

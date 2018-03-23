@@ -1,7 +1,10 @@
 package org.jenkinsci.plugins.workflow;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import com.google.inject.Inject;
 import hudson.*;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.slaves.Cloud;
@@ -15,6 +18,7 @@ import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractSynchronousNonBlockingStepExecution;
 import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 
@@ -68,7 +72,8 @@ public class vSphereStep extends AbstractStepImpl {
             return "Invoke an vSphere action, exposing the VM IP under some actions";
         }
 
-        public ListBoxModel doFillServerNameItems() {
+        public ListBoxModel doFillServerNameItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             ListBoxModel select = new ListBoxModel();
             try {
                 for (Cloud cloud : Jenkins.getInstance().clouds) {

@@ -1,12 +1,16 @@
 package org.jenkinsci.plugins.vsphere.parameters;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToAccessJob;
+
 import hudson.Extension;
+import hudson.model.Item;
 import hudson.model.ParameterValue;
 import hudson.model.SimpleParameterDefinition;
 import hudson.model.StringParameterValue;
 import hudson.util.ListBoxModel;
 import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.vSphereCloud;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.export.Exported;
@@ -56,7 +60,8 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
     @Extension
     public static class DescriptorImpl extends ParameterDescriptor {
 
-        public ListBoxModel doFillCloudNameItems() {
+        public ListBoxModel doFillCloudNameItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
             ListBoxModel items = new ListBoxModel();
             for (String cloudName : vSphereCloud.findAllVsphereCloudNames()) {
                 items.add(cloudName);
