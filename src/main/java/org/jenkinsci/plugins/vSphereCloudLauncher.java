@@ -46,6 +46,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         REVERT_AND_RESTART,
         SUSPEND,
         RESET,
+        RECONNECT_AND_REVERT,
         NOTHING
     }
 
@@ -79,6 +80,9 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 break;
             case "Reset":
                 idleAction = MACHINE_ACTION.RESET;
+                break;
+            case "Reconnect and Revert":
+                idleAction = MACHINE_ACTION.RECONNECT_AND_REVERT;
                 break;
             case "Suspend":
                 idleAction = MACHINE_ACTION.SUSPEND;
@@ -305,6 +309,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
         vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         VSphere v = null;
+        boolean reconnect = false;
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             super.afterDisconnect(slaveComputer, taskListener);
@@ -339,7 +344,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         case RESET:
                             resetVM(vm, slaveComputer, taskListener);
                             break;
-                        case NOTHING:
+                        default:
                             break;
                     }
                     switch (localIdle) {
@@ -359,7 +364,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             revertVM(vm, vsC, slaveComputer, taskListener);
                             resetVM(vm, slaveComputer, taskListener);
                             break;
-                        default:
+                        case RECONNECT_AND_REVERT:
+                            reconnect = true;
+                            break;
+                        case NOTHING:
                             break;
                     }
                 } else {
@@ -377,6 +385,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             }
             vsSlave.slaveIsDisconnecting = Boolean.FALSE;
             vsSlave.slaveIsStarting = Boolean.FALSE;
+
+            if (reconnect) {
+                slaveComputer.connect(false);
+            }
         }
     }
 

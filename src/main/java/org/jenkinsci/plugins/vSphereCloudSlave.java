@@ -407,6 +407,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             options.add("Revert and Reset");
             options.add("Suspend");
             options.add("Reset");
+            options.add("Reconnect and Revert");
             options.add("Nothing");
             return options;
         }
