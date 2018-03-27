@@ -17,7 +17,6 @@
 package org.jenkinsci.plugins.vsphere;
 
 import hudson.model.ExecutorListener;
-import hudson.model.Computer;
 import hudson.model.Descriptor;
 import hudson.model.Executor;
 import hudson.model.Queue;
@@ -29,8 +28,6 @@ import hudson.slaves.RetentionStrategy;
 import hudson.util.TimeUnit2;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -99,6 +96,16 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
         done(executor);
     }
 
+    @Override
+    public boolean isAcceptingTasks(AbstractCloudComputer c) {
+        synchronized (this) {
+            if (isBeingTerminated()) {
+                return false;
+            }
+        }
+        return super.isAcceptingTasks(c);
+    }
+
     private void done(final Executor executor) {
         final AbstractCloudComputer<?> c = (AbstractCloudComputer<?>) executor.getOwner();
         final Queue.Executable exec = executor.getCurrentExecutable();
@@ -107,75 +114,52 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     }
 
     private void done(final AbstractCloudComputer<?> c) {
-        c.setAcceptingTasks(false);
         final String cname = c.getName();
         synchronized (this) {
-            if (isBeingTerminated(c)) {
+            if (isBeingTerminated()) {
                 LOGGER.log(Level.FINER, "Termination of {0} is already in progress.", cname);
                 return;
             }
             LOGGER.log(Level.FINER, "Initiating termination of {0}.", cname);
-            setBeingTerminated(c);
+            setBeingTerminated();
         }
-        Computer.threadPoolForRemoting.submit(new Runnable() {
-            @Override
-            public void run() {
-                Queue.withLock(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            AbstractCloudSlave node = c.getNode();
-                            if (node != null) {
-                                LOGGER.log(Level.FINER, "Terminating {0} node {1}.", new Object[] { cname, node });
-                                node.terminate();
-                            } else {
-                                LOGGER.log(Level.FINER,
-                                        "Not terminating {0} as its corresponding node has already been removed.",
-                                        cname);
-                            }
-                        } catch (InterruptedException e) {
-                            LOGGER.log(Level.WARNING, "Failed to terminate " + cname, e);
-                            synchronized (RunOnceCloudRetentionStrategy.this) {
-                                clearBeingTerminated(c);
-                            }
-                        } catch (IOException e) {
-                            LOGGER.log(Level.WARNING, "Failed to terminate " + cname, e);
-                            synchronized (RunOnceCloudRetentionStrategy.this) {
-                                clearBeingTerminated(c);
-                            }
-                        }
-                    }
-                });
+        final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._runOnceCloudRetentionStrategy_OfflineReason_BuildHasRun());
+        c.disconnect(cause);
+        try {
+            final AbstractCloudSlave node = c.getNode();
+            if (node != null) {
+                LOGGER.log(Level.FINER, "Terminating {0} node {1}.", new Object[] { cname, node });
+                node.terminate();
+            } else {
+                LOGGER.log(Level.FINER,
+                        "Not terminating {0} as its corresponding node has already been removed.",
+                        cname);
             }
-        });
+        } catch (InterruptedException e) {
+            LOGGER.log(Level.WARNING, "Failed to terminate " + cname, e);
+            synchronized (RunOnceCloudRetentionStrategy.this) {
+                clearBeingTerminated();
+            }
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Failed to terminate " + cname, e);
+            synchronized (RunOnceCloudRetentionStrategy.this) {
+                clearBeingTerminated();
+            }
+        }
     }
 
-    /**
-     * One {@link RunOnceCloudRetentionStrategy} can be shared across multiple
-     * slaves, so we need to track who's being terminated individually instead
-     * of having a single boolean.
-     */
-    private transient Set<AbstractCloudComputer<?>> beingTerminated;
+    private transient boolean beingTerminated;
 
-    private boolean isBeingTerminated(AbstractCloudComputer<?> c) {
-        if (beingTerminated == null) {
-            return false;
-        }
-        return beingTerminated.contains(c);
+    private boolean isBeingTerminated() {
+        return beingTerminated;
     }
 
-    private void setBeingTerminated(AbstractCloudComputer<?> c) {
-        if (beingTerminated == null) {
-            beingTerminated = new HashSet<AbstractCloudComputer<?>>();
-        }
-        beingTerminated.add(c);
+    private void setBeingTerminated() {
+        beingTerminated = true;
     }
 
-    private void clearBeingTerminated(AbstractCloudComputer<?> c) {
-        if (beingTerminated == null) {
-            return;
-        }
-        beingTerminated.remove(c);
+    private void clearBeingTerminated() {
+        beingTerminated = false;
     }
 
     @Override

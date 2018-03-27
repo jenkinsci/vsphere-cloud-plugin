@@ -446,11 +446,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     sshLauncher.getRetryWaitTime());
             return launcherWithIPAddress;
         }
-        throw new IllegalStateException("Unsupported launcher in template configuration");
+        throw new IllegalStateException("Unsupported launcher (" + launcher + ") in template configuration");
     }
 
     private RetentionStrategy<?> determineRetention() {
-        return retentionStrategy;
+        if (retentionStrategy instanceof RunOnceCloudRetentionStrategy) {
+            final RunOnceCloudRetentionStrategy templateStrategy = (RunOnceCloudRetentionStrategy) retentionStrategy;
+            final RunOnceCloudRetentionStrategy cloneStrategy = new RunOnceCloudRetentionStrategy(
+                    templateStrategy.getIdleMinutes());
+            return cloneStrategy;
+        }
+        if (retentionStrategy instanceof VSphereCloudRetentionStrategy) {
+            final VSphereCloudRetentionStrategy templateStrategy = (VSphereCloudRetentionStrategy) retentionStrategy;
+            final VSphereCloudRetentionStrategy cloneStrategy = new VSphereCloudRetentionStrategy(
+                    templateStrategy.getIdleMinutes());
+            return cloneStrategy;
+        }
+        throw new IllegalStateException(
+                "Unsupported retentionStrategy (" + retentionStrategy + ") in template configuration");
     }
 
     @SuppressWarnings("unchecked")
