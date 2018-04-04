@@ -19,6 +19,7 @@ import hudson.util.FormValidation;
 
 import java.io.IOException;
 
+import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -141,12 +142,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         try {
             Computer computer = toComputer();
             if(computer != null) {
-                computer.disconnect(new OfflineCause(){
-                    @Override
-                    public String toString() {
-                        return "Shutting down VSphere Cloud Slave";
-                    }
-                });
+                final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._vSphereCloudSlave_OfflineReason_ShuttingDown());
+                computer.disconnect(cause);
                 vSphereCloud.Log(this, listener, "Disconnected computer %s", vmName);
             } else {
                 vSphereCloud.Log(this, listener, "Can't disconnect computer for %s as there was no Computer node for it.", vmName);
@@ -237,12 +234,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
         if(buildItem.task instanceof Queue.FlyweightTask) {
-            return new CauseOfBlockage() {
-                @Override
-                public String getShortDescription() {
-                    return "Don't run FlyweightTask on vSphere node.";
-                }
-            };
+            return CauseOfBlockage.fromMessage(Messages._vSphereCloudSlave_BlockageReason_NoFlyweightTasks());
         }
 
         if(slaveIsStarting == Boolean.TRUE) {
@@ -304,10 +296,13 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                     if (slave != null) {
                         vSphereCloud.Log(this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
 
-                        slave.setTemporarilyOffline(true, new OfflineCause.ByCLI("vSphere Plugin marking the slave as offline due to reaching limited build threshold"));
+                        final VSphereOfflineCause tempOffline = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                        slave.setTemporarilyOffline(true, tempOffline);
                         slave.waitUntilOffline();
-                        slave.disconnect(new OfflineCause.ByCLI("vSphere Plugin disconnecting the slave as offline due to reaching limited build threshold"));
-                        slave.setTemporarilyOffline(false, new OfflineCause.ByCLI("vSphere Plugin marking the slave as online after completing post-disconnect actions."));
+                        final VSphereOfflineCause disconnect = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
+                        slave.disconnect(disconnect);
+                        final VSphereOfflineCause tempOnline = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                        slave.setTemporarilyOffline(false, tempOnline);
                     }
                     else {
                         vSphereCloud.Log(this, "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");

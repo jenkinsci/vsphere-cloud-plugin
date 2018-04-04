@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.ObjectStreamException;
 import java.util.Calendar;
 
+import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.DataBoundConstructor;
 
@@ -170,14 +171,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     return;
                 }
 
-                // Not the most efficient way, but only allow one VM
-                // to startup at at time. Prevents multiple launches for
-                // the same job.
                 vSphereCloudSlave.ProbableLaunchCleanup();
-                //if (vSphereCloudSlave.ProbableLaunchCount() > 0) {
-                //    vSphereCloud.Log(slaveComputer, taskListener, "Aborting this slave start since another slave is being started");
-                //    return;
-                //}
 
                 vSphereCloud vsC = findOurVsInstance();
                 vsSlave.slaveIsStarting = Boolean.TRUE;
@@ -301,7 +295,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             return;
         }
         if (slaveComputer.isTemporarilyOffline()) {
-            if (!slaveComputer.getOfflineCauseReason().contains("vSphere Plugin")) {
+            if (!(slaveComputer.getOfflineCause() instanceof VSphereOfflineCause)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
                 return;
             }
@@ -368,6 +362,9 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             reconnect = true;
                             break;
                         case NOTHING:
+                        case SUSPEND:
+                        case SHUTDOWN:
+                        case RESET:
                             break;
                     }
                 } else {
@@ -429,9 +426,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
     public boolean isLaunchSupported() {
         if (this.overrideLaunchSupported == null) {
             return launcher.isLaunchSupported();
-        } else {
-            return overrideLaunchSupported;
         }
+        return overrideLaunchSupported;
     }
 
     @Override
