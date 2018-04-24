@@ -200,8 +200,8 @@ public class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord record = createInstance(2, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
-        final String expected1 = prefix + "_1";
-        final String expected2 = prefix + "_2";
+        final String expected1 = prefix + "1";
+        final String expected2 = prefix + "2";
 
         // When
         final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
@@ -219,10 +219,10 @@ public class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord record = createInstance(3, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
-        final String expected1 = prefix + "_1";
-        final String unwanted = prefix + "_2";
+        final String expected1 = prefix + "1";
+        final String unwanted = prefix + "2";
         record.setCurrentlyUnwanted(unwanted, false);
-        final String expected2 = prefix + "_3";
+        final String expected2 = prefix + "3";
 
         // When
         final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
@@ -240,9 +240,9 @@ public class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord record = createInstance(3, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
-        final String unwanted = prefix + "_1";
-        final String active = prefix + "_2";
-        final String planned = prefix + "_3";
+        final String unwanted = prefix + "1";
+        final String active = prefix + "2";
+        final String planned = prefix + "3";
         record.setCurrentlyUnwanted(unwanted, false);
         record.addCurrentlyActive(active);
         record.addCurrentlyPlanned(planned);
@@ -264,7 +264,7 @@ public class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord record = createInstance(2, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
-        final String expected = prefix + "_1";
+        final String expected = prefix + "1";
 
         // When
         final String actual1 = CloudProvisioningAlgorithm.findUnusedName(record);
@@ -296,7 +296,7 @@ public class CloudProvisioningAlgorithmTest {
         // Then
         final List<String> uniques = new ArrayList<String>(new LinkedHashSet<String>(actuals));
         assertThat(actuals, equalTo(uniques));
-        assertThat(actuals, everyItem(startsWith(prefix + "_")));
+        assertThat(actuals, everyItem(startsWith(prefix)));
     }
 
     private CloudProvisioningRecord createInstance(int capacity, int provisioned, int planned) {
