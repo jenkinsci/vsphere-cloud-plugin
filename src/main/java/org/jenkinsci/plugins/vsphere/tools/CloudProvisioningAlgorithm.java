@@ -70,7 +70,7 @@ public final class CloudProvisioningAlgorithm {
         final int maxAttempts = hasCap ? (templateInstanceCap) : 100;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             final String suffix = hasCap ? calcSequentialSuffix(attempt) : calcRandomSuffix(attempt);
-            final String nodeName = cloneNamePrefix + "_" + suffix;
+            final String nodeName = cloneNamePrefix + suffix;
             if (!existingNames.contains(nodeName)) {
                 return nodeName;
             }
