@@ -82,7 +82,9 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     protected static final SchemeRequirement HTTP_SCHEME = new SchemeRequirement("http");
     protected static final SchemeRequirement HTTPS_SCHEME = new SchemeRequirement("https");
 
-    private final String cloneNamePrefix;
+    private int configVersion;
+    private static final int CURRENT_CONFIG_VERSION = 1;
+    private String cloneNamePrefix; // almost final
     private final String masterImageName;
     private Boolean useSnapshot; // almost final
     private final String snapshotName;
@@ -148,6 +150,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final RetentionStrategy<?> retentionStrategy,
                                      final List<? extends NodeProperty<?>> nodeProperties,
                                      final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
+        this.configVersion = CURRENT_CONFIG_VERSION;
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
         this.snapshotName = snapshotName;
@@ -348,6 +351,38 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             } catch (Exception ex) {
                 LOGGER.log(Level.CONFIG, " - Failed to reconfigure strategy", ex);
             }
+        }
+        // Earlier versions of the code may have stored configuration in a
+        // different way but in the same kind of fields, so we need an explicit
+        // versioning to know how to mutate the data.
+        if (configVersion <= 0) {
+            LOGGER.log(Level.CONFIG,
+                    "{0} loaded old configuration that had hard-coded underscore at the end of the cloneNamePrefix.",
+                    this);
+            // In version one, the underscore was removed from the code so we
+            // have to put it in the data (the user is then free to change it to
+            // something else if they want to).
+            this.cloneNamePrefix = this.cloneNamePrefix + "_";
+            configVersion = 1;
+        }
+        // Note: Subsequent changes dependent on configVersion should go above
+        // this line.
+        if (configVersion < CURRENT_CONFIG_VERSION) {
+            throw new IllegalStateException("Internal error: configVersion==" + configVersion
+                    + " at end of readResolve method, but the current config version should be "
+                    + CURRENT_CONFIG_VERSION
+                    + ".  Either CURRENT_CONFIG_VERSION is incorrect or the readResolve method is not setting configVersion when it upgrades the data.");
+        }
+        if (configVersion > CURRENT_CONFIG_VERSION) {
+            LOGGER.log(Level.WARNING,
+                    "{0} was defined by a later version of the plugin "
+                            + "(one that saved with configVersion={1}, whereas this version of the plugin is expecting {2}).  "
+                            + "The code may not function as expected.",
+                    new Object[]{
+                            this,
+                            configVersion,
+                            CURRENT_CONFIG_VERSION
+                    });
         }
         return this;
     }

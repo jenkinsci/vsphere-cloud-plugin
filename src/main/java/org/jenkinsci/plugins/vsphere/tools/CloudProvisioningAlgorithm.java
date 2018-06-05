@@ -44,15 +44,17 @@ public final class CloudProvisioningAlgorithm {
     }
 
     /**
-     * Chooses a name for a new node.
+     * Chooses a name for a new node. The name will start with the
+     * {@link vSphereCloudSlaveTemplate#getCloneNamePrefix()}.
      * <ul>
      * <li>If the template has a limited number of instances available then the
-     * name will be of the form "prefix_number" where "number" is a number that
-     * should be between 1 and the number of permitted instances.</li>
+     * name will be of the form "prefix<i>number</i>" where "<i>number</i>" is a
+     * number that should be between 1 and the number of permitted instances.
+     * </li>
      * <li>If the template has an unlimited number of instances available then
-     * the name will be of the form "prefix_random" where "random" is a random
-     * UUID's 32-byte number (rendered using a high radix to keep the string
-     * short).</li>
+     * the name will be of the form "prefix<i>random</i>" where "<i>random</i>"
+     * is a random UUID's 32-byte (128 bit) number (rendered using a high radix
+     * to keep the string short).</li>
      * </ul>
      * 
      * @param record
@@ -70,7 +72,7 @@ public final class CloudProvisioningAlgorithm {
         final int maxAttempts = hasCap ? (templateInstanceCap) : 100;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             final String suffix = hasCap ? calcSequentialSuffix(attempt) : calcRandomSuffix(attempt);
-            final String nodeName = cloneNamePrefix + "_" + suffix;
+            final String nodeName = cloneNamePrefix + suffix;
             if (!existingNames.contains(nodeName)) {
                 return nodeName;
             }
