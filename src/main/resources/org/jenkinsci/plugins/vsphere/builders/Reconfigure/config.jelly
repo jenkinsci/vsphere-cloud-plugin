@@ -19,7 +19,7 @@ limitations under the License.
     <f:entry title="${%VM}" field="vm">
       <f:textbox  />
     </f:entry>
-    <f:entry title="${%Reconfigure Hardware}">
+    <f:entry title="${%Reconfigure}">
         <!--
             <f:repeatable items="${instance.reconfigureSteps}" var="rstep" name="reconfigureSteps" header="${%Modification}" add="${%Add Device Modification}">
 
