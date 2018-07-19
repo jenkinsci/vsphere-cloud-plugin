@@ -64,9 +64,8 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
         super._terminate(listener);
         try {
             final ComputerLauncher l = getLauncher();
-            final vSphereCloudLauncher launcher = l instanceof vSphereCloudLauncher ? (vSphereCloudLauncher) l : null;
-            if (launcher != null) {
-                final vSphereCloud cloud = launcher.findOurVsInstance();
+            final vSphereCloud cloud = findOurVsInstance(l);
+            if (cloud != null) {
                 final String cloneName = this.getComputer().getName();
                 cloud.provisionedSlaveHasTerminated(cloneName);
             } else {

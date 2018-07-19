@@ -1,0 +1,68 @@
+<?jelly escape-by-default='true'?>
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:i="jelly:fmt">
+
+  <h2>vSphere Information</h2>
+  <dl>
+    <j:choose>
+      <j:when test="${it.cloudDescription != null}">
+        <dt>vSphere Cloud:</dt>
+        <dd><tt>${it.cloudDescription}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmName != null}">
+        <dt>VM Name:</dt>
+        <dd><tt>${it.vmName}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmInformationError != null}">
+        <dt>Error: Unable to provide further information:</dt>
+        <dd><pre>${it.vmInformationError}</pre></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmFolder != null}">
+        <dt>Folder:</dt>
+        <dd><tt>${it.vmFolder}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmGuestName != null}">
+        <dt>Guest OS:</dt>
+        <dd><tt>${it.vmGuestName}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmNumCPU != 0}">
+        <dt>Number of CPUs:</dt>
+        <dd><tt>${it.vmNumCPU}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmMemoryMB != 0}">
+        <dt>Memory in MB:</dt>
+        <dd><tt>${it.vmMemoryMB}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmGuestToolsStatus != null}">
+        <dt>Guest Tools Status:</dt>
+        <dd><tt>${it.vmGuestToolsStatus}</tt></dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmUptimeSeconds != 0}">
+        <dt>Uptime:</dt>
+        <dd><tt>${it.vmUptimeSeconds}</tt> seconds</dd>
+      </j:when>
+    </j:choose>
+    <j:choose>
+      <j:when test="${it.vmAnnotation != null}">
+        <dt>Notes:</dt>
+        <dd><tt>${it.vmAnnotation}</tt></dd>
+      </j:when>
+    </j:choose>
+  </dl>
+
+</j:jelly>

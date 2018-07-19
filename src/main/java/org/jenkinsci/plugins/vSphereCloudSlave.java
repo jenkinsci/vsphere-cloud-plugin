@@ -20,6 +20,8 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
@@ -151,6 +153,22 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         } catch(Exception e) {
             vSphereCloud.Log(this, listener, e, "Can't disconnect %s", vmName);
         }
+    }
+
+    @Restricted(NoExternalUse.class)
+    vSphereCloud findOurVsInstance() {
+        final ComputerLauncher l = getLauncher();
+        return findOurVsInstance(l);
+    }
+
+    @Restricted(NoExternalUse.class)
+    protected vSphereCloud findOurVsInstance(final ComputerLauncher l) {
+        if (l instanceof vSphereCloudLauncher) {
+            final vSphereCloudLauncher launcher = (vSphereCloudLauncher) l;
+            final vSphereCloud cloud = launcher.findOurVsInstance();
+            return cloud;
+        }
+        return null;
     }
 
     private static class ProbableLaunchData {
