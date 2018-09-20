@@ -29,10 +29,10 @@ import hudson.model.Label;
 import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.slaves.NodeProperty;
 import hudson.slaves.CommandLauncher;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
+import hudson.slaves.NodeProperty;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
 
@@ -51,6 +51,7 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
 
+import org.jenkinsci.plugins.vsphere.FixedLifespanCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -497,6 +498,12 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     templateStrategy.getIdleMinutes());
             return cloneStrategy;
         }
+        if (retentionStrategy instanceof FixedLifespanCloudRetentionStrategy) {
+            final FixedLifespanCloudRetentionStrategy templateStrategy = (FixedLifespanCloudRetentionStrategy) retentionStrategy;
+            final FixedLifespanCloudRetentionStrategy cloneStrategy = new FixedLifespanCloudRetentionStrategy(
+                    templateStrategy.getLifespanMinutes());
+            return cloneStrategy;
+        }
         throw new IllegalStateException(
                 "Unsupported retentionStrategy (" + retentionStrategy + ") in template configuration");
     }
@@ -606,6 +613,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final List<Descriptor<RetentionStrategy<?>>> result = new ArrayList<>();
             result.add(RunOnceCloudRetentionStrategy.DESCRIPTOR);
             result.add(VSphereCloudRetentionStrategy.DESCRIPTOR);
+            result.add(FixedLifespanCloudRetentionStrategy.DESCRIPTOR);
             return result;
         }
     }
