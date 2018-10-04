@@ -1,0 +1,15 @@
+<div>
+If set, specifies a command to be run on the master before a VM will be destroyed.
+Standard variable substitution is in force, plus the variable VSPHERE_IP will be set to the IP address of the VM.
+<p>
+This command is executed after Jenkins has determined that it should dispose of the slave, but before the VM is deleted.
+For optimal build performance, any command run from here should complete quickly,
+as any delay will result in the VM continuing to exist and hence count against the instance totals,
+reducing build throughput.
+The exit code and output from the process will be logged in the vSphere log.
+</p>
+Note: 
+It is an acknowledged problem that debugging slave issues is problematic when the slaves are disposed of shortly after the issue occurs.
+This field, and its sibling, are intended as an aide to debugging such issues.
+They are <em>not</em> intended as robust production-scale functionality.
+</div>

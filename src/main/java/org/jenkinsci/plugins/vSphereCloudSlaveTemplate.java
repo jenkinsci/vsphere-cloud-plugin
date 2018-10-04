@@ -61,6 +61,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -117,6 +118,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
     private ComputerLauncher launcher;
     private RetentionStrategy<?> retentionStrategy;
+    private String vmCreationHook;
+    private String vmDisposalHook;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
@@ -312,6 +315,32 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.retentionStrategy;
     }
 
+    public String getVmCreationHook() {
+        return this.vmCreationHook == null ? "" : this.vmCreationHook;
+    }
+
+    @DataBoundSetter
+    public void setVmCreationHook(String vmCreationHook) {
+        if (vmCreationHook != null) {
+            this.vmCreationHook = vmCreationHook.isEmpty() ? null : vmCreationHook;
+        } else {
+            this.vmCreationHook = null;
+        }
+    }
+
+    public String getVmDisposalHook() {
+        return this.vmDisposalHook == null ? "" : this.vmDisposalHook;
+    }
+
+    @DataBoundSetter
+    public void setVmDisposalHook(String vmDisposalHook) {
+        if (vmDisposalHook != null) {
+            this.vmDisposalHook = vmDisposalHook.isEmpty() ? null : vmDisposalHook;
+        } else {
+            this.vmDisposalHook = null;
+        }
+    }
+
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
         if(this.templateInstanceCap == 0) {
@@ -388,19 +417,20 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
-        final PrintStream logger = listener.getLogger();
-        final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
+        final EnvVars knownVariables = calculateVariablesForGuestInfo(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
         final vSphereCloudProvisionedSlave slave;
         try {
-            slave = provision(cloneName, logger, resolvedExtraConfigParameters, vSphere);
+            slave = provision(cloneName, listener, knownVariables, vSphere);
         } finally {
             vSphere.disconnect();
         }
         return slave;
     }
 
-    private vSphereCloudProvisionedSlave provision(final String cloneName, final PrintStream logger, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
+    private vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener, final EnvVars knownVariables, final VSphere vSphere) throws VSphereException, FormException, IOException {
+        final PrintStream logger = listener.getLogger();
+        final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(knownVariables);
         final boolean POWER_ON = true;
         final boolean useCurrentSnapshot;
         final String snapshotToUse;
@@ -452,6 +482,27 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final RetentionStrategy<?> configuredStrategy = determineRetention();
             final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
             slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotNameForLauncher, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+            final String configuredCreationHookOrNull = getVmCreationHook();
+            final String configuredDisposalHookOrNull = getVmDisposalHook();
+            if (configuredCreationHookOrNull != null || configuredDisposalHookOrNull != null) {
+                final String vmIPAddress = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
+                addEnvVar(knownVariables, "IP_ADDRESS", vmIPAddress);
+            }
+            final String resolvedCreationHookOrNull;
+            final String resolvedDisposalHookOrNull;
+            if (configuredCreationHookOrNull == null) {
+                resolvedCreationHookOrNull = null;
+            } else {
+                resolvedCreationHookOrNull = Util.replaceMacro(configuredCreationHookOrNull, knownVariables);
+            }
+            if (configuredDisposalHookOrNull == null) {
+                resolvedDisposalHookOrNull = null;
+            } else {
+                resolvedDisposalHookOrNull = Util.replaceMacro(configuredDisposalHookOrNull, knownVariables);
+            }
+            slave.setVmCreationHook(resolvedCreationHookOrNull);
+            slave.setVmDisposalHook(resolvedDisposalHookOrNull);
+            slave._start(listener); // runs the creation hook, if there is one.
         } finally {
             // if anything went wrong, try to tidy up
             if( slave==null ) {
@@ -636,9 +687,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return vmJenkinsUrl;
     }
 
-    private Map<String, String> calculateExtraConfigParameters(final String cloneName, final TaskListener listener)
-            throws IOException, InterruptedException {
-        final EnvVars knownVariables = calculateVariablesForGuestInfo(cloneName, listener);
+    private Map<String, String> calculateExtraConfigParameters(final EnvVars knownVariables) {
         final Map<String, String> result = new LinkedHashMap<String, String>();
         final String jenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
         if (jenkinsUrl != null) {

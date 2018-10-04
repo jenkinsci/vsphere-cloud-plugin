@@ -18,9 +18,12 @@ import hudson.slaves.*;
 import hudson.util.FormValidation;
 
 import java.io.IOException;
+import java.io.InputStream;
 
+import org.apache.commons.io.IOUtils;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -37,6 +40,9 @@ import jenkins.model.Jenkins;
  * @author Admin
  */
 public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
+    private String vmCreationHook;
+    private String vmDisposalHook;
+
     @DataBoundConstructor
     public vSphereCloudProvisionedSlave(String name, String nodeDescription,
             String remoteFS, String numExecutors, Mode mode,
@@ -59,8 +65,39 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
               LimitedTestRunCount);
     }
 
+    public String getVmCreationHook() {
+        return this.vmCreationHook == null ? "" : this.vmCreationHook;
+    }
+
+    @DataBoundSetter
+    public void setVmCreationHook(String vmCreationHook) {
+        if (vmCreationHook != null) {
+            this.vmCreationHook = vmCreationHook.isEmpty() ? null : vmCreationHook;
+        } else {
+            this.vmCreationHook = null;
+        }
+    }
+
+    public String getVmDisposalHook() {
+        return this.vmDisposalHook == null ? "" : this.vmDisposalHook;
+    }
+
+    @DataBoundSetter
+    public void setVmDisposalHook(String vmDisposalHook) {
+        if (vmDisposalHook != null) {
+            this.vmDisposalHook = vmDisposalHook.isEmpty() ? null : vmDisposalHook;
+        } else {
+            this.vmDisposalHook = null;
+        }
+    }
+
+    protected void _start(TaskListener listener) {
+        runHookCommand(listener, "_start", vmCreationHook);
+    }
+
     @Override
     protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
+        runHookCommand(listener, "_terminate", vmDisposalHook);
         super._terminate(listener);
         try {
             final ComputerLauncher l = getLauncher();
@@ -76,6 +113,44 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
             vSphereCloud.Log(listener, ex, "%1s._terminate for vmName %2s failed",
                     getClass().getSimpleName(), getVmName());
         }
+    }
+
+    private void runHookCommand(TaskListener listener, String methodName, String hookCommand) {
+        if (hookCommand == null || hookCommand.isEmpty()) {
+            return;
+        }
+        final String[] cmdArray = hookCommand.split(" ");
+        final ProcessBuilder pb = new ProcessBuilder(cmdArray);
+        pb.redirectErrorStream(true);
+        Exception exDuringCommandHandling = null;
+        String outputFromCommand = null;
+        Integer exitValueFromCommand = null;
+        try {
+            final Process p = pb.start();
+            try (final InputStream unbufferedStdout = p.getInputStream()) {
+                outputFromCommand = IOUtils.toString(unbufferedStdout);
+            }
+            final int exitValue = p.waitFor();
+            exitValueFromCommand = Integer.valueOf(exitValue);
+        } catch (Exception ex) {
+            exDuringCommandHandling = ex;
+        }
+        final String logMsg;
+        if (exitValueFromCommand == null) {
+            if (outputFromCommand == null || outputFromCommand.trim().isEmpty()) {
+                logMsg = "vmName %1s method %2s ran command %3s which failed";
+            } else {
+                logMsg = "vmName %1s method %2s ran command %3s which failed but output %5s";
+            }
+        } else {
+            if (outputFromCommand == null || outputFromCommand.trim().isEmpty()) {
+                logMsg = "vmName %1s method %2s ran command %3s which returned exit code %4d and no output";
+            } else {
+                logMsg = "vmName %1s method %2s ran command %3s which returned exit code %4d and output %5s";
+            }
+        }
+        vSphereCloud.Log(listener, exDuringCommandHandling, logMsg, getVmName(), methodName, hookCommand,
+                exitValueFromCommand, outputFromCommand);
     }
 
     @Extension

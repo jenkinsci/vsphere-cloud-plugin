@@ -122,6 +122,13 @@
             </f:dropdownList>
 
             <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+
+            <f:entry title="${%Debugging script to run after VM creation}" field="vmCreationHook">
+                <f:textbox/>
+            </f:entry>
+            <f:entry title="${%Debugging script to run before VM disposal}" field="vmDisposalHook">
+                <f:textbox/>
+            </f:entry>
         </f:advanced>
 
         <f:entry title="">

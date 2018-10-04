@@ -1,0 +1,13 @@
+<div>
+If set, specifies a command to be run on the master shortly after a VM has been started.
+Standard variable substitution is in force, plus the variable VSPHERE_IP will be set to the IP address of the VM.
+<p>
+This command is executed after the VM has been created, and after its IP address is known, but before the slave computer is released into Jenkins' control.
+Any command run from here MUST complete quickly.
+The exit code and output from the process will be logged in the vSphere log.
+</p>
+Note: 
+It is an acknowledged problem that debugging slave issues is problematic when the slaves are disposed of shortly after the issue occurs.
+This field, and its sibling, are intended as an aide to debugging such issues.
+They are <em>not</em> intended as robust production-scale functionality.
+</div>
