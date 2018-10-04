@@ -543,7 +543,7 @@ public class VSphere {
                 return;
 
             if (isPoweredOff(vm) || force) {
-                powerOffVm(vm, force, false);
+                powerOffVm(vm, force, 0);
                 vm.markAsTemplate();
                 return;
             }
@@ -812,7 +812,7 @@ public class VSphere {
             }
 
             if (!vm.getConfig().template) {
-                powerOffVm(vm, true, false);
+                powerOffVm(vm, true, 0);
             }
 
             final Task task = vm.destroy_Task();
@@ -904,7 +904,12 @@ public class VSphere {
         return ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld));
     }
 
+    @Deprecated
     public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, boolean shutdownGracefully) throws VSphereException {
+        powerOffVm(vm, evenIfSuspended, shutdownGracefully ? 180 : 0);
+    }
+
+    public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, int gracefulShutdownSeconds) throws VSphereException {
 
         if (vm.getConfig().template)
             throw new VSphereException("VM represents a template!");
@@ -914,12 +919,12 @@ public class VSphere {
 
             String status;
             try {
-                if (!isSuspended(vm) && shutdownGracefully && vmToolIsEnabled(vm)) {
+                if (!isSuspended(vm) && gracefulShutdownSeconds > 0 && vmToolIsEnabled(vm)) {
                     LOGGER.log(Level.FINER, "Requesting guest shutdown");
                     vm.shutdownGuest();
 
-                    // Wait for up to 180 seconds for a shutdown - then shutdown hard.
-                    for (int i = 0; i <= 180; i++) {
+                    // Wait for a short while for a shutdown - then power off hard.
+                    for (int i = 0; i <= gracefulShutdownSeconds; i++) {
                         try {
                             Thread.sleep(1000);
                         } catch (InterruptedException e) { // build aborted
