@@ -114,16 +114,16 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenOneCappedAndOneUncappedThenDistributesTheLoadEventlyUntilCapReached() {
-        findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEventlyUntilCapReached(true);
+    public void findTemplateWithMostFreeCapacityGivenOneCappedAndOneUncappedThenDistributesTheLoadEvenlyUntilCapReached() {
+        findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEvenlyUntilCapReached(true);
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenOneUncappedAndOneCappedThenDistributesTheLoadEventlyUntilCapReached() {
-        findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEventlyUntilCapReached(false);
+    public void findTemplateWithMostFreeCapacityGivenOneUncappedAndOneCappedThenDistributesTheLoadEvenlyUntilCapReached() {
+        findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEvenlyUntilCapReached(false);
     }
 
-    private void findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEventlyUntilCapReached(
+    private void findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEvenlyUntilCapReached(
             boolean forwards) {
         // Given
         final CloudProvisioningRecord capOf2 = createInstance(2, 0, 0);

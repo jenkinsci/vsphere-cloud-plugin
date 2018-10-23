@@ -340,7 +340,7 @@ public class vSphereCloud extends Cloud {
             excessWorkloadSoFar -= numberOfvSphereCloudSlaveExecutors;
             if (excessWorkloadSoFar <= 0) {
                 VSLOG.log(Level.INFO, methodCallDescription + ": " + numberOfvSphereCloudSlaves + " existing slaves (="
-                        + numberOfvSphereCloudSlaveExecutors + " executors): Workload is satisifed by bringing those online.");
+                        + numberOfvSphereCloudSlaveExecutors + " executors): Workload is satisfied by bringing those online.");
                 return Collections.emptySet();
             }
             // If we've got this far then our static slaves are insufficient to meet
