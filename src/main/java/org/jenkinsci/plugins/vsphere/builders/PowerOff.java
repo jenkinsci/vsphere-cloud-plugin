@@ -34,6 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -44,7 +45,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 	private final String vm;    
 	private final boolean evenIfSuspended;
     private final boolean shutdownGracefully;
-
+	private Integer gracefulShutdownTimeout;
 
 	private final boolean ignoreIfNotExists;
 
@@ -56,6 +57,11 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
         this.ignoreIfNotExists = ignoreIfNotExists;
 	}
 
+	@DataBoundSetter
+	public void setGracefulShutdownTimeout(int gracefulShutdownTimeout) {
+		this.gracefulShutdownTimeout = gracefulShutdownTimeout == 180 ? null : gracefulShutdownTimeout;
+	}
+
 	public boolean isIgnoreIfNotExists() {
 		return ignoreIfNotExists;
 	}
@@ -65,6 +71,12 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 	}
 
     public boolean isShutdownGracefully() {return shutdownGracefully; }
+
+	public int getGracefulShutdownTimeout() {
+		if (!shutdownGracefully || gracefulShutdownTimeout == null)
+			return 180;
+		return gracefulShutdownTimeout;
+	}
 
 	public String getVm() {
 		return vm;
@@ -133,7 +145,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         if (vsphereVm != null) {
-			vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully);
+			vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully ? getGracefulShutdownTimeout() : 0);
 
 			VSphereLogger.vsLogger(jLogger, "Successfully shutdown \"" + expandedVm + "\"");
 		} else {
