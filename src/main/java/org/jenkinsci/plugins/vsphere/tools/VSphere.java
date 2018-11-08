@@ -904,11 +904,24 @@ public class VSphere {
         return ((status == VirtualMachineToolsStatus.toolsOk) || (status == VirtualMachineToolsStatus.toolsOld));
     }
 
+    /**
+     * Power off the given virtual machine, optionally waiting 180 seconds for its operating system to shut down.
+     * @param vm The virtual machine to power off.
+     * @param evenIfSuspended If false, a suspended VM is left as it was. If true, a suspended VM gets fully powered off.
+     * @param shutdownGracefully If false, the VM is powered off immediately. If true (and VMware tools is installed), the guest operating system is given a grace period of 180 seconds to shut down.
+     * @deprecated This method has been superseded by {@link #powerOffVm(VirtualMachine, boolean, int)}, which allows setting an arbitrary grace period.
+     */
     @Deprecated
     public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, boolean shutdownGracefully) throws VSphereException {
         powerOffVm(vm, evenIfSuspended, shutdownGracefully ? 180 : 0);
     }
 
+    /**
+     * Power off the given virtual machine, optionally waiting a while for its operating system to shut down.
+     * @param vm The virtual machine to power off.
+     * @param evenIfSuspended If false, a suspended VM is left as it was. If true, a suspended VM gets fully powered off.
+     * @param gracefulShutdownSeconds The number of seconds to wait for the guest operating system to shut down. If the passed value is zero or less (or if VMware tools is not installed on the VM), the VM is powered off immediately.
+     */
     public void powerOffVm(VirtualMachine vm, boolean evenIfSuspended, int gracefulShutdownSeconds) throws VSphereException {
 
         if (vm.getConfig().template)
