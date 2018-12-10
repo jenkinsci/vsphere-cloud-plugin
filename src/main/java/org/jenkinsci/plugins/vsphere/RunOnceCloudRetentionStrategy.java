@@ -16,6 +16,7 @@
 
 package org.jenkinsci.plugins.vsphere;
 
+import hudson.Extension;
 import hudson.model.ExecutorListener;
 import hudson.model.Descriptor;
 import hudson.model.Executor;
@@ -168,6 +169,7 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     }
 
     @Restricted(NoExternalUse.class)
+    @Extension
     public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
