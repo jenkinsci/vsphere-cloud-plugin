@@ -182,8 +182,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.targetResourcePool = targetResourcePool;
         this.targetHost = targetHost;
         this.credentialsId = credentialsId;
-        this.nodeProperties = nodeProperties;
-        this.guestInfoProperties = guestInfoProperties;
+        this.nodeProperties = Util.fixNull(nodeProperties);
+        this.guestInfoProperties = Util.fixNull(guestInfoProperties);
         this.launcher = launcher;
         this.retentionStrategy = retentionStrategy;
         readResolve();
