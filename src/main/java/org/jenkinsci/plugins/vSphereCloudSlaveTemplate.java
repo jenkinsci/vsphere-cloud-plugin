@@ -615,20 +615,25 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         try {
             vm = vSphere.getVmByName(cloneName);
         } catch (VSphereException e) {
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getVmByName.", e );
             return null;
         }
         final VirtualMachineConfigInfo config = vm.getConfig();
         if (config == null) {
+            // TODO: If this happens, it causes JENKINS-54521
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getConfig." );
             return null;
         }
-        final OptionValue[] extraConfigs = config.extraConfig;
+        final OptionValue[] extraConfigs = config.getExtraConfig();
         if (extraConfigs == null) {
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getExtraConfig." );
             return null;
         }
         String vmJenkinsUrl = null;
         for (final OptionValue ec : extraConfigs) {
-            final String configName = ec.key;
-            final String configValue = ec.value == null ? null : ec.value.toString();
+            final String configName = ec.getKey();
+            final Object valueObject = ec.getValue();
+            final String configValue = valueObject == null ? null : valueObject.toString();
             if (VSPHERE_ATTR_FOR_JENKINSURL.equals(configName)) {
                 vmJenkinsUrl = configValue;
             }
