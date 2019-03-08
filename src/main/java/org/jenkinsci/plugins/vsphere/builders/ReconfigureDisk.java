@@ -143,7 +143,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 					if (m.matches()) {
 						diskNames.put(m.group(1), true);
 					} else {
-						VSphereLogger.vsLogger(jLogger, String.format("Warning: unreconnized disk filename format: %s", info.getFileName()));
+						VSphereLogger.vsLogger(jLogger, String.format("Warning: unrecognized disk filename format: %s", info.getFileName()));
 					}
 				}
 			}

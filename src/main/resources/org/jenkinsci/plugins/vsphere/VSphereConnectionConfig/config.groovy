@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+package org.jenkinsci.plugins.vsphere.VSphereConnectionConfig
 
 f = namespace(lib.FormTagLib)
 c = namespace(lib.CredentialsTagLib)
