@@ -2,67 +2,87 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form" xmlns:i="jelly:fmt">
 
   <h2>vSphere Information</h2>
-  <dl>
+  <table class="pane bigtable" style="text-align: left;">
     <j:choose>
       <j:when test="${it.cloudDescription != null}">
-        <dt>vSphere Cloud:</dt>
-        <dd><tt>${it.cloudDescription}</tt></dd>
+        <tr>
+          <th>vSphere Cloud</th>
+          <td><tt>${it.cloudDescription}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmName != null}">
-        <dt>VM Name:</dt>
-        <dd><tt>${it.vmName}</tt></dd>
+        <tr>
+          <th>VM Name</th>
+          <td><tt>${it.vmName}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmInformationError != null}">
-        <dt>Error: Unable to provide further information:</dt>
-        <dd><pre>${it.vmInformationError}</pre></dd>
+        <tr>
+          <th>Error: Unable to provide further information</th>
+          <td><pre>${it.vmInformationError}</pre></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmFolder != null}">
-        <dt>Folder:</dt>
-        <dd><tt>${it.vmFolder}</tt></dd>
+        <tr>
+          <th>Folder</th>
+          <td><tt>${it.vmFolder}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmGuestName != null}">
-        <dt>Guest OS:</dt>
-        <dd><tt>${it.vmGuestName}</tt></dd>
+        <tr>
+          <th>Guest OS</th>
+          <td><tt>${it.vmGuestName}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmNumCPU != 0}">
-        <dt>Number of CPUs:</dt>
-        <dd><tt>${it.vmNumCPU}</tt></dd>
+        <tr>
+          <th>Number of CPUs</th>
+          <td><tt>${it.vmNumCPU}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmMemoryMB != 0}">
-        <dt>Memory in MB:</dt>
-        <dd><tt>${it.vmMemoryMB}</tt></dd>
+        <tr>
+          <th>Memory in MB</th>
+          <td><tt>${it.vmMemoryMB}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmGuestToolsStatus != null}">
-        <dt>Guest Tools Status:</dt>
-        <dd><tt>${it.vmGuestToolsStatus}</tt></dd>
+        <tr>
+          <th>Guest Tools Status</th>
+          <td><tt>${it.vmGuestToolsStatus}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmUptimeSeconds != 0}">
-        <dt>Uptime:</dt>
-        <dd><tt>${it.vmUptimeSeconds}</tt> seconds</dd>
+        <tr>
+          <th>Uptime</th>
+          <td><tt>${it.vmUptimeSeconds}</tt> seconds</td>
+        </tr>
       </j:when>
     </j:choose>
     <j:choose>
       <j:when test="${it.vmAnnotation != null}">
-        <dt>Notes:</dt>
-        <dd><tt>${it.vmAnnotation}</tt></dd>
+        <tr>
+          <th>Notes</th>
+          <td><tt>${it.vmAnnotation}</tt></td>
+        </tr>
       </j:when>
     </j:choose>
-  </dl>
+  </table>
 
 </j:jelly>

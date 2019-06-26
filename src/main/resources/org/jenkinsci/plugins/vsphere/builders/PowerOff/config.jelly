@@ -20,15 +20,17 @@ limitations under the License.
     <f:textbox />
   </f:entry>
 
+  <f:entry title="${%Ignore if not exists?}" field="ignoreIfNotExists">
+    <f:checkbox />
+  </f:entry>
   <f:entry title="${%If suspended?}" field="evenIfSuspended">
     <f:checkbox />
   </f:entry>
-  <f:entry title="${%Shutdown gracefully?}" field="shutdownGracefully">
-    <f:checkbox />
-  </f:entry>
-  <f:entry title="${%ignore If Not Exists?}" field="ignoreIfNotExists">
-    <f:checkbox />
-  </f:entry>
+  <f:optionalBlock title="${%Shutdown gracefully?}" field="shutdownGracefully" checked="false" inline="true">
+    <f:entry title="${%Gracefully shutdown timeout}" field="gracefulShutdownTimeout">
+      <f:number default="180" />
+    </f:entry>
+  </f:optionalBlock>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm"/>
 </j:jelly>

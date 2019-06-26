@@ -4,6 +4,6 @@ Says whether to use the slave once and then immediately dispose of it, or to kee
 <li>If you use the run-once strategy, you should ensure that there is only 1 executor.</li>
 <li>If you use the keep-until-idle strategy, you should ensure that "disconnect after limited builds" is disabled (set to 0).</li>
 </ul>
-Both these otions have an idle timeout (in minutes) after which to kill the slave, but for a run-once strategy, this is only a fail-safe if the slave fails to connect.
+Both these options have an idle timeout (in minutes) after which to kill the slave, but for a run-once strategy, this is only a fail-safe if the slave fails to connect.
 Normally a run-once slave will be terminated immediately after it has completed its one-and-only job.
 </div>
