@@ -121,7 +121,10 @@
                 </j:forEach>
             </f:dropdownList>
 
-            <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+            <f:entry title="Node Properties">
+                <f:repeatableHeteroProperty field="nodeProperties" oneEach="true" hasHeader="true"
+                                            addCaption="Add Node Property" deleteCaption="Delete Node Property"/>
+            </f:entry>
         </f:advanced>
 
         <f:entry title="">
