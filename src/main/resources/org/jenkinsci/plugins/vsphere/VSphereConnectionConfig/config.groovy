@@ -7,7 +7,7 @@ f.entry(title:_("vSphere Host"), field:"vsHost") {
     f.textbox()
 }
 
-f.entry(title:_("Disable Certificate Verification"), field:"allowUntrustedCertificate") {
+f.entry(title:_("Disable SSL Check"), field:"allowUntrustedCertificate") {
     f.checkbox()
 }
 

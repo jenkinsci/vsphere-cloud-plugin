@@ -72,7 +72,7 @@
                 <f:checkbox/>
             </f:entry>
 
-            <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
+            <f:entry title="${%Delay in seconds}" field="launchDelay">
                 <f:textbox clazz="required number" default="60"/>
             </f:entry>
 
