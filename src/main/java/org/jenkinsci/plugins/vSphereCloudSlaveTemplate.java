@@ -456,7 +456,11 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
             final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
-            slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotNameForLauncher, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+            slave = new vSphereCloudProvisionedSlave(cloneName, getTemplateDescription(), getRemoteFS(),
+                    String.valueOf(getNumberOfExecutors()), getMode(), getLabelString(), configuredLauncher,
+                    configuredStrategy, Util.fixNull(getNodeProperties()), getParent().getVsDescription(), cloneName,
+                    getForceVMLaunch(), getWaitForVMTools(), snapshotNameForLauncher, String.valueOf(getLaunchDelay()),
+                    null, String.valueOf(getLimitedRunCount()));
         } finally {
             // if anything went wrong, try to tidy up
             if( slave==null ) {
