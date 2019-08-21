@@ -26,7 +26,7 @@ limitations under the License.
   <f:entry title="${%If suspended?}" field="evenIfSuspended">
     <f:checkbox />
   </f:entry>
-  <f:optionalBlock title="${%Shutdown gracefully?}" field="shutdownGracefully" checked="false" inline="true">
+  <f:optionalBlock title="${%Shutdown gracefully?}" field="shutdownGracefully" inline="true">
     <f:entry title="${%Gracefully shutdown timeout}" field="gracefulShutdownTimeout">
       <f:number default="180" />
     </f:entry>
