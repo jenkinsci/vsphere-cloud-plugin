@@ -616,7 +616,7 @@ public class vSphereCloud extends Cloud {
 
             TopLevelItem topLevelItem = null;
             if (prevFolder == null) {
-                topLevelItem = Jenkins.getActiveInstance().getItem(item);
+                topLevelItem = Jenkins.getInstance().getItem(item);
             } else {
                 Collection<TopLevelItem> items = prevFolder.getItems();
                 for (TopLevelItem levelItem : items) {
