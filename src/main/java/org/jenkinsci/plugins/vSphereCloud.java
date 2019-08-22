@@ -340,7 +340,7 @@ public class vSphereCloud extends Cloud {
             excessWorkloadSoFar -= numberOfvSphereCloudSlaveExecutors;
             if (excessWorkloadSoFar <= 0) {
                 VSLOG.log(Level.INFO, methodCallDescription + ": " + numberOfvSphereCloudSlaves + " existing slaves (="
-                        + numberOfvSphereCloudSlaveExecutors + " executors): Workload is satisifed by bringing those online.");
+                        + numberOfvSphereCloudSlaveExecutors + " executors): Workload is satisfied by bringing those online.");
                 return Collections.emptySet();
             }
             // If we've got this far then our static slaves are insufficient to meet
@@ -616,7 +616,7 @@ public class vSphereCloud extends Cloud {
 
             TopLevelItem topLevelItem = null;
             if (prevFolder == null) {
-                topLevelItem = Jenkins.getActiveInstance().getItem(item);
+                topLevelItem = Jenkins.getInstance().getItem(item);
             } else {
                 Collection<TopLevelItem> items = prevFolder.getItems();
                 for (TopLevelItem levelItem : items) {

@@ -30,6 +30,7 @@ import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.NodeProperty;
+import hudson.slaves.NodePropertyDescriptor;
 import hudson.slaves.CommandLauncher;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
@@ -48,6 +49,8 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.Nonnull;
+
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
 
@@ -59,6 +62,8 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -361,7 +366,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 final String oldCredentialsIdOrNull = getCredentialsId();
                 final String oldCredentialsId = oldCredentialsIdOrNull == null ? "" : oldCredentialsIdOrNull;
                 // these were the old hard-coded settings
-                this.launcher = new SSHLauncher(null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60);
+                this.launcher = new SSHLauncher(null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60, null);
                 LOGGER.log(Level.CONFIG, " - now configured to use {0}(..., {1}, ...)", new Object[] {
                         this.launcher.getClass().getSimpleName(), oldCredentialsId });
             } catch (Exception ex) {
@@ -456,7 +461,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it wasn't started by this plugin.", cloneName );
                 throw ex;
             }
-            final String ourJenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+            final String ourJenkinsUrl = Jenkins.getInstance().getRootUrl();
             if ( vmJenkinsUrl.equals(ourJenkinsUrl) ) {
                 LOGGER.log(Level.INFO, "Found existing VM {0} that we started previously (and must have either lost track of it or failed to delete it).", cloneName );
             } else {
@@ -481,7 +486,11 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
             final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
-            slave = new vSphereCloudProvisionedSlave(cloneName, this.templateDescription, this.remoteFS, String.valueOf(this.numberOfExecutors), this.mode, this.labelString, configuredLauncher, configuredStrategy, this.nodeProperties, this.parent.getVsDescription(), cloneName, this.forceVMLaunch, this.waitForVMTools, snapshotNameForLauncher, String.valueOf(this.launchDelay), null, String.valueOf(this.limitedRunCount));
+            slave = new vSphereCloudProvisionedSlave(cloneName, getTemplateDescription(), getRemoteFS(),
+                    String.valueOf(getNumberOfExecutors()), getMode(), getLabelString(), configuredLauncher,
+                    configuredStrategy, Util.fixNull(getNodeProperties()), getParent().getVsDescription(), cloneName,
+                    getForceVMLaunch(), getWaitForVMTools(), snapshotNameForLauncher, String.valueOf(getLaunchDelay()),
+                    null, String.valueOf(getLimitedRunCount()));
             final String configuredCreationHookOrNull = getVmCreationHook();
             final String configuredDisposalHookOrNull = getVmDisposalHook();
             if (configuredCreationHookOrNull != null || configuredDisposalHookOrNull != null) {
@@ -529,7 +538,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     sshLauncher.getCredentialsId(), sshLauncher.getJvmOptions(), sshLauncher.getJavaPath(),
                     sshLauncher.getPrefixStartSlaveCmd(), sshLauncher.getSuffixStartSlaveCmd(),
                     sshLauncher.getLaunchTimeoutSeconds(), sshLauncher.getMaxNumRetries(),
-                    sshLauncher.getRetryWaitTime());
+                    sshLauncher.getRetryWaitTime(), sshLauncher.getSshHostKeyVerificationStrategy());
             return launcherWithIPAddress;
         }
         throw new IllegalStateException("Unsupported launcher (" + launcher + ") in template configuration");
@@ -659,6 +668,27 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             result.add(VSphereCloudRetentionStrategy.DESCRIPTOR);
             return result;
         }
+
+        /**
+         * Returns the list of {@link NodePropertyDescriptor} appropriate for the
+         * {@link vSphereCloudSlave}s that are created from this template.
+         *
+         * @return the filtered list
+         */
+        @SuppressWarnings("unchecked")
+        @Nonnull
+        @Restricted(NoExternalUse.class) // used by Jelly EL only
+        public List<NodePropertyDescriptor> getNodePropertiesDescriptors() {
+            List<NodePropertyDescriptor> result = new ArrayList<NodePropertyDescriptor>();
+            final Jenkins j = Jenkins.getInstance();
+            final List<NodePropertyDescriptor> list = j.getDescriptorList(NodeProperty.class);
+            for (NodePropertyDescriptor npd : list) {
+                if (npd.isApplicable(vSphereCloudSlave.class)) {
+                    result.add(npd);
+                }
+            }
+            return result;
+        }
     }
 
     private static String findWhichJenkinsThisVMBelongsTo(final VSphere vSphere, String cloneName) {
@@ -666,20 +696,25 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         try {
             vm = vSphere.getVmByName(cloneName);
         } catch (VSphereException e) {
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getVmByName.", e );
             return null;
         }
         final VirtualMachineConfigInfo config = vm.getConfig();
         if (config == null) {
+            // TODO: If this happens, it causes JENKINS-54521
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getConfig." );
             return null;
         }
-        final OptionValue[] extraConfigs = config.extraConfig;
+        final OptionValue[] extraConfigs = config.getExtraConfig();
         if (extraConfigs == null) {
+            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getExtraConfig." );
             return null;
         }
         String vmJenkinsUrl = null;
         for (final OptionValue ec : extraConfigs) {
-            final String configName = ec.key;
-            final String configValue = ec.value == null ? null : ec.value.toString();
+            final String configName = ec.getKey();
+            final Object valueObject = ec.getValue();
+            final String configValue = valueObject == null ? null : valueObject.toString();
             if (VSPHERE_ATTR_FOR_JENKINSURL.equals(configName)) {
                 vmJenkinsUrl = configValue;
             }
@@ -689,7 +724,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     private Map<String, String> calculateExtraConfigParameters(final EnvVars knownVariables) {
         final Map<String, String> result = new LinkedHashMap<String, String>();
-        final String jenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+        final String jenkinsUrl = Jenkins.getInstance().getRootUrl();
         if (jenkinsUrl != null) {
             result.put(VSPHERE_ATTR_FOR_JENKINSURL, jenkinsUrl);
         }
@@ -711,7 +746,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         final EnvVars knownVariables = new EnvVars();
         // Maintenance note: If you update this method, you must also update the
         // UI help page to match.
-        final String jenkinsUrl = Jenkins.getActiveInstance().getRootUrl();
+        final String jenkinsUrl = Jenkins.getInstance().getRootUrl();
         if (jenkinsUrl != null) {
             addEnvVar(knownVariables, "JENKINS_URL", jenkinsUrl);
             addEnvVar(knownVariables, "HUDSON_URL", jenkinsUrl);

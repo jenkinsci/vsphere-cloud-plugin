@@ -72,7 +72,7 @@
                 <f:checkbox/>
             </f:entry>
 
-            <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
+            <f:entry title="${%Delay in seconds}" field="launchDelay">
                 <f:textbox clazz="required number" default="60"/>
             </f:entry>
 
@@ -121,7 +121,10 @@
                 </j:forEach>
             </f:dropdownList>
 
-            <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+            <f:entry title="Node Properties">
+                <f:repeatableHeteroProperty field="nodeProperties" oneEach="true" hasHeader="true"
+                                            addCaption="Add Node Property" deleteCaption="Delete Node Property"/>
+            </f:entry>
 
             <f:entry title="${%Debugging script to run after VM creation}" field="vmCreationHook">
                 <f:textbox/>
