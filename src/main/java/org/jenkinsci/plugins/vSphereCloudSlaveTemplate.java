@@ -458,7 +458,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
             slave = new vSphereCloudProvisionedSlave(cloneName, getTemplateDescription(), getRemoteFS(),
                     String.valueOf(getNumberOfExecutors()), getMode(), getLabelString(), configuredLauncher,
-                    configuredStrategy, Util.fixNull(getNodeProperties()), getParent().getVsDescription(), cloneName,
+                    configuredStrategy, makeCopyOfList(getNodeProperties()), getParent().getVsDescription(), cloneName,
                     getForceVMLaunch(), getWaitForVMTools(), snapshotNameForLauncher, String.valueOf(getLaunchDelay()),
                     null, String.valueOf(getLimitedRunCount()));
         } finally {
@@ -469,6 +469,23 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             }
         }
         return slave;
+    }
+
+    private <T> List<T> makeCopyOfList(List<? extends T> listOrNull) {
+        final List<? extends T> originalList = Util.fixNull(listOrNull);
+        final List<T> copyList = new ArrayList<T>(originalList.size());
+        for( final T originalElement : originalList) {
+            final T copyOfElement = makeCopy(originalElement);
+            copyList.add(copyOfElement);
+        }
+        return copyList;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T makeCopy(final T original) {
+        final String xml = Jenkins.XSTREAM.toXML(original);
+        final Object copy = Jenkins.XSTREAM.fromXML(xml);
+        return (T) copy;
     }
 
     private ComputerLauncher determineLauncher(final VSphere vSphere, final String cloneName) throws VSphereException {
