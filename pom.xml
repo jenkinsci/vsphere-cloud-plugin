@@ -17,23 +17,30 @@
     <url>https://wiki.jenkins-ci.org/display/JENKINS/vSphere+Cloud+Plugin</url>
     <licenses>
         <license>
-            <name>The Apache Software License, Version 2.0</name>
+            <name>Apache Software License, Version 2.0</name>
             <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
             <distribution>repo</distribution>
             <comments>A business-friendly OSS license</comments>
         </license>
-     </licenses>
+    </licenses>
 
     <developers>
-        <developer>
+        <!--
+        Previous maintainers "hall of fame":
+        <developer> 2011-2016
             <id>jswager</id>
             <name>Jason Swager</name>
             <email>jswager@alohaoi.com</email>
         </developer>
-        <developer>
+        <developer> 2013-2014
             <id>elordahl</id>
             <name>Eric Lordahl</name>
             <email>elordahl@vt.edu</email>
+        </developer>
+        -->
+        <developer> <!-- 2016... -->
+            <id>pjdarton</id>
+            <name>Peter Darton</name>
         </developer>
     </developers>
 
