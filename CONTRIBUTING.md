@@ -14,8 +14,9 @@ The [plugin's wiki page](https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+P
 
 # Legal conditions
 
-- Any contributions (code, information etc) submitted will be subject to the same license as the rest of the code. No new restrictions/conditions are permitted.
-- As a contributor, you MUST have the legal right to grant permission for the contribution to be used under these conditions.
+- Any contributions (code, information etc) submitted will be subject to the same [license](LICENSE) as the rest of the code.
+No new restrictions/conditions are permitted.
+- As a contributor, you MUST have the legal right to grant permission for your contribution to be used under these conditions.
 
 # Reporting a new issue
 
