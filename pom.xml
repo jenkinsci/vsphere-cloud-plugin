@@ -14,26 +14,39 @@
 
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
-    <url>https://wiki.jenkins-ci.org/display/JENKINS/vSphere+Cloud+Plugin</url>
+    <url>https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+Plugin</url>
     <licenses>
         <license>
-            <name>The Apache Software License, Version 2.0</name>
+            <name>Apache Software License, Version 2.0</name>
             <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
             <distribution>repo</distribution>
             <comments>A business-friendly OSS license</comments>
         </license>
-     </licenses>
+    </licenses>
 
     <developers>
         <developer>
             <id>jswager</id>
             <name>Jason Swager</name>
             <email>jswager@alohaoi.com</email>
+            <roles>
+                <role>maintainer (retired)</role>
+            </roles>
         </developer>
         <developer>
             <id>elordahl</id>
             <name>Eric Lordahl</name>
             <email>elordahl@vt.edu</email>
+            <roles>
+                <role>maintainer (retired)</role>
+            </roles>
+        </developer>
+        <developer>
+            <id>pjdarton</id>
+            <name>Peter Darton</name>
+            <roles>
+                <role>maintainer</role>
+            </roles>
         </developer>
     </developers>
 
