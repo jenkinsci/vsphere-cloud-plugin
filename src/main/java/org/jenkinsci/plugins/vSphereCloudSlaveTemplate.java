@@ -18,6 +18,7 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 
+import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Util;
@@ -48,6 +49,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -645,15 +647,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         @Nonnull
         @Restricted(NoExternalUse.class) // used by Jelly EL only
         public List<NodePropertyDescriptor> getNodePropertiesDescriptors() {
-            List<NodePropertyDescriptor> result = new ArrayList<NodePropertyDescriptor>();
-            final Jenkins j = Jenkins.getInstance();
-            final List<NodePropertyDescriptor> list = j.getDescriptorList(NodeProperty.class);
-            for (NodePropertyDescriptor npd : list) {
-                if (npd.isApplicable(vSphereCloudSlave.class)) {
-                    result.add(npd);
-                }
-            }
-            return result;
+            DescriptorExtensionList<NodeProperty<?>, NodePropertyDescriptor> nodePropertyDescriptors = NodeProperty.all();
+            return nodePropertyDescriptors.stream()
+                .filter(npd -> npd.isApplicable(vSphereCloudSlave.class))
+                .collect(Collectors.toList());
         }
     }
 
