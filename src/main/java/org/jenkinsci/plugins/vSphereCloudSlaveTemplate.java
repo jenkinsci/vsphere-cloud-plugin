@@ -648,9 +648,13 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         @Restricted(NoExternalUse.class) // used by Jelly EL only
         public List<NodePropertyDescriptor> getNodePropertiesDescriptors() {
             DescriptorExtensionList<NodeProperty<?>, NodePropertyDescriptor> nodePropertyDescriptors = NodeProperty.all();
-            return nodePropertyDescriptors.stream()
-                .filter(npd -> npd.isApplicable(vSphereCloudSlave.class))
-                .collect(Collectors.toList());
+            List<NodePropertyDescriptor> list = new ArrayList<>();
+            for (NodePropertyDescriptor npd : nodePropertyDescriptors) {
+                if (npd.isApplicable(vSphereCloudSlave.class)) {
+                    list.add(npd);
+                }
+            }
+            return list;
         }
     }
 
