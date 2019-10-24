@@ -371,7 +371,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
         @Override
         public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
-            return !(descriptor instanceof vSphereCloudProvisionedSlave.DescriptorImpl);
+            return !(descriptor instanceof DescriptorImpl);
         }
     }
 
