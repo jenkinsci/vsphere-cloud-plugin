@@ -36,6 +36,7 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
+import java.util.Collections;
 import javax.annotation.CheckForNull;
 import javax.annotation.Nonnull;
 import jenkins.model.Jenkins;
@@ -140,14 +141,9 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String vsHost) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final Jenkins instance = Jenkins.getInstance(); 
-            if (instance != null) {
-                return new StandardListBoxModel().withEmptySelection().withMatching(
-                    CREDENTIALS_MATCHER, CredentialsProvider.lookupCredentials(StandardCredentials.class,
-                    instance, ACL.SYSTEM, getDomainRequirement(vsHost))
-                );
-            }
-            return new StandardListBoxModel();
+            return new StandardListBoxModel().includeEmptyValue()
+                .includeMatching(Jenkins.getInstance(), StandardCredentials.class,
+                    Collections.singletonList(getDomainRequirement(vsHost)), CREDENTIALS_MATCHER);
         }
 
         public FormValidation doCheckCredentialsId(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
