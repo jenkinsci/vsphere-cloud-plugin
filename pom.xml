@@ -65,8 +65,8 @@
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
-        <dependencies>
-            <dependency>
+    <dependencies>
+        <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>credentials</artifactId>
             <version>2.1.2</version>
@@ -83,16 +83,16 @@
             <artifactId>yavijava</artifactId>
             <version>6.0.05</version>
         </dependency>
-         <dependency>
-             <groupId>org.jenkins-ci.plugins</groupId>
-             <artifactId>node-iterator-api</artifactId>
-             <version>1.5</version>
-         </dependency>
-         <dependency>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>node-iterator-api</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
             <version>1.15</version>
-         </dependency>
+        </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins.workflow</groupId>
             <artifactId>workflow-basic-steps</artifactId>
