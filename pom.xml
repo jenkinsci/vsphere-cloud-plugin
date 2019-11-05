@@ -9,7 +9,7 @@
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
-    <version>2.22-SNAPSHOT</version>
+    <version>${revision}${changelist}</version>
     <packaging>hpi</packaging>
 
     <name>vSphere Plugin</name>
@@ -54,11 +54,11 @@
         <connection>scm:git:git://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
-        <tag>HEAD</tag>
+        <tag>${scmTag}</tag>
     </scm>
 
     <properties>
-        <revision>2.21</revision>
+        <revision>2.22</revision>
         <changelist>-SNAPSHOT</changelist>
         <java.level>8</java.level>
         <jenkins.version>2.60.3</jenkins.version>
