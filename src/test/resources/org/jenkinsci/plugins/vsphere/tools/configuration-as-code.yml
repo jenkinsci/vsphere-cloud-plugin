@@ -1,0 +1,40 @@
+jenkins:
+  systemMessage: "Hello World"
+  agentProtocols:
+    - "JNLP4-connect"
+  clouds:
+    - vSphere:
+        instanceCap: 100
+        maxOnlineSlaves: 0
+        templates:
+          - cloneNamePrefix: "windows-"
+            cluster: "Company"
+            datastore: "Company-FMD-01"
+            folder: "Company/Jenkins agents/Linked clones"
+            forceVMLaunch: true
+            guestInfoProperties:
+              # ^ escapes the secret
+              - name: "JENKINS_URL"
+                value: "^${JENKINS_URL}"
+            labelString: "windows vsphere"
+            launchDelay: 60
+            launcher:
+              jnlp:
+                tunnel: "jenkins:"
+            limitedRunCount: 1
+            linkedClone: true
+            masterImageName: "windows-server-2019"
+            mode: EXCLUSIVE
+            numberOfExecutors: 1
+            remoteFS: "C:/jenkins"
+            resourcePool: "Resources"
+            retentionStrategy:
+              runOnceCloud:
+                idleMinutes: 2
+            saveFailure: false
+            templateInstanceCap: 5
+            useSnapshot: true
+            waitForVMTools: true
+        vsConnectionConfig:
+          vsHost: "https://company-vsphere"
+        vsDescription: "Company vSphere"

@@ -32,6 +32,7 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
     }
 
     @Restricted(NoExternalUse.class)
+    @Extension
     public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
