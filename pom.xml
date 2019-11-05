@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>2.29</version>
+        <version>3.51</version>
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -60,20 +60,16 @@
     <properties>
         <revision>2.21</revision>
         <changelist>-SNAPSHOT</changelist>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.level>8</java.level>
+        <jenkins.version>2.60.3</jenkins.version>
+        <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
     <dependencies>
         <dependency>
-            <groupId>org.kohsuke.stapler</groupId>
-            <artifactId>json-lib</artifactId>
-            <version>2.1-rev7</version>
-            <type>jar</type>
-        </dependency>
-        <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>credentials</artifactId>
-            <version>1.28</version>
+            <version>2.1.2</version>
             <type>jar</type>
         </dependency>
         <dependency>
@@ -87,16 +83,16 @@
             <artifactId>yavijava</artifactId>
             <version>6.0.05</version>
         </dependency>
-         <dependency>
-             <groupId>org.jenkins-ci.plugins</groupId>
-             <artifactId>node-iterator-api</artifactId>
-             <version>1.5</version>
-         </dependency>
-         <dependency>
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>node-iterator-api</artifactId>
+            <version>1.5</version>
+        </dependency>
+        <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
             <version>1.15</version>
-         </dependency>
+        </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins.workflow</groupId>
             <artifactId>workflow-basic-steps</artifactId>
@@ -116,23 +112,4 @@
             <url>https://repo.jenkins-ci.org/public/</url>
         </pluginRepository>
     </pluginRepositories>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.jenkins-ci.tools</groupId>
-                <artifactId>maven-hpi-plugin</artifactId>
-                <configuration>
-                    <disabledTestInjection>false</disabledTestInjection>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>findbugs-maven-plugin</artifactId>
-                <configuration>
-                    <skip>true</skip>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>

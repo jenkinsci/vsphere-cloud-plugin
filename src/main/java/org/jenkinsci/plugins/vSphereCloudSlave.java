@@ -2,10 +2,12 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.AbortException;
 import hudson.Extension;
-import hudson.Functions;
 import hudson.Util;
+import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.Queue.BuildableItem;
 import hudson.model.Result;
 import hudson.model.TaskListener;
@@ -366,6 +368,14 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     @Extension
+    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
+        @Override
+        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
+            return !(descriptor instanceof DescriptorImpl);
+        }
+    }
+
+    @Extension
     public static final class DescriptorImpl extends SlaveDescriptor {
 
         public DescriptorImpl() {
@@ -400,16 +410,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 }
             }
             throw new Exception("The vSphere Cloud doesn't exist");
-        }
-
-        public List<Descriptor<ComputerLauncher>> getComputerLauncherDescriptors() {
-            List<Descriptor<ComputerLauncher>> result = new ArrayList<Descriptor<ComputerLauncher>>();
-            for (Descriptor<ComputerLauncher> launcher : Functions.getComputerLauncherDescriptors()) {
-                if (!vSphereCloudLauncher.class.isAssignableFrom(launcher.clazz)) {
-                    result.add(launcher);
-                }
-            }
-            return result;
         }
 
         public List<String> getIdleOptions() {
