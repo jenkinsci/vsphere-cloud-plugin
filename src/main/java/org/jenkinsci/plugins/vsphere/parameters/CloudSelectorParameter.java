@@ -35,8 +35,10 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
 
     private StringParameterValue checkValue(StringParameterValue value) {
         List<String> cloudNames = vSphereCloud.findAllVsphereCloudNames();
-        if (!cloudNames.contains(value.value))
-            throw new IllegalArgumentException("No vsphere cloud with name: " + value.value);
+        String check = String.valueOf(value.getValue());
+        if (!cloudNames.contains(check)) {
+            throw new IllegalArgumentException("No vsphere cloud with name: " + check);
+        }
         return value;
     }
 
