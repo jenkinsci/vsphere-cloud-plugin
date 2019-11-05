@@ -16,8 +16,12 @@
 
 package org.jenkinsci.plugins.vsphere;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.Extension;
 import hudson.model.ExecutorListener;
 import hudson.model.Descriptor;
+import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.Executor;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
@@ -174,6 +178,14 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
         @Override
         public String getDisplayName() {
             return "vSphere Run-Once Retention Strategy";
+        }
+    }
+
+    @Extension
+    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
+        @Override
+        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
+            return !(descriptor instanceof DescriptorImpl);
         }
     }
 }
