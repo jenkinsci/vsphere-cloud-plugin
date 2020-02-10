@@ -24,7 +24,9 @@ you ensure that it has Java installed,
 and that Jenkins has network connectivity to the VM's first IP address.
 This means that you won't be able to get away with using a host-only network on vSphere for your VMs; you'll need them to have IP addresses that Jenkins can ping.
 
-See the [SSH Build Agents](https://plugins.jenkins.io/ssh-slaves) for further details on that configuration options are available
+See
+[the SSH Build Agents plugin](https://plugins.jenkins.io/ssh-slaves)
+for further details on that configuration options are available
 ...but make sure that everything you set in Jenkins has matching functionality in your VM.
 
 ### Launch agent via Java Web Start

@@ -59,7 +59,7 @@ You may add as many templates that you wish.
 Each template defines a means of creating a new VM to be used as a Jenkins node which will automatically be used to clone new nodes as necessary.
 You can control which templates get used by specifying labels on the templates and "Restrict where build can run" on the jobs.
 
-![](images/JenkinsConfiguration-vSphereCloud-Template.png){width="731" height="1280"}
+![](images/JenkinsConfiguration-vSphereCloud-Template.png)
 
 * Enter a "Clone Name Prefix",
 that name will be used when creating new clones.
@@ -206,6 +206,6 @@ It will optionally consolidate all of the VM's disks.
 
 **WARNING:** THIS IS A DESTRUCTIVE OPERATION THAT WILL DELETE THE SNAPSHOT WITHOUT ADDITIONAL CONFIRMATION.  IT CANNOT BE UNDONE.
 
-** Disclaimer:**
-This list is a guide only.
+**Disclaimer:** This list is a guide only.
 Additional capabilities are typically added by volunteers for whom functionality is usually a higher priority than documentation.
+Further (and sometimes better) documentation can be found in the online help in the Jenkins UI.
