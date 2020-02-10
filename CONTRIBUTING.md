@@ -5,8 +5,8 @@ This facility is for reporting (and fixing) bugs in the code.
 If you're not 100% sure it's a bug in the code then please seek help elsewhere.
 e.g. the [jenkins-users google group](https://groups.google.com/forum/#!forum/jenkinsci-users).
 - [RTFM](https://en.wikipedia.org/wiki/RTFM).
-The Jenkins UI pages include help that should explain things.
-The [plugin's wiki page](https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+Plugin) explains a lot more.
+The Jenkins UI pages include help that should explain things - most fields have online help.
+The [plugin's documentation](README.md) explains some things in more detail.
 - Be helpful and make no demands.
   * This code is Free Open-Source Software - nobody is obliged to make things work for you *but* you have legal permission to fix things yourself.
   * If you're reporting and fixing an issue yourself then you only need to explain what problem you're fixing in enough detail that the maintainer(s) can understand why your changes are in the public interest.
@@ -28,7 +28,7 @@ No new restrictions/conditions are permitted.
 - Specify the Jenkins core & plugin version you're seeing the issue with.
 - Check `Manage Jenkins` -> `Manage Old Data` for out of date configuration data and provide this info.
 - Check for and include output from `Manage Jenkins` -> `System Log`.
-  * If that log is too verbose, create a `vSphere` log as described in the "Debugging" section of [the plugin's wiki page](https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+Plugin).
+  * If that log is too verbose, create a `vSphere` log as described in the "Debugging" section of [the docs](docs/misc.md).
   * Exceptions and stacktraces are *especially* useful, so don't omit those...
   * Note that sensitive information may be visible in logs, so take care to redact logs where necessary.
 - The reported activity & results from your vSphere system may also be relevant.
@@ -71,6 +71,5 @@ Please do not do both in the same PR as this makes life difficult for anyone els
 
 # Links
 
-- https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+Plugin
-- https://wiki.jenkins.io/display/JENKINS/Beginners+Guide+to+Contributing
-- https://wiki.jenkins.io/display/JENKINS/Extend+Jenkins
+- https://plugins.jenkins.io/vsphere-cloud/
+- https://jenkins.io/participate/code/

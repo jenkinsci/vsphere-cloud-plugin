@@ -14,7 +14,7 @@
 
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
-    <url>https://wiki.jenkins.io/display/JENKINS/vSphere+Cloud+Plugin</url>
+    <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
     <licenses>
         <license>
             <name>Apache Software License, Version 2.0</name>
