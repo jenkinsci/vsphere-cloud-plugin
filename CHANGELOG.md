@@ -1,7 +1,7 @@
 # Change Log
 
 ### [Version 2.22](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.22)
-(TBD):
+_February 14th, 2020_:
 * JCasC support
 ([JENKINS-60029](https://issues.jenkins-ci.org/browse/JENKINS-60029),
 [PR#100](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/100),
