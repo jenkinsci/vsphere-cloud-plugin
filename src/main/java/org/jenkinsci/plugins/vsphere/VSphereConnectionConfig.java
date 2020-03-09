@@ -142,7 +142,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                 @QueryParameter String vsHost) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return new StandardListBoxModel().includeEmptyValue()
-                .includeMatching(Jenkins.getInstance(), StandardCredentials.class,
+                .includeMatchingAs(ACL.SYSTEM, Jenkins.getInstance(), StandardCredentials.class,
                     Collections.singletonList(getDomainRequirement(vsHost)), CREDENTIALS_MATCHER);
         }
 
