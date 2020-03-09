@@ -1,5 +1,11 @@
 # Change Log
 
+### [Version 2.23](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.23)
+_Unreleased_:
+* Fix broken credentials selection
+([JENKINS-61131](https://issues.jenkins-ci.org/browse/JENKINS-61131),
+[PR#116](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/116)).
+
 ### [Version 2.22](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.22)
 _February 14th, 2020_:
 * JCasC support
