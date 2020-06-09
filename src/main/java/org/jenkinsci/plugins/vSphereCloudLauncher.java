@@ -282,18 +282,20 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
 
-        if(vsSlave == null) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Slave is null.");
-            return;
+        if (vsSlave != null) {
+            if (vsSlave.slaveIsStarting == Boolean.TRUE) {
+                vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
+                return;
+            }
+            if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
+                vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
+                return;
+            }
+            vsSlave.slaveIsDisconnecting = Boolean.TRUE;
+        } else {
+            vSphereCloud.Log(slaveComputer, taskListener, "Slave is null. Will still attempt to tear down launcher.");
         }
-        if (vsSlave.slaveIsStarting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
-            return;
-        }
-        if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
-            return;
-        }
+
         if (slaveComputer.isTemporarilyOffline()) {
             if (!(slaveComputer.getOfflineCause() instanceof VSphereOfflineCause)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
@@ -301,7 +303,6 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             }
         }
 
-        vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         VSphere v = null;
         boolean reconnect = false;
         try {
@@ -380,8 +381,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 v.disconnect();
                 v = null;
             }
-            vsSlave.slaveIsDisconnecting = Boolean.FALSE;
-            vsSlave.slaveIsStarting = Boolean.FALSE;
+            if (vsSlave != null) {
+                vsSlave.slaveIsDisconnecting = Boolean.FALSE;
+                vsSlave.slaveIsStarting = Boolean.FALSE;
+            }
 
             if (reconnect) {
                 slaveComputer.connect(false);
