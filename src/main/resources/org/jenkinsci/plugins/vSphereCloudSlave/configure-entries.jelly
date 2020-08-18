@@ -57,7 +57,7 @@
 
     <f:dropdownList name="slave.delegateLauncher" title="${%Secondary launch method}"
                     help="${descriptor.getHelpFile('launcher')}">
-        <j:forEach var="d" items="${descriptor.getComputerLauncherDescriptors()}" varStatus="loop">
+        <j:forEach var="d" items="${descriptor.computerLauncherDescriptors(it)}" varStatus="loop">
             <f:dropdownListBlock value="${d.clazz.name}" name="${d.displayName}"
                                  selected="${it.delegateLauncher.descriptor==d}"
                                  title="${d.displayName}">
