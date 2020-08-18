@@ -2,17 +2,13 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
 
-import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Util;
-import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.Queue.BuildableItem;
 import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.model.Computer;
-import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Run;
 import hudson.model.queue.CauseOfBlockage;
@@ -368,28 +364,14 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     @Extension
-    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
-        @Override
-        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
-            return !(descriptor instanceof DescriptorImpl);
-        }
-    }
-
-    @Extension
-    public static final class DescriptorImpl extends SlaveDescriptor {
-
+    public static class DescriptorImpl extends SlaveDescriptor {
         public DescriptorImpl() {
             load();
         }
 
         @Override
         public String getDisplayName() {
-            return "Slave virtual computer running under vSphere Cloud";
-        }
-
-        @Override
-        public boolean isInstantiable() {
-            return true;
+            return "Agent running within a vSphere hypervisor";
         }
 
         public List<vSphereCloud> getvSphereClouds() {
