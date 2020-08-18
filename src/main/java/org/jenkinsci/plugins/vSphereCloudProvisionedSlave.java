@@ -100,89 +100,19 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     }
 
     @Extension
-    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
-        @Override
-        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
-            return !(descriptor instanceof DescriptorImpl);
-        }
-    }
-
-    @Extension
-    public static final class DescriptorImpl extends SlaveDescriptor {
-
-        public DescriptorImpl() {
-            load();
-        }
-
+    public static final class DescriptorImpl extends vSphereCloudSlave.DescriptorImpl {
         @Override
         public String getDisplayName() {
-            return "Slave created from a vSphere Cloud slave template";
+            return super.getDisplayName()+", auto-provisioned by Jenkins from cloud template";
         }
 
         @Override
         public boolean isInstantiable() {
+            /*
+             * This type of agent can't be directly created by the user through the UI.
+             * The user defines a vSphere agent template and _that_ then creates these "on demand".
+             */
             return false;
-        }
-
-        public List<vSphereCloud> getvSphereClouds() {
-            List<vSphereCloud> result = new ArrayList<vSphereCloud>();
-            for (Cloud cloud : Jenkins.getInstance().clouds) {
-                if (cloud instanceof vSphereCloud) {
-                    result.add((vSphereCloud) cloud);
-                }
-            }
-            return result;
-        }
-
-        public vSphereCloud getSpecificvSphereCloud(String vsDescription)
-                throws Exception {
-            for (vSphereCloud vs : getvSphereClouds()) {
-                if (vs.getVsDescription().equals(vsDescription)) {
-                    return vs;
-                }
-            }
-            throw new Exception("The vSphere Cloud doesn't exist");
-        }
-
-        public List<String> getIdleOptions() {
-            List<String> options = new ArrayList<String>();
-            options.add("Shutdown");
-            options.add("Shutdown and Revert");
-            options.add("Revert and Restart");
-            options.add("Revert and Reset");
-            options.add("Suspend");
-            options.add("Reset");
-            options.add("Reconnect and Revert");
-            options.add("Nothing");
-            return options;
-        }
-
-        public FormValidation doCheckLaunchDelay(@QueryParameter String value) {
-            return FormValidation.validatePositiveInteger(value);
-        }
-
-        @RequirePOST
-        public FormValidation doTestConnection(@AncestorInPath ItemGroup<?> context,
-                @QueryParameter String vsDescription,
-                @QueryParameter String vmName,
-                @QueryParameter String snapName) {
-            throwUnlessUserHasPermissionToConfigureSlave(context);
-            try {
-                vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
-                VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
-                if (vm == null) {
-                    return FormValidation.error("Virtual Machine was not found");
-                }
-                if (!snapName.isEmpty()) {
-                    VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
-                    if (snap == null) {
-                        return FormValidation.error("Virtual Machine snapshot was not found");
-                    }
-                }
-                return FormValidation.ok("Virtual Machine found successfully");
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 }
