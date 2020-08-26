@@ -44,6 +44,11 @@ public class ReconfigureMemory extends ReconfigureStep {
 	}
 
 	@Override
+	public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+		reconfigureMemory(env, listener);
+	}
+
+	@Override
 	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			reconfigureMemory(run, launcher, listener);
@@ -65,24 +70,19 @@ public class ReconfigureMemory extends ReconfigureStep {
 	}
 
 	public boolean reconfigureMemory(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+        EnvVars env = extractEnvironment(run, listener);
 
-        PrintStream jLogger = listener.getLogger();
-		String expandedMemorySize = memorySize;
-        EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-		if (run instanceof AbstractBuild) {
-			env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-			expandedMemorySize = env.expand(memorySize);
-		}
+		return reconfigureMemory(env, listener);
+	}
 
-        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
-        spec.setMemoryMB(Long.valueOf(expandedMemorySize));
-        VSphereLogger.vsLogger(jLogger, "Finished!");
-        return true;
+	private boolean reconfigureMemory(final EnvVars env, final TaskListener listener) throws VSphereException  {
+		PrintStream jLogger = listener.getLogger();
+		String expandedMemorySize = env.expand(memorySize);
+
+		VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
+		spec.setMemoryMB(Long.valueOf(expandedMemorySize));
+		VSphereLogger.vsLogger(jLogger, "Finished!");
+		return true;
 	}
 
 	@Extension

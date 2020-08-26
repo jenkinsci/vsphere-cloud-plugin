@@ -65,6 +65,11 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	@Override
+	public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+		reconfigureDisk(env, listener);
+	}
+
+	@Override
 	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			reconfigureDisk(run, launcher, listener);
@@ -86,20 +91,18 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	public boolean reconfigureDisk(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+		EnvVars env = extractEnvironment(run, listener);
 
+		return reconfigureDisk(env, listener);
+	}
+
+	private boolean reconfigureDisk(final EnvVars env, final TaskListener listener) throws VSphereException  {
 		PrintStream jLogger = listener.getLogger();
-		int diskSize = Integer.parseInt(this.diskSize);
-		EnvVars env;
+		int diskSize = Integer.parseInt(env.expand(this.diskSize));
 
 		try {
-			env = run.getEnvironment(listener);
-			if (run instanceof AbstractBuild) {
-				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-				diskSize = Integer.parseInt(env.expand(this.diskSize));
-			}
 			VirtualDeviceConfigSpec vdiskSpec = createAddDiskConfigSpec(vm, diskSize, jLogger);
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
-
 			spec.setDeviceChange(vdiskSpecArray);
 			VSphereLogger.vsLogger(jLogger, "Configuration done");
 		} catch (Exception e) {

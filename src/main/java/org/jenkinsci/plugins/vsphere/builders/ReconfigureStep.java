@@ -69,6 +69,8 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
 
     public abstract void perform(@Nonnull Run<?, ?> run, FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
 
+    public abstract void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException;
+
     protected VirtualDevice findDeviceByLabel(VirtualDevice[] devices, String label) {
         for(VirtualDevice d : devices) {
             if(d.getDeviceInfo().getLabel().contentEquals(label)) {
@@ -76,6 +78,20 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
             }
         }
         return null;
+    }
+
+    protected EnvVars extractEnvironment(final Run<?, ?> run, final TaskListener listener) throws VSphereException  {
+        try {
+            EnvVars env = run.getEnvironment(listener);
+
+            if (run instanceof AbstractBuild) {
+                env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+            }
+
+            return env;
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
     }
 
 	public static abstract class ReconfigureStepDescriptor extends Descriptor<ReconfigureStep> {

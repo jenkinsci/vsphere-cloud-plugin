@@ -31,6 +31,7 @@ import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -491,7 +492,7 @@ public class CloudProvisioningStateTest {
                 null, "snapshotName", false, "cluster", "resourcePool", "datastore", "folder", "customizationSpec", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", null,
                 new JNLPLauncher(), RetentionStrategy.NOOP, Collections.<NodeProperty<?>> emptyList(),
-                Collections.<VSphereGuestInfoProperty> emptyList());
+                Collections.<VSphereGuestInfoProperty> emptyList(), Collections.emptyList());
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<vSphereCloudSlaveTemplate>();
         templates.add(template);

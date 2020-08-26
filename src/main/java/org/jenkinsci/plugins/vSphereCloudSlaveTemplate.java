@@ -18,6 +18,7 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 
+import com.vmware.vim25.VirtualMachineConfigSpec;
 import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
 import hudson.Extension;
@@ -49,7 +50,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -61,6 +61,7 @@ import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -124,6 +125,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
     private ComputerLauncher launcher;
     private RetentionStrategy<?> retentionStrategy;
+    private final List<ReconfigureStep> reconfigureSteps;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
@@ -156,7 +158,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final ComputerLauncher launcher,
                                      final RetentionStrategy<?> retentionStrategy,
                                      final List<? extends NodeProperty<?>> nodeProperties,
-                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
+                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties,
+                                     final List<ReconfigureStep> reconfigureSteps) {
         this.configVersion = CURRENT_CONFIG_VERSION;
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
@@ -186,6 +189,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.guestInfoProperties = Util.fixNull(guestInfoProperties);
         this.launcher = launcher;
         this.retentionStrategy = retentionStrategy;
+        this.reconfigureSteps = Util.fixNull(reconfigureSteps);
         readResolve();
     }
 
@@ -319,6 +323,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.retentionStrategy;
     }
 
+    public List<ReconfigureStep> getReconfigureSteps() {
+        return this.reconfigureSteps;
+    }
+
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
         if(this.templateInstanceCap == 0) {
@@ -395,20 +403,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
-        final PrintStream logger = listener.getLogger();
         final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
         final vSphereCloudProvisionedSlave slave;
         try {
-            slave = provision(cloneName, logger, resolvedExtraConfigParameters, vSphere);
+            slave = provision(cloneName, listener, resolvedExtraConfigParameters, vSphere);
         } finally {
             vSphere.disconnect();
         }
         return slave;
     }
 
-    private vSphereCloudProvisionedSlave provision(final String cloneName, final PrintStream logger, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
-        final boolean POWER_ON = true;
+    private vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
+        final PrintStream logger = listener.getLogger();
         final boolean useCurrentSnapshot;
         final String snapshotToUse;
         if (getUseSnapshot()) {
@@ -425,8 +432,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             snapshotToUse = null;
         }
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, logger);
+            final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, !willReconfigure, resolvedExtraConfigParameters, this.customizationSpec, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
+            if(willReconfigure) {
+                final VirtualMachine vm = vSphere.getVmByName(cloneName);
+                final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+                final EnvVars env = new EnvVars();
+                for (ReconfigureStep globalStep : reconfigureSteps) {
+                    // Do not mutate global steps to perform reconfiguration - use a clone
+                    ReconfigureStep actionStep = (ReconfigureStep)Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep));
+                    actionStep.setVsphere(vSphere);
+                    actionStep.setVM(vm);
+                    actionStep.setVirtualMachineConfigSpec(spec);
+                    actionStep.perform(env, listener);
+                }
+                vSphere.reconfigureVm(cloneName, spec);
+                vSphere.startVm(cloneName, 30);
+            }
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
             if ( vmJenkinsUrl==null ) {
