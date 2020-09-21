@@ -1,5 +1,12 @@
 # Change Log
 
+### [Version 2.24](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.24)
+_September 21st, 2020_:
+* Fix resource leak on disconnect ([PR#117](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/117))
+* Fix ability to manually create vSphere agent
+([JENKINS-61702](https://issues.jenkins-ci.org/browse/JENKINS-61702),
+[PR#118](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/118)).
+
 ### [Version 2.23](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.23)
 _March 13th, 2020_:
 * Fix broken credentials selection
@@ -45,12 +52,12 @@ _February 26th, 2019:_
 ([PR#97](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/97)).
 * Correct button text on Folder configuration
 ([PR#99](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/99)).
-* Improve appearance of slave WebUI page
+* Improve appearance of agent WebUI page
 ([PR#101](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/101)).
 
 ### [Version 2.18](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.18)
 _July 23rd, 2018:_
-* Enhancement: Added "Reconnect and Revert" VM slave option
+* Enhancement: Added "Reconnect and Revert" VM agent option
 ([PR#90](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/90)).
 * Enhancement: Improved localization support + code tidy-up for cloud agent retention
 ([PR#91](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/91)).
@@ -172,7 +179,7 @@ _February 24th, 2016:_
 
 ### [Version 2.10](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.10)
 _January 26th, 2016:_
-* Slave naming fixes
+* Agent naming fixes
 ([PR#41](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/41)).
 
 ### [Version 2.9](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.9)
@@ -184,7 +191,7 @@ _December 30th, 2015:_
 
 ### [Version 2.8](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.8)
 _December 11th, 2015:_
-* Dynamic On-Demand slaves
+* Dynamic On-Demand agents
 ([PR#35](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/35)).
 * Set DataStore when reconfiguring disks
 ([PR#37](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/37)).
@@ -261,14 +268,14 @@ _July 8th, 2014:_
 * Allow deployment without a resource pool
 ([JENKINS-21647](https://issues.jenkins-ci.org/browse/JENKINS-21647)).
 * Added a Graceful Shutdown to the Power Down build step.
-* Additional fixes to handle multiple slave shutdowns and job runs on powered down slaves.
+* Additional fixes to handle multiple agent shutdowns and job runs on powered down agents.
 
 ### [Version 1.1.10](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-1.1.10)
 _May 15th, 2014:_
-* Modified the previous fix for preventing jobs running on slaves that had limited test runs enabled.
+* Modified the previous fix for preventing jobs running on agents that had limited test runs enabled.
 The original fix wasn't robust in terms of Jenkins restarts.
 * **NOTE:**
-A cleanup of the code revealed that the plugin was storing information in the slave configuration that it wasn't supposed to.
+A cleanup of the code revealed that the plugin was storing information in the agent configuration that it wasn't supposed to.
 When this version of the plugin is installed, some old data may have been stored and Jenkins will note this on the Manage Jenkins page.
 If the data is in regard to "isStarting" and "isDisconnecting", then it should be fine to delete that old data with no adverse effects.
 
@@ -285,7 +292,7 @@ _April 25th, 2014:_
 _March 13th, 2014:_
 * "VM cannot be started" repeatedly with vSphere plugin
 ([JENKINS-22025](https://issues.jenkins-ci.org/browse/JENKINS-22025)).
-* Vsphere plugin keeps reseting the slave when slave is configured for on demand start
+* Vsphere plugin keeps reseting the agent when agent is configured for on demand start
 ([JENKINS-21312](https://issues.jenkins-ci.org/browse/JENKINS-21312)).
 
 ### [Version 1.1.4](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-1.1.4)
@@ -301,7 +308,7 @@ _January 7th, 2014:_
 
 ### [Version 1.1.2](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-1.1.2)
 _November 26th, 2013:_
-* Fixed a race-case type issue where Jenkins would disconnect a slave that was in the process of trying to connect.
+* Fixed a race-case type issue where Jenkins would disconnect an agent that was in the process of trying to connect.
 
 ### [Version 1.1.1](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-1.1.1)
 _November 6th, 2013:_
@@ -346,20 +353,20 @@ _August 22nd, 2013:_
 _May 25th, 2012:_
 * Fixed
 [JENKINS-13722](https://issues.jenkins-ci.org/browse/JENKINS-13722).
-* Undid all the slave launching logic - the logic plus
+* Undid all the agent launching logic - the logic plus
 [JENKINS-13735](https://issues.jenkins-ci.org/browse/JENKINS-13735)
-was resulting in slaves that would never start.
-Slave STILL never start in some cases, but once the Jenkins bug is fixed, it should begin working better.
+was resulting in agents that would never start.
+Agent STILL never start in some cases, but once the Jenkins bug is fixed, it should begin working better.
 
 ### [Version 0.9](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-0.9)
 _May 7th, 2012:_
-* Overhaul of the slave launching logic.  Multiple slaves will be launched if unique.
+* Overhaul of the agent launching logic.  Multiple agents will be launched if unique.
 * Log lines should print with new lines
 ([JENKINS-17323](https://issues.jenkins-ci.org/browse/JENKINS-17323)).
 
 ### [Version 0.8](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-0.8)
 _May 4th, 2012:_
-* Fixed an NPE in some race cases involving slave startups
+* Fixed an NPE in some race cases involving agent startups
 ([JENKINS-13675](https://issues.jenkins-ci.org/browse/JENKINS-13675)).
 
 ### [Version 0.7](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-0.7)
