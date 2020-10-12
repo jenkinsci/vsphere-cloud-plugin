@@ -1,4 +1,4 @@
-:: Interrogates the machine Jenkins slave JNLP start-up parameters and then launches the slave as a JNLP agent.
+:: Interrogates the machine Jenkins agent JNLP start-up parameters and then launches the agent as a JNLP agent.
 :: The start-up parameters are expected to be injected in by the hypervisor for cloud-based machines.
 :: e.g. We look for vSphere "userinfo", or a magic script file (as used by OpenStack).
 ::
@@ -21,9 +21,9 @@
 ::    (forever) for the other thread to finish its loading.
 ::    In practice, it means the Jenkins SwapSpaceMonitor code can deadlock with Util.isSymlink
 ::    unless we get all that classloading out of the way before there are multiple threads.
-:: We do not set "-Xrs" for a desktop-based slave because it isn't running "as a service"
+:: We do not set "-Xrs" for a desktop-based agent because it isn't running "as a service"
 :: and hence will get killed by logoff events.
-:: We also create a logging configuration file and tell the slave to use it using the setting
+:: We also create a logging configuration file and tell the agent to use it using the setting
 :: "-Djava.util.logging.config.file=jenkins-slave.logging.properties"
 :: and this is done outside the normal JVM_ARGS code because we're only doing it as a JVM ARG
 :: as a workaround because --loggingConfig doesn't work.
@@ -38,13 +38,13 @@
 )
 @SET /A countOfConsecutiveSlaveFailures=countOfConsecutiveSlaveFailures+1
 @CALL :logMessage "WARNING" "This is slave failure count %countOfConsecutiveSlaveFailures% since bootup or last successful completion."
-:: The java slave execution stopped, attempt to relaunch it in a short while.
+:: The java agent execution stopped, attempt to relaunch it in a short while.
 @CALL :wait 30 "before attempting a slave relaunch"
 @CALL :logBlankLine
 @GOTO start_slave
 
 ::***************************************************************************************
-:: 1. If %JENKINS_ENV_VARS% batch script exists, then is run to set environment variables that are used to configure the slave.
+:: 1. If %JENKINS_ENV_VARS% batch script exists, then is run to set environment variables that are used to configure the agent.
 :: 2. If this fails then it attempts to read the configuration settings from the vSphere "guestinfo" data object.
 :: Success is indicated when SLAVE_JNLP_URL is set. In this case SLAVE_HOME, SLAVE_JVM_ARGS, SLAVE_PARAMS and JAVA_HOME will also be set.
 :: If the above both fail then they are retried in turn until one of them sets SLAVE_JNLP_URL.
@@ -64,7 +64,7 @@
 
 ::***************************************************************************************
 :showSettings
-:: Logs the settings that we're going to try launching the slave with.
+:: Logs the settings that we're going to try launching the agent with.
 ::
 :: %1 = Where the settings came from
 @CALL :logMessage "FINE" "%~1"
@@ -90,7 +90,7 @@ GOTO :eof
 :: If %SCRIPT_FOLDER%jenkins_startup_vars.cmd does not exist it returns immediately with SLAVE_JNLP_URL left unset.
 :: Otherwise the script is run and this start-up information is used to set:
 ::   SLAVE_JNLP_URL      to %SLAVE_JNLP_URL%
-::   SLAVE_JAR_URL       to %SLAVE_JAR_URL% or, if this is not set, to the JNLP URL with /computer/... replaced with /jnlpJars/slave.jar
+::   SLAVE_JAR_URL       to %SLAVE_JAR_URL% or, if this is not set, to the JNLP URL with /computer/... replaced with /jnlpJars/agent.jar
 ::   SLAVE_HOME          to %SLAVE_JENKINS_HOME% or if this is not set, %SCRIPT_FOLDER% with no trailing backslash.
 ::   SLAVE_JVM_ARGS      to %SLAVE_JVM_OPTIONS% or if this is not set, %DEFAULT_SLAVE_JVM_ARGS%.
 ::   SLAVE_PARAMS        to -secret "%SLAVE_JNLP_SECRET%" %SLAVE_PARAMETERS% if SLAVE_JNLP_SECRET is set, else just %SLAVE_PARAMETERS.
@@ -132,7 +132,7 @@ GOTO :eof
 :: If no GuestInfo is present or has no JNLP URL it returns immediately with SLAVE_JNLP_URL left unset.
 :: Otherwise sets:
 ::   SLAVE_JNLP_URL      to GuestInfo.SLAVE_JNLP_URL or, if this is not set, to GuestInfo.JNLPURL
-::   SLAVE_JAR_URL       to GuestInfo.SLAVE_JAR_URL or, if this is not set, to the JNLP URL with /computer/... replaced with /jnlpJars/slave.jar
+::   SLAVE_JAR_URL       to GuestInfo.SLAVE_JAR_URL or, if this is not set, to the JNLP URL with /computer/... replaced with /jnlpJars/agent.jar
 ::   SLAVE_HOME          to GuestInfo.SLAVE_HOME or if this is not set, %SCRIPT_FOLDER% with no trailing backslash.
 ::   SLAVE_JVM_ARGS      to GuestInfo.SLAVE_JVM_ARGS or if this is not set, %DEFAULT_SLAVE_JVM_ARGS%.
 ::   SLAVE_PARAMS        to -secret GuestInfo.SLAVE_SECRET GuestInfo.SLAVE_PARAMETERS if GuestInfo.SLAVE_SECRET is set, else just GuestInfo.SLAVE_PARAMETERS.
@@ -185,10 +185,10 @@ GOTO :eof
 
 ::***************************************************************************************
 :calcJenkinsSlaveJarUrlFromSlaveAgentUrl
-:: Given the URL of the jnlp endpoint, calculates the URL of the slave.jar file.
-:: i.e. Turns someurl/computer/somename/something into someurl/jnlpJars/slave.jar
+:: Given the URL of the jnlp endpoint, calculates the URL of the agent.jar file.
+:: i.e. Turns someurl/computer/somename/something into someurl/jnlpJars/agent.jar
 ::
-:: %1 = variable name holding slave agent url
+:: %1 = variable name holding agent url
 :: %2 = variable name to be set to base URL
 @CALL :findSubstring "(1,1,500)" 17 "/slave-agent.jnlp" %1 cjbufsau_indexOfSlashSlaveAgent || EXIT /b 1
 @IF "%cjbufsau_indexOfSlashSlaveAgent%"=="" EXIT /b 1
@@ -230,7 +230,7 @@ GOTO :eof
 ::***************************************************************************************
 :createLoggingConfigFile
 :: Creates a Java properties file that configures java.util.logging.Logger
-:: which is what the slave uses to log everything.
+:: which is what the agent uses to log everything.
 ::
 :: %1 = name of our script that's running right now.
 :: %2 = name of the file to create
@@ -445,12 +445,12 @@ GOTO :eof
 
 ::***************************************************************************************
 :: Create the Jenkins home folder if it does not exist.
-:: If we have been told where to get slave.jar from then we download it.
+:: If we have been told where to get agent.jar from then we download it.
 :: If not, and the Jenkins home folder does not already contain a slave jar, then fail.
 :: Finally, we run the Jenkins JNLP start-up command.
-:: We only return once the slave has exited, i.e. crashed, died, disconnected etc.
-:: If we managed to run the slave and it exited with code zero then we return 0.
-:: If we ran the slave and it exited with a non-zero code then we return 1.
+:: We only return once the agent has exited, i.e. crashed, died, disconnected etc.
+:: If we managed to run the agent and it exited with code zero then we return 0.
+:: If we ran the agenT and it exited with a non-zero code then we return 1.
 :: If we did not manage to start it, we return 1.
 ::
 :runSlave
