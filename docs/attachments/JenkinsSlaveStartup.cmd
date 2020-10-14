@@ -450,7 +450,7 @@ GOTO :eof
 :: Finally, we run the Jenkins JNLP start-up command.
 :: We only return once the agent has exited, i.e. crashed, died, disconnected etc.
 :: If we managed to run the agent and it exited with code zero then we return 0.
-:: If we ran the agenT and it exited with a non-zero code then we return 1.
+:: If we ran the agent and it exited with a non-zero code then we return 1.
 :: If we did not manage to start it, we return 1.
 ::
 :runSlave
