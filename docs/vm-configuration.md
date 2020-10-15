@@ -56,7 +56,7 @@ download agent.jar, then run java -jar agent.jar with the appropriate arguments.
 e.g. If you're using Windows, you could have the machine auto-login to itself,
 start a desktop session and have a .CMD script in the StartUp folder that achieves the same thing.
 This example script,
-[JenkinsSlaveStartup.cmd](attachments/JenkinsSlaveStartup.cmd),
+[JenkinsAgentStartup.cmd](attachments/JenkinsAgentStartup.cmd),
 requires 3 GuestInfo properties to be set:
 * `JNLPURL` should be set to value `${JENKINS_URL}computer/${NODE_NAME}/slave-agent.jnlp`,
 * `SLAVE_HOME` should be set to `${remoteFS}` and
