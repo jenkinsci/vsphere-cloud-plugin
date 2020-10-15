@@ -51,7 +51,7 @@
     </f:entry>
 
     <f:entry title="${%Delay between launch and boot complete}" field="launchDelay"
-    description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as a agent.}" >
+    description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as an agent.}" >
         <f:textbox default="60" />
     </f:entry>
 

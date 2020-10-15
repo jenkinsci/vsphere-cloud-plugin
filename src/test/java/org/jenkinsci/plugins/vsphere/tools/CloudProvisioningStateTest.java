@@ -233,7 +233,7 @@ public class CloudProvisioningStateTest {
         final String deletedButActiveNodeName = createNodeName();
         final String livedAndDiedNodeName = createNodeName();
         final CloudProvisioningState instance = createInstance();
-        // A template which the user deleted but still has an active agent 
+        // A template which the user deleted but still has an active agent
         final CloudProvisioningRecord deletedButActiveRecord = createRecord(instance);
         instance.provisioningStarted(deletedButActiveRecord, deletedButActiveNodeName);
         instance.provisionedSlaveNowActive(deletedButActiveRecord, deletedButActiveNodeName);
