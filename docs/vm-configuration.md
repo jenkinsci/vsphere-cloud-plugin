@@ -34,7 +34,7 @@ for further details on that configuration options are available
 With a "Java Web Start" (aka JNLP) method, the Jenkins master does not connect to the node;
 it relies on the node connecting to the master.
 
-This requires that you configure your VM to start the Jenkins slave.jar process such that it to connects to the master.
+This requires that you configure your VM to start the Jenkins agent.jar process such that it to connects to the master.
 This means that you can use a non-routable network for your VMs
 (they only need NAT access to the Jenkins master's IP address;
 the Jenkins master doesn't need to be able to connect to them)
@@ -51,12 +51,12 @@ provides details of how to read the properties at runtime.
 
 e.g. If you're using a \*nix OS with upstart,
 you could run the process from upstart by having a script read the GuestInfo properties,
-download slave.jar, then run java -jar slave.jar with the appropriate arguments.
+download agent.jar, then run java -jar agent.jar with the appropriate arguments.
 
 e.g. If you're using Windows, you could have the machine auto-login to itself,
 start a desktop session and have a .CMD script in the StartUp folder that achieves the same thing.
 This example script,
-[JenkinsSlaveStartup.cmd](attachments/JenkinsSlaveStartup.cmd),
+[JenkinsAgentStartup.cmd](attachments/JenkinsAgentStartup.cmd),
 requires 3 GuestInfo properties to be set:
 * `JNLPURL` should be set to value `${JENKINS_URL}computer/${NODE_NAME}/slave-agent.jnlp`,
 * `SLAVE_HOME` should be set to `${remoteFS}` and

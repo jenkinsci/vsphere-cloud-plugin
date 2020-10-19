@@ -53,13 +53,13 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
-    /** If more than zero then this is the number of build-jobs we limit the slave to. */
+    /** If more than zero then this is the number of build-jobs we limit the agent to. */
     private Integer LimitedTestRunCount = 0;
-    /** A count of the number of build-jobs this slave has done. */
+    /** A count of the number of build-jobs this agent has done. */
     private transient Integer NumberOfLimitedTestRuns = 0;
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
-    // The list of slaves that MIGHT be launched.
+    // The list of agents that MIGHT be launched.
     private static ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
     private static final Boolean ProbableLaunchLock = true;
 
@@ -349,7 +349,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
         @Override
         public void preLaunch(Computer c, TaskListener taskListener) throws IOException, InterruptedException {
-            /* We may be called on any slave type so check that we should
+            /* We may be called on any agent type so check that we should
              * be in here. */
             if (!(c.getNode() instanceof vSphereCloudSlave)) {
                 return;

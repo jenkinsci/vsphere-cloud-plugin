@@ -85,7 +85,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
 
         @Override
         public void preLaunch(Computer c, TaskListener taskListener) throws IOException, InterruptedException {
-            /* We may be called on any slave type so check that we should
+            /* We may be called on any agent type so check that we should
              * be in here. */
             if (!(c.getNode() instanceof vSphereCloudProvisionedSlave)) {
                 return;

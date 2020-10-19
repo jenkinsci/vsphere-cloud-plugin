@@ -233,7 +233,7 @@ public class CloudProvisioningStateTest {
         final String deletedButActiveNodeName = createNodeName();
         final String livedAndDiedNodeName = createNodeName();
         final CloudProvisioningState instance = createInstance();
-        // A template which the user deleted but still has an active slave
+        // A template which the user deleted but still has an active agent
         final CloudProvisioningRecord deletedButActiveRecord = createRecord(instance);
         instance.provisioningStarted(deletedButActiveRecord, deletedButActiveNodeName);
         instance.provisionedSlaveNowActive(deletedButActiveRecord, deletedButActiveNodeName);
@@ -244,7 +244,7 @@ public class CloudProvisioningStateTest {
         final vSphereCloudSlaveTemplate deletedAndInactiveTemplate = deletedAndInactiveRecord.getTemplate();
         instance.provisionedSlaveNowUnwanted(deletedAndInactiveNodeName, true);
         instance.unwantedSlaveNowDeleted(deletedAndInactiveNodeName);
-        // A template which is current but has no active slaves right now
+        // A template which is current but has no active agents right now
         final CloudProvisioningRecord activeRecord = createRecord(instance);
         instance.provisioningStarted(activeRecord, livedAndDiedNodeName);
         instance.provisionedSlaveNowActive(activeRecord, livedAndDiedNodeName);

@@ -13,15 +13,15 @@ import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 
 /**
- * Utility class that works out what slaves we should start up in response to
+ * Utility class that works out what agents we should start up in response to
  * Jenkins asking us to start things.
  * <p>
- * We do this by keeping a record of every slave we start, and every slave we
+ * We do this by keeping a record of every agent we start, and every agent we
  * have active. That way, we can avoid over-provisioning.
  * </p>
  * <p>
- * The idea is that we are told what slaves that the cloud is going to create,
- * when the cloud has created them (or failed to) and when those slaves have
+ * The idea is that we are told what agents that the cloud is going to create,
+ * when the cloud has created them (or failed to) and when those agents have
  * died. This way we can keep track of everything, in order to allow the cloud
  * to make accurate decisions regarding what to create next.
  * </p>
@@ -30,7 +30,7 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 public class CloudProvisioningState {
     private static final Logger LOGGER = Logger.getLogger(CloudProvisioningState.class.getName());
     /**
-     * Record of slaves we've told Jenkins to start up, which have yet to start.
+     * Record of agents we've told Jenkins to start up, which have yet to start.
      */
     private final Map<vSphereCloudSlaveTemplate, CloudProvisioningRecord> records = new IdentityHashMap<vSphereCloudSlaveTemplate, CloudProvisioningRecord>();
     /**
@@ -107,7 +107,7 @@ public class CloudProvisioningState {
      * @param nodeName
      *            The name of the VM.
      * @param willAttemptImmediateDeletion
-     *            If true then the caller must attempt to delete the slave and
+     *            If true then the caller must attempt to delete the agent and
      *            guarantee that they will call
      *            {@link #unwantedSlaveNotDeleted(String)} or
      *            {@link #unwantedSlaveNowDeleted(String)} as appropriate (just

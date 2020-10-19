@@ -158,14 +158,14 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     return;
                 }
 
-                // Slaves that take a while to start up make get multiple launch
+                // Agents that take a while to start up make get multiple launch
                 // requests from Jenkins.
                 if (vsSlave.slaveIsStarting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring additional attempt to start the slave; it's already being started");
                     return;
                 }
 
-                // If a slave is disconnecting, don't try to start it up
+                // If a agent is disconnecting, don't try to start it up
                 if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring connect attempt to start the slave; it's being shutdown");
                     return;
