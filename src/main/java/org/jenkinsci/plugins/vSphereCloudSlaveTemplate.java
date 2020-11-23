@@ -448,7 +448,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     actionStep.perform(env, listener);
                 }
                 vSphere.reconfigureVm(cloneName, spec);
-                vSphere.startVm(cloneName, 30);
+                vSphere.startVm(cloneName, 120);
             }
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
