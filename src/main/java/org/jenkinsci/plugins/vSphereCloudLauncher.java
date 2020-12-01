@@ -291,7 +291,6 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
                 return;
             }
-            vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         } else {
             vSphereCloud.Log(slaveComputer, taskListener, "Slave is null. Will still attempt to tear down launcher.");
         }
@@ -301,6 +300,11 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
                 return;
             }
+        }
+
+        if (vsSlave != null) {
+            // This must be done after the isTemporarilyOffline() check, since the full disconnect may not occur
+            vsSlave.slaveIsDisconnecting = Boolean.TRUE;
         }
 
         VSphere v = null;
