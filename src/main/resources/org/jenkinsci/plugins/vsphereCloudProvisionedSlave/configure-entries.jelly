@@ -64,11 +64,7 @@
                 <j:set var="descriptor" value="${d}"/>
                 <j:set var="instance"
                        value="${it.delegateLauncher.descriptor==d ? it.delegateLauncher : null}"/>
-                <tr>
-                    <td>
-                        <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                    </td>
-                </tr>
+                <f:invisibleEntry><input type="hidden" name="stapler-class" value="${d.clazz.name}"/></f:invisibleEntry>
                 <st:include from="${d}" page="${d.configPage}" optional="true"/>
             </f:dropdownListBlock>
         </j:forEach>
@@ -86,11 +82,7 @@
                         <j:set var="descriptor" value="${d}"/>
                         <j:set var="instance"
                                value="${it.retentionStrategy.descriptor==d ? it.retentionStrategy : null}"/>
-                        <tr>
-                            <td>
-                                <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                            </td>
-                        </tr>
+                        <f:invisibleEntry><input type="hidden" name="stapler-class" value="${d.clazz.name}"/></f:invisibleEntry>
                         <st:include from="${d}" page="${d.configPage}" optional="true"/>
                     </f:dropdownListBlock>
                 </j:if>
