@@ -61,7 +61,7 @@
         <revision>2.25</revision>
         <changelist>-SNAPSHOT</changelist>
         <java.level>8</java.level>
-        <jenkins.version>2.235.5</jenkins.version>
+        <jenkins.version>2.190.1</jenkins.version>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
@@ -69,8 +69,8 @@
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.235.x</artifactId>
-                <version>19</version>
+                <artifactId>bom-2.190.x</artifactId>
+                <version>16</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
