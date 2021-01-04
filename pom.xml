@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>3.51</version>
+        <version>4.14</version>
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -18,7 +18,7 @@
     <licenses>
         <license>
             <name>Apache Software License, Version 2.0</name>
-            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
             <distribution>repo</distribution>
             <comments>A business-friendly OSS license</comments>
         </license>
@@ -61,27 +61,50 @@
         <revision>2.25</revision>
         <changelist>-SNAPSHOT</changelist>
         <java.level>8</java.level>
-        <jenkins.version>2.60.3</jenkins.version>
+        <jenkins.version>2.190.1</jenkins.version>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.jenkins.tools.bom</groupId>
+                <artifactId>bom-2.190.x</artifactId>
+                <version>16</version>
+                <scope>import</scope>
+                <type>pom</type>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>credentials</artifactId>
-            <version>2.1.2</version>
-            <type>jar</type>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>cloudbees-folder</artifactId>
-            <version>5.2.2</version>
         </dependency>
-
+        <dependency>
+            <groupId>org.jenkins-ci.plugins</groupId>
+            <artifactId>command-launcher</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.toastcoders</groupId>
             <artifactId>yavijava</artifactId>
             <version>6.0.05</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.httpcomponents</groupId>
+                    <artifactId>httpclient</artifactId>
+                </exclusion>
+                <!-- https://github.com/yavijava/yavijava/issues/272 and https://github.com/yavijava/yavijava/issues/234 -->
+                <exclusion>
+                    <groupId>org.projectlombok</groupId>
+                    <artifactId>lombok</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
@@ -91,24 +114,19 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>ssh-slaves</artifactId>
-            <version>1.15</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins.workflow</groupId>
             <artifactId>workflow-basic-steps</artifactId>
-            <version>2.0</version>
         </dependency>
         <dependency>
             <groupId>io.jenkins</groupId>
             <artifactId>configuration-as-code</artifactId>
-            <version>1.32</version>
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>io.jenkins</groupId>
-            <artifactId>configuration-as-code</artifactId>
-            <version>1.32</version>
-            <classifier>tests</classifier>
+            <groupId>io.jenkins.configuration-as-code</groupId>
+            <artifactId>test-harness</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
