@@ -15,7 +15,7 @@ limitations under the License.
 -->
 <?jelly escape-by-default='true'?>
 
-<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
+<j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form" xmlns:v="/lib/vsphere">
     <f:entry title="${%Action to Perform}" field="deviceAction">
         <f:enum>
             ${it.getLabel()}
@@ -31,18 +31,18 @@ limitations under the License.
     </f:entry>
 
     <f:block>
-        <table>
+        <v:blockWrapper>
             <f:optionalBlock name="standardSwitch" title="Configure VMWare Standard Switch"
                              inline="true" checked="${instance.standardSwitch}">
                 <f:entry title="${%Network Port Group}" field="portGroup">
                     <f:textbox  />
                 </f:entry>
             </f:optionalBlock>
-        </table>
+        </v:blockWrapper>
     </f:block>
 
     <f:block>
-        <table>
+        <v:blockWrapper>
             <f:optionalBlock name="distributedSwitch" title="Configure VMWare Distributed Switch"
                              inline="true" checked="${instance.distributedSwitch}">
                 <f:entry title="${%Distributed Port Group}" field="distributedPortGroup">
@@ -52,6 +52,6 @@ limitations under the License.
                     <f:textbox  />
                 </f:entry>
             </f:optionalBlock>
-        </table>
+        </v:blockWrapper>
     </f:block>
 </j:jelly>
