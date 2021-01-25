@@ -1,5 +1,12 @@
 # Change Log
 
+### [Version 2.25](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.25)
+_January 25th, 2021_:
+* Bump minimum Jenkins core version to 2.190.1 ([PR#125](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/125))
+* Bugfix: agent was being left in isDisconnecting state ([JENKINS-64335](https://issues.jenkins.io/browse/JENKINS-64335), [PR#124](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/124))
+* Bugfix: Configure Clouds UI was broken in Jenkins >= 2.264 ([JENKINS-64357](https://issues.jenkins.io/browse/JENKINS-64357), [PR#126](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/126))
+* Update terminology in documentation [#words-matter](https://www.ibm.com/blogs/think/2020/08/words-matter-driving-thoughtful-change-toward-inclusive-language-in-technology/) ([PR#119](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/119), [PR#120](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/120))
+
 ### [Version 2.24](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.24)
 _September 21st, 2020_:
 * Fix resource leak on disconnect ([PR#117](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/117))
