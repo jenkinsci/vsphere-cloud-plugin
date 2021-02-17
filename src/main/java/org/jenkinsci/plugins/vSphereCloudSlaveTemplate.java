@@ -49,7 +49,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
@@ -114,6 +113,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final boolean saveFailure;
     private final String targetResourcePool;
     private final String targetHost;
+    private final int instancesMin;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -152,6 +152,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final boolean saveFailure,
                                      final String targetResourcePool,
                                      final String targetHost,
+                                     final int instancesMin,
                                      final String credentialsId /*deprecated*/,
                                      final ComputerLauncher launcher,
                                      final RetentionStrategy<?> retentionStrategy,
@@ -181,6 +182,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.saveFailure = saveFailure;
         this.targetResourcePool = targetResourcePool;
         this.targetHost = targetHost;
+        this.instancesMin = instancesMin;
         this.credentialsId = credentialsId;
         this.nodeProperties = Util.fixNull(nodeProperties);
         this.guestInfoProperties = Util.fixNull(guestInfoProperties);
@@ -272,6 +274,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.limitedRunCount;
     }
 
+    public int getInstancesMin() {
+        return this.instancesMin;
+    }
+
     public boolean getSaveFailure() {
         return this.saveFailure;
     }
@@ -317,6 +323,49 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     public RetentionStrategy<?> getRetentionStrategy() {
         return this.retentionStrategy;
+    }
+
+    /**
+     * Return a list of running nodes provisioned using this template.
+     */
+    public List<vSphereCloudSlaveComputer> getOnlineNodes() {
+        return getNodes(false, false);
+    }
+
+    /**
+     * Return a list of idle nodes provisioned using this template.
+     */
+    public List<vSphereCloudSlaveComputer> getIdleNodes() {
+        return getNodes(true, false);
+    }
+
+    /**
+     * Return a list of busy nodes provisioned using this template
+     * that can be reused.
+     */
+    public List<vSphereCloudSlaveComputer> getBusyReusableNodes() {
+        return getNodes(false, true);
+    }
+
+    private List<vSphereCloudSlaveComputer> getNodes(Boolean idle, Boolean runOnce) {
+        List<vSphereCloudSlaveComputer> nodes = new ArrayList<>();
+        for (vSphereCloudSlaveComputer node : vSphereCloudSlaveComputer.getAll()) {
+            if (!node.isOnline()) continue;
+            if (idle && !node.isIdle()) continue;
+            // count only busy nodes for runOnce strategy
+            if (runOnce && node.isIdle()) continue;
+            String vmName = node.getName();
+            vSphereCloudSlaveTemplate nodeTemplate = getParent().getTemplateForVM(vmName);
+            // Filter out nodes from other clouds: nodeTemplate is null for these.
+            if (nodeTemplate == null) continue;
+            if (getLabelString() != nodeTemplate.getLabelString()) continue;
+            if (runOnce) {
+                RetentionStrategy<?> nodeStrategy = nodeTemplate.getRetentionStrategy();
+                if (!(nodeStrategy instanceof RunOnceCloudRetentionStrategy)) continue;
+            }
+            nodes.add(node);
+        }
+        return nodes;
     }
 
     protected Object readResolve() {
@@ -548,6 +597,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
         public FormValidation doCheckLimitedRunCount(@QueryParameter String limitedRunCount) {
             return FormValidation.validateNonNegativeInteger(limitedRunCount);
+        }
+
+        public FormValidation doCheckInstancesMin(@QueryParameter String instancesMin) {
+            return FormValidation.validateNonNegativeInteger(instancesMin);
         }
 
         public FormValidation doCheckTemplateInstanceCap(@QueryParameter String templateInstanceCap) {

@@ -65,6 +65,10 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
         if (c.isIdle() && !disabled) {
             final long idleMilliseconds = System.currentTimeMillis() - c.getIdleStartMilliseconds();
             if (idleMilliseconds > TimeUnit.MINUTES.toMillis(idleMinutes)) {
+                if (VSphereNodeReconcileWork.shouldNodeBeRetained(c)) {
+                    LOGGER.log(Level.FINE, "Keeping {0} to meet minimum requirements", c.getName());
+                    return 1;
+                }
                 LOGGER.log(
                         Level.FINE,
                         "Disconnecting {0} because it has been idle for more than {1} minutes (has been idle for {2}ms)",

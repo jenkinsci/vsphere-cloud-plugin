@@ -133,6 +133,11 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         return LimitedTestRunCount;
     }
 
+    public vSphereCloudSlaveTemplate getTemplate() {
+        vSphereCloud cloud = findOurVsInstance();
+        return cloud.getTemplateForVM(getVmName());
+    }
+
     public boolean isLaunchSupportForced() {
         return ((vSphereCloudLauncher) getLauncher()).getOverrideLaunchSupported() == Boolean.TRUE;
     }

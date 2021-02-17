@@ -202,6 +202,9 @@ public class vSphereCloud extends Cloud {
             }
         }
     }
+    public ConcurrentHashMap<String, String> getCurrentOnlineSlaves() {
+        return currentOnline;
+    }
 
     public int getMaxOnlineSlaves() {
         return maxOnlineSlaves;
@@ -215,7 +218,7 @@ public class vSphereCloud extends Cloud {
         return this.templates;
     }
 
-    private vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
+    public vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
         if (this.templates == null || vmName == null)
             return null;
         for (final vSphereCloudSlaveTemplate t : this.templates) {
