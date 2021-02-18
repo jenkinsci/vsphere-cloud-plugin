@@ -328,6 +328,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     /**
      * Return a list of running nodes provisioned using this template.
      */
+    @Restricted(NoExternalUse.class)
     public List<vSphereCloudSlaveComputer> getOnlineNodes() {
         return getNodes(false, false);
     }
@@ -335,6 +336,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     /**
      * Return a list of idle nodes provisioned using this template.
      */
+    @Restricted(NoExternalUse.class)
     public List<vSphereCloudSlaveComputer> getIdleNodes() {
         return getNodes(true, false);
     }
@@ -343,6 +345,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
      * Return a list of busy nodes provisioned using this template
      * that can be reused.
      */
+    @Restricted(NoExternalUse.class)
     public List<vSphereCloudSlaveComputer> getBusyReusableNodes() {
         return getNodes(false, true);
     }

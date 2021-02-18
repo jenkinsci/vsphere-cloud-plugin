@@ -23,6 +23,8 @@ import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
@@ -202,9 +204,6 @@ public class vSphereCloud extends Cloud {
             }
         }
     }
-    public ConcurrentHashMap<String, String> getCurrentOnlineSlaves() {
-        return currentOnline;
-    }
 
     public int getMaxOnlineSlaves() {
         return maxOnlineSlaves;
@@ -218,6 +217,7 @@ public class vSphereCloud extends Cloud {
         return this.templates;
     }
 
+    @Restricted(NoExternalUse.class)
     public vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
         if (this.templates == null || vmName == null)
             return null;

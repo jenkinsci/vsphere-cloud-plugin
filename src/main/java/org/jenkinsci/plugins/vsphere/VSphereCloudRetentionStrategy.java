@@ -40,24 +40,11 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
     @Override
     @GuardedBy("hudson.model.Queue.lock")
     public long check(final AbstractCloudComputer c) {
-        final AbstractCloudSlave computerNode = c.getNode();
-        if (c.isIdle() && !disabled && computerNode != null) {
-            final long idleMilliseconds = System.currentTimeMillis() - c.getIdleStartMilliseconds();
-            if (idleMilliseconds > MINUTES.toMillis(idleMinutes)) {
-                if (VSphereNodeReconcileWork.shouldNodeBeRetained(c)) {
-                    LOGGER.log(Level.FINE, "Keeping {0} to meet minimum requirements", c.getName());
-                    return 1;
-                }
-                LOGGER.log(Level.INFO, "Disconnecting {0}", c.getName());
-                try {
-                    computerNode.terminate();
-                } catch (InterruptedException | IOException e) {
-                    LOGGER.log(Level.WARNING, "Failed to terminate {0}. Exception: {1}",
-                    new Object[] { c.getName(), e});
-                }
-            }
+        if (VSphereNodeReconcileWork.shouldNodeBeRetained(c)) {
+            LOGGER.log(Level.FINE, "Keeping {0} to meet minimum requirements", c.getName());
+            return 1;
         }
-        return 1;
+        return super.check(c);
     }
 
     @Override
