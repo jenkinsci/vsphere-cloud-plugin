@@ -350,21 +350,21 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return getNodes(false, true);
     }
 
-    private List<vSphereCloudSlaveComputer> getNodes(Boolean idle, Boolean runOnce) {
+    private List<vSphereCloudSlaveComputer> getNodes(Boolean idle, Boolean reusable) {
         List<vSphereCloudSlaveComputer> nodes = new ArrayList<>();
         for (vSphereCloudSlaveComputer node : vSphereCloudSlaveComputer.getAll()) {
             if (!node.isOnline()) continue;
             if (idle && !node.isIdle()) continue;
-            // count only busy nodes for runOnce strategy
-            if (runOnce && node.isIdle()) continue;
+            // only busy nodes are counted as reusable
+            if (reusable && node.isIdle()) continue;
             String vmName = node.getName();
             vSphereCloudSlaveTemplate nodeTemplate = getParent().getTemplateForVM(vmName);
             // Filter out nodes from other clouds: nodeTemplate is null for these.
             if (nodeTemplate == null) continue;
             if (getLabelString() != nodeTemplate.getLabelString()) continue;
-            if (runOnce) {
+            if (reusable) {
                 RetentionStrategy<?> nodeStrategy = nodeTemplate.getRetentionStrategy();
-                if (!(nodeStrategy instanceof RunOnceCloudRetentionStrategy)) continue;
+                if (nodeStrategy instanceof RunOnceCloudRetentionStrategy) continue;
             }
             nodes.add(node);
         }
