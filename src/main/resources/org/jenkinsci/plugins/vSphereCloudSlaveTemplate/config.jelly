@@ -54,7 +54,7 @@
                 <f:textbox clazz="required number" default="0"/>
             </f:entry>
 
-            <f:entry title="${%Instances Min}" field="instancesMin" description="The number of instances to be pre-provisioned.">
+            <f:entry title="${%Instances Min}" field="instancesMin">
                 <f:textbox clazz="required number" default="0"/>
             </f:entry>
 

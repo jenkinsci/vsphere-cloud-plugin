@@ -1,5 +1,14 @@
 <div>
     Number of instances to be provisioned beforehand.<br>
-    The plugin counts the number of idle online nodes and reconciles it with the specified value.<br>
-    If retention strategy allows to re-use nodes that will be taken into account.<br>
+    This allows to speed up jobs execution by starting them immediately without waiting for a VM to get booted.<br>
+    <dt>If set to 0:</dt>
+    <dd>No VMs provisioned in advance.</dd>
+    <dt>If number is bigger than 0:</dt>
+    <dd>Plugin will try to provision new nodes to meet the value.</dd>
+    <dt>If Run-Once retention strategy is used along with this option:</dt>
+    <dd>New VM will be added after previous VM is gone.</dd>
+    <dt>If Keep-Until-Idle retention strategy is used along with this option:</dt>
+    <dd>Busy nodes will be counted as reuseable, so plugin will not provision more nodes even if all of them are currently busy.</dd>
+    <dt>If instances Min is bigger than instance Cap:</dt>
+    <dd>Plugin will provision max number of nodes specified in instance Cap (the smallest of cloud and template options).</dd>
 </div>
