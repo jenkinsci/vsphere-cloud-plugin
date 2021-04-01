@@ -4,13 +4,11 @@ import hudson.Extension;
 import hudson.Functions;
 import hudson.model.TaskListener;
 import hudson.model.AsyncPeriodicWork;
-import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.Cloud;
 import hudson.model.Label;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.jenkinsci.plugins.vSphereCloudSlaveComputer;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 
@@ -54,15 +52,13 @@ public final class VSphereNodeReconcileWork extends AsyncPeriodicWork {
                 int instancesMin = template.getInstancesMin();
                 List<vSphereCloudSlaveComputer> idleNodes = template.getIdleNodes();
                 List<vSphereCloudSlaveComputer> runningNodes = template.getOnlineNodes();
-                List<vSphereCloudSlaveComputer> reusableBusyNodes = template.getBusyReusableNodes();
                 // Get max number of nodes that could be provisioned
                 int globalMaxNodes = ((vSphereCloud) cloud).getInstanceCap();
                 int templateMaxNodes = template.getTemplateInstanceCap();
                 int maxNodes = Math.min(globalMaxNodes, templateMaxNodes);
 
                 // if maxNumber is lower than instancesMin, we have to ignore instancesMin
-                int toProvision = Math.min(instancesMin - (reusableBusyNodes.size() + idleNodes.size()),
-                        maxNodes - runningNodes.size());
+                int toProvision = Math.min(instancesMin - idleNodes.size(), maxNodes - runningNodes.size());
                 if (toProvision > 0) {
                     // provision desired number of nodes for this label
                     LOGGER.log(Level.INFO, "Pre-creating {0} instance(s) for template {1} in cloud {3}",
@@ -91,29 +87,5 @@ public final class VSphereNodeReconcileWork extends AsyncPeriodicWork {
                 }
             }
         }
-    }
-
-    /**
-     * Should a node be retained to meet the minimum instances constraint?
-     */
-    @SuppressWarnings("rawtypes")
-    public static boolean shouldNodeBeRetained(AbstractCloudComputer c) {
-        // Checks only idle nodes
-        vSphereCloudSlave node = (vSphereCloudSlave) c.getNode();
-        if (node == null) return false;
-        vSphereCloudSlaveTemplate nodeTemplate = node.getTemplate();
-        // nodeTemplate might be null if the template was manually deleted from a cloud
-        if (nodeTemplate == null) return false;
-        int instancesMin = nodeTemplate.getInstancesMin();
-        if (instancesMin > 0) {
-            int maxNodes = Math.min(nodeTemplate.getTemplateInstanceCap(), nodeTemplate.getParent().getInstanceCap());
-            int runningNodesTotal = nodeTemplate.getOnlineNodes().size();
-            int idleNodesTotal = nodeTemplate.getIdleNodes().size();
-            int reusableBusyNodesTotal = nodeTemplate.getBusyReusableNodes().size();
-            if ((instancesMin >= (idleNodesTotal + reusableBusyNodesTotal - 1)) && (runningNodesTotal <= maxNodes)) {
-                return true;
-            }
-        }
-        return false;
     }
 }

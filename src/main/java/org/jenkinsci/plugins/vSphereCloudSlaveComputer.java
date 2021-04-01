@@ -7,6 +7,8 @@ import java.util.List;
 
 import javax.annotation.Nonnull;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineConfigInfo;
@@ -83,8 +85,9 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
     }
 
     /**
-     * Get all computers.
+     * Get all vsphere computers.
      */
+    @Restricted(NoExternalUse.class)
     protected static @Nonnull List<vSphereCloudSlaveComputer> getAll() {
         ArrayList<vSphereCloudSlaveComputer> out = new ArrayList<>();
         for (final Computer c : Jenkins.get().getComputers()) {

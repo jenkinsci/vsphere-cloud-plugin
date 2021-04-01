@@ -1,16 +1,12 @@
 <div>
     The number of VMs to be provisioned beforehand.<br>
     This allows to speed up CI runs by starting them immediately without waiting for a VM to get booted.<br>
-    <dt>If the number set to 0:</dt>
+    <dt>If the number is set to 0:</dt>
     <dd>No VMs provisioned in advance.</dd>
     <dt>If the number is bigger than 0:</dt>
     <dd>The plugin provisions new VMs to meet the value.</dd>
-    <dt>If Keep-Until-Idle retention strategy is used along with this option:</dt>
-    <dd>Busy VMs are counted as reuseable, so the plugin will not provision more VMs even if all of them are currently busy.</dd>
-    <dt>If Run-Once retention strategy is used along with this option:</dt>
-    <dd>Busy VMs are counted as non reusable, so the plugin will provision more VMs to meet the value.<br>
-        When at maximum capacity new VM will be added after an old VM is gone.</dd>
     <dt>If instances Min is bigger than instance Cap:</dt>
-    <dd>The plugin will provision max number of VMs specified in instance Cap (the smallest of cloud and template options).</dd>
+    <dd>The plugin provisions max number of VMs specified in instance Cap (the smallest of cloud and template options).</dd>
     The plugin checks the number of running VMs once in 2 minutes.
+    <dt>The plugin respects retention policies.</dt>
 </div>
