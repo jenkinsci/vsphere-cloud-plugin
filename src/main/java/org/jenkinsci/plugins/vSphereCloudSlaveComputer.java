@@ -88,7 +88,7 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
      * Get all vsphere computers.
      */
     @Restricted(NoExternalUse.class)
-    protected static @Nonnull List<vSphereCloudSlaveComputer> getAll() {
+    static @Nonnull List<vSphereCloudSlaveComputer> getAll() {
         ArrayList<vSphereCloudSlaveComputer> out = new ArrayList<>();
         for (final Computer c : Jenkins.get().getComputers()) {
             if (!(c instanceof vSphereCloudSlaveComputer)) continue;

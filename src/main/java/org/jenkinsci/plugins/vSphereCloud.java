@@ -218,7 +218,7 @@ public class vSphereCloud extends Cloud {
     }
 
     @Restricted(NoExternalUse.class)
-    public vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
+    vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
         if (this.templates == null || vmName == null)
             return null;
         for (final vSphereCloudSlaveTemplate t : this.templates) {
