@@ -2,13 +2,8 @@ package org.jenkinsci.plugins;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.List;
 
-import javax.annotation.Nonnull;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineConfigInfo;
@@ -19,10 +14,8 @@ import com.vmware.vim25.VirtualMachineToolsStatus;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.VirtualMachine;
 
-import hudson.model.Computer;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
-import jenkins.model.Jenkins;
 
 public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
     private final vSphereCloudSlave vSlave;
@@ -82,19 +75,6 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
 
     public String getVmInformationError() {
         return getVMInformation().errorEncounteredWhenDataWasRead;
-    }
-
-    /**
-     * Get all vsphere computers.
-     */
-    @Restricted(NoExternalUse.class)
-    static @Nonnull List<vSphereCloudSlaveComputer> getAll() {
-        ArrayList<vSphereCloudSlaveComputer> out = new ArrayList<>();
-        for (final Computer c : Jenkins.get().getComputers()) {
-            if (!(c instanceof vSphereCloudSlaveComputer)) continue;
-            out.add((vSphereCloudSlaveComputer) c);
-        }
-        return out;
     }
 
     /** 10 seconds */

@@ -325,37 +325,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.retentionStrategy;
     }
 
-    /**
-     * Return a list of running nodes provisioned using this template.
-     */
-    @Restricted(NoExternalUse.class)
-    public List<vSphereCloudSlaveComputer> getOnlineNodes() {
-        return getNodes(false);
-    }
-
-    /**
-     * Return a list of idle nodes provisioned using this template.
-     */
-    @Restricted(NoExternalUse.class)
-    public List<vSphereCloudSlaveComputer> getIdleNodes() {
-        return getNodes(true);
-    }
-
-    private List<vSphereCloudSlaveComputer> getNodes(boolean idle) {
-        List<vSphereCloudSlaveComputer> nodes = new ArrayList<>();
-        for (vSphereCloudSlaveComputer node : vSphereCloudSlaveComputer.getAll()) {
-            if (!node.isOnline()) continue;
-            if (idle && !node.isIdle()) continue;
-            String vmName = node.getName();
-            vSphereCloudSlaveTemplate nodeTemplate = getParent().getTemplateForVM(vmName);
-            // Filter out nodes from other clouds: nodeTemplate is null for these.
-            if (nodeTemplate == null) continue;
-            if (getLabelString() != nodeTemplate.getLabelString()) continue;
-            nodes.add(node);
-        }
-        return nodes;
-    }
-
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
         if(this.templateInstanceCap == 0) {
