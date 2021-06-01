@@ -41,10 +41,11 @@ public final class VSpherePreProvisonWork extends AsyncPeriodicWork {
     public void execute(TaskListener listener) {
         for (Cloud cloud : Jenkins.getActiveInstance().clouds) {
             if (!(cloud instanceof vSphereCloud)) continue;
-            for (vSphereCloudSlaveTemplate template : ((vSphereCloud) cloud).getTemplates()) {
+            vSphereCloud vsCloud = (vSphereCloud) cloud;
+            for (vSphereCloudSlaveTemplate template : vsCloud.getTemplates()) {
                 if (template.getInstancesMin() > 0) {
                     LOGGER.log(Level.INFO, "Check if template (label=" + template.getLabelString() + ") has enough active nodes to meet instances Min value");
-                    ((vSphereCloud) cloud).preProvisionNodes(template);
+                    vsCloud.preProvisionNodes(template);
                 }
             }
         }
