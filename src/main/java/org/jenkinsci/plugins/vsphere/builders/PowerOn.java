@@ -16,7 +16,6 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
-import com.google.common.base.Stopwatch;
 import com.vmware.vim25.mo.VirtualMachine;
 import hudson.*;
 import hudson.model.*;
@@ -96,9 +95,9 @@ public class PowerOn extends VSphereBuildStep {
 			expandedVm = env.expand(vm);
 		}
 
-        Stopwatch stopwatch = new Stopwatch().start();
+        long startTimeNanos = System.nanoTime();
         vsphere.startVm(expandedVm, timeoutInSeconds);
-        long elapsedTime = stopwatch.elapsedTime(TimeUnit.SECONDS);
+        long elapsedTime = TimeUnit.SECONDS.convert(System.nanoTime() - startTimeNanos, TimeUnit.NANOSECONDS);
 
         int secondsToWaitForIp = (int) (timeoutInSeconds - elapsedTime);
 
@@ -110,7 +109,6 @@ public class PowerOn extends VSphereBuildStep {
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+IP);
-        stopwatch.stop();
 
         // useful to tell user about the environment variable
         VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
