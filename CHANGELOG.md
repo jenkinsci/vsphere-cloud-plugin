@@ -1,5 +1,9 @@
 # Change Log
 
+### [Version 2.26](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.26)
+_August 18th, 2021_:
+* Prepare vSphere for core Guava upgrade ([JENKINS-66301](https://issues.jenkins.io/browse/JENKINS-66301), [PR#128](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/128))
+
 ### [Version 2.25](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.25)
 _January 25th, 2021_:
 * Bump minimum Jenkins core version to 2.190.1 ([PR#125](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/125))
