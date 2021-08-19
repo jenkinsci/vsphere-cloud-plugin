@@ -56,6 +56,11 @@ public class ReconfigureAnnotation extends ReconfigureStep {
     }
 
     @Override
+    public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+        reconfigureAnnotation(env, listener);
+    }
+
+    @Override
     public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         try {
             reconfigureAnnotation(run, launcher, listener);
@@ -77,19 +82,14 @@ public class ReconfigureAnnotation extends ReconfigureStep {
     }
 
     public boolean reconfigureAnnotation(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+        EnvVars env = extractEnvironment(run, listener);
 
+        return reconfigureAnnotation(env, listener);
+    }
+
+    private boolean reconfigureAnnotation(final EnvVars env, final TaskListener listener) throws VSphereException  {
         final PrintStream jLogger = listener.getLogger();
-        String expandedText = getAnnotation();
-        final EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-        if (run instanceof AbstractBuild) {
-            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-            expandedText = env.expand(expandedText);
-        }
+        String expandedText = env.expand(getAnnotation());
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Annotation");
         if (getAppend()) {

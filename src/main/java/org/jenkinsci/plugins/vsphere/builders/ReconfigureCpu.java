@@ -50,6 +50,11 @@ public class ReconfigureCpu extends ReconfigureStep {
     }
 
     @Override
+    public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+        reconfigureCPU(env, listener);
+    }
+
+    @Override
     public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         try {
             reconfigureCPU(run, launcher, listener);
@@ -70,32 +75,23 @@ public class ReconfigureCpu extends ReconfigureStep {
         //TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureCPU (final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureCPU(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+        EnvVars env = extractEnvironment(run, listener);
 
+        return reconfigureCPU(env, listener);
+    }
+
+    private boolean reconfigureCPU(final EnvVars env, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
-        String expandedCPUCores = cpuCores;
-        String expandedCoresPerSocket = coresPerSocket;
-        EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-
-        if (run instanceof AbstractBuild) {
-            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-            expandedCPUCores = env.expand(cpuCores);
-            expandedCoresPerSocket = env.expand(coresPerSocket);
-        }
+        String expandedCPUCores = env.expand(cpuCores);
+        String expandedCoresPerSocket = env.expand(coresPerSocket);
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: CPU");
         spec.setNumCPUs(Integer.valueOf(expandedCPUCores));
         spec.setNumCoresPerSocket(Integer.valueOf(expandedCoresPerSocket));
-
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
-	}
-
+    }
 
 	@Extension
 	public static final class ReconfigureCpuDescriptor extends ReconfigureStepDescriptor {

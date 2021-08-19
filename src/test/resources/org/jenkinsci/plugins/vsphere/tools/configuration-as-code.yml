@@ -26,6 +26,12 @@ jenkins:
             masterImageName: "windows-server-2019"
             mode: EXCLUSIVE
             numberOfExecutors: 1
+            reconfigureSteps:
+              - reconfigureMemory:
+                  memorySize: "8192"
+              - reconfigureCpu:
+                  coresPerSocket: "4"
+                  cpuCores: "8"
             remoteFS: "C:/jenkins"
             resourcePool: "Resources"
             retentionStrategy:

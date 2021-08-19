@@ -94,6 +94,11 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     @Override
+    public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+        reconfigureNetwork(env, listener);
+    }
+
+    @Override
     public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
         try {
             reconfigureNetwork(run, launcher, listener);
@@ -114,27 +119,20 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         //TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+        EnvVars env = extractEnvironment(run, listener);
+
+        return reconfigureNetwork(env, listener);
+    }
+
+    private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
-        String expandedDeviceLabel = deviceLabel;
-        String expandedMacAddress = macAddress;
-        String expandedPortGroup = portGroup;
-        String expandedDistributedPortGroup = distributedPortGroup;
-        String expandedDistributedPortId = distributedPortId;
-        EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-        if (run instanceof AbstractBuild) {
-            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-            expandedDeviceLabel = env.expand(deviceLabel);
-            expandedMacAddress = env.expand(macAddress);
-            expandedPortGroup = env.expand(portGroup);
-            expandedDistributedPortGroup = env.expand(distributedPortGroup);
-            expandedDistributedPortId = env.expand(distributedPortId);
-        }
+        String expandedDeviceLabel = env.expand(deviceLabel);
+        String expandedMacAddress = env.expand(macAddress);
+        String expandedPortGroup = env.expand(portGroup);
+        String expandedDistributedPortGroup = env.expand(distributedPortGroup);
+        String expandedDistributedPortId = env.expand(distributedPortId);
+
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter \"" + expandedDeviceLabel + "\"");
         VirtualEthernetCard vEth = null;
         if (deviceAction == DeviceAction.ADD) {
