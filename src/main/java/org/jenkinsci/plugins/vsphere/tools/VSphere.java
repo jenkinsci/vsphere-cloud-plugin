@@ -24,8 +24,8 @@ import java.util.Map;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -69,7 +69,7 @@ public class VSphere {
     private final String session;
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
-    private VSphere(@Nonnull String url, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
             this.url = new URL(url);
             final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
@@ -90,7 +90,7 @@ public class VSphere {
      * @throws VSphereException If an error occurred.
      * @return A connected instance.
      */
-    public static VSphere connect(@Nonnull VSphereConnectionConfig connectionDetails) throws VSphereException {
+    public static VSphere connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
         final String server = connectionDetails.getVsHost() + "/sdk";
         final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
@@ -109,7 +109,7 @@ public class VSphere {
      * @deprecated Use {@link #connect(VSphereConnectionConfig)} instead.
      */
     @Deprecated
-    public static VSphere connect(@Nonnull String server, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    public static VSphere connect(@NonNull String server, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         return new VSphere(server, ignoreCert, user, pw);
     }
 

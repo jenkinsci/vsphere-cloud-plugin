@@ -23,7 +23,7 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 import java.io.PrintStream;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -56,7 +56,7 @@ public class Delete extends VSphereBuildStep {
 	}
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			if(allowDelete()) {
 				killVm(run, launcher, listener);
