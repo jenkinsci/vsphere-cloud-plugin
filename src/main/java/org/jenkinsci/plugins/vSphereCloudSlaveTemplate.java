@@ -51,7 +51,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
@@ -644,7 +644,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
          * @return the filtered list
          */
         @SuppressWarnings("unchecked")
-        @Nonnull
+        @NonNull
         @Restricted(NoExternalUse.class) // used by Jelly EL only
         public List<NodePropertyDescriptor> getNodePropertiesDescriptors() {
             List<NodePropertyDescriptor> result = new ArrayList<>();
