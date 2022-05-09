@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.14</version>
+        <version>4.31</version>
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -61,7 +61,7 @@
         <revision>2.27</revision>
         <changelist>-SNAPSHOT</changelist>
         <java.level>8</java.level>
-        <jenkins.version>2.190.1</jenkins.version>
+        <jenkins.version>2.263.1</jenkins.version>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
@@ -69,8 +69,8 @@
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.190.x</artifactId>
-                <version>16</version>
+                <artifactId>bom-2.263.x</artifactId>
+                <version>984.vb5eaac999a7e</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -118,6 +118,11 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins.workflow</groupId>
             <artifactId>workflow-basic-steps</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jenkins.plugins</groupId>
+            <artifactId>jaxb</artifactId>
+            <version>2.3.6-1</version>
         </dependency>
         <dependency>
             <groupId>io.jenkins</groupId>
