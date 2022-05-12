@@ -727,7 +727,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         addEnvVars(knownVariables, listener, Jenkins.getInstance().getGlobalNodeProperties());
         addEnvVars(knownVariables, listener, this.nodeProperties);
         addEnvVar(knownVariables, "NODE_NAME", cloneName);
-        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : Util.join(getLabelSet(), " "));
+        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : getLabelSet().stream().map(Object::toString).collect(Collectors.joining(" ")));
         addEnvVar(knownVariables, "cluster", this.cluster);
         addEnvVar(knownVariables, "datastore", this.datastore);
         addEnvVar(knownVariables, "folder", this.folder);
