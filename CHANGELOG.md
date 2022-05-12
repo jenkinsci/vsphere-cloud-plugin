@@ -3,8 +3,10 @@
 ## Unreleased
 A pre-release can be downloaded from https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/
 
-* Prepare for removal of JAXB and Java 11 requirement ([JENKINS-68477](https://issues.jenkins.io/browse/JENKINS-68477), [#131](https://github.com/jenkinsci/docker-plugin/pull/131)
-* Stop using deprecated Util join() [#129](https://github.com/jenkinsci/docker-plugin/pull/129)
+### [Version 2.27](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.27)
+_May 12th, 2022_:
+* Prepare for removal of JAXB and Java 11 requirement ([JENKINS-68477](https://issues.jenkins.io/browse/JENKINS-68477), [#131](https://github.com/jenkinsci/docker-plugin/pull/131))
+* Stop using deprecated Util join() ([#129](https://github.com/jenkinsci/docker-plugin/pull/129))
 
 ### [Version 2.26](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.26)
 _August 18th, 2021_:
