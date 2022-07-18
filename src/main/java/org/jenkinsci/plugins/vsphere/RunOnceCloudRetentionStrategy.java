@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.jenkinsci.Symbol;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -175,6 +176,10 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     @Extension
     public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
+    /**
+     * JENKINS-69035: runOnceCloud is not unique. Keeping it as a legacy to not break compatibility.
+     */
+    @Symbol({"vsphereRunOnceCloud", "runOnceCloud"})
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
         @Override
         public String getDisplayName() {
