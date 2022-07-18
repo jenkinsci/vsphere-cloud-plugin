@@ -15,7 +15,9 @@ import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
+import org.jvnet.hudson.test.Issue;
 
 import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
 import static io.jenkins.plugins.casc.misc.Util.toStringFromYamlFile;
@@ -28,13 +30,35 @@ import static org.hamcrest.core.Is.is;
 
 public class ConfigurationAsCodeTest {
 
-    @ClassRule
-    @ConfiguredWithCode("configuration-as-code.yml")
-    public static JenkinsConfiguredWithCodeRule r = new JenkinsConfiguredWithCodeRule();
+    @Rule
+    public JenkinsConfiguredWithCodeRule r = new JenkinsConfiguredWithCodeRule();
 
     @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
     public void should_support_configuration_as_code() {
-        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        validateCasCLoading((vSphereCloud) r.jenkins.clouds.get(0));
+    }
+
+    @Test
+    @Issue("JENKINS-69035")
+    @ConfiguredWithCode("configuration-as-code-legacy.yml")
+    public void should_support_legacy_configuration_as_code() {
+        validateCasCLoading((vSphereCloud) r.jenkins.clouds.get(0));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
+    public void should_support_configuration_export() throws Exception {
+        validateCasCExport();
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-legacy.yml")
+    public void should_support_legacy_configuration_export() throws Exception {
+        validateCasCExport();
+    }
+    
+    private void validateCasCLoading(vSphereCloud cloud) {
         assertThat(cloud.getVsDescription(), is("Company vSphere"));
         assertThat(cloud.getVsHost(), is("https://company-vsphere"));
         assertThat(cloud.getInstanceCap(), is(100));
@@ -78,9 +102,8 @@ public class ConfigurationAsCodeTest {
         RunOnceCloudRetentionStrategy runOnce = (RunOnceCloudRetentionStrategy) retentionStrategy;
         assertThat(runOnce.getIdleMinutes(), is(2));
     }
-
-    @Test
-    public void should_support_configuration_export() throws Exception {
+    
+    private void validateCasCExport() throws Exception {
         ConfiguratorRegistry registry = ConfiguratorRegistry.get();
         ConfigurationContext context = new ConfigurationContext(registry);
         final CNode cloud = getJenkinsRoot(context).get("clouds");
@@ -90,5 +113,6 @@ public class ConfigurationAsCodeTest {
         String expected = toStringFromYamlFile(this, "expected_output.yml");
 
         assertThat(exported, is(expected));
+        
     }
 }

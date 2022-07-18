@@ -23,7 +23,7 @@
       remoteFS: "C:/jenkins"
       resourcePool: "Resources"
       retentionStrategy:
-        runOnceCloud:
+        vsphereRunOnceCloud:
           idleMinutes: 2
       saveFailure: false
       templateInstanceCap: 5
