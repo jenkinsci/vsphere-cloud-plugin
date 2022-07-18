@@ -2,6 +2,7 @@
 
 ## Unreleased
 A pre-release can be downloaded from https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/
+* Resolve JCasC runOnceCloud retention strategy clash with anka-build plugin ([#132](https://github.com/jenkinsci/docker-plugin/pull/132))
 
 ### [Version 2.27](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.27)
 _May 12th, 2022_:
