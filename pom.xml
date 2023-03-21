@@ -95,6 +95,11 @@
             <artifactId>yavijava</artifactId>
             <version>6.0.05</version>
             <exclusions>
+                <!-- Provided by Jenkins core -->
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
                 <exclusion>
                     <groupId>org.apache.httpcomponents</groupId>
                     <artifactId>httpclient</artifactId>
