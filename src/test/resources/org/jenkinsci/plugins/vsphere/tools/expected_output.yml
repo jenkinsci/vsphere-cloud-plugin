@@ -30,5 +30,6 @@
       useSnapshot: true
       waitForVMTools: true
     vsConnectionConfig:
+      httpClientClassName: "WSClient"
       vsHost: "https://company-vsphere"
     vsDescription: "Company vSphere"

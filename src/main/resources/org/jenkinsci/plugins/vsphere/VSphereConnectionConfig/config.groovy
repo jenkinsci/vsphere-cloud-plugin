@@ -7,6 +7,10 @@ f.entry(title:_("vSphere Host"), field:"vsHost") {
     f.textbox()
 }
 
+f.entry(title:_("Change Http Client"), field:"httpClientClassName") {
+    f.select()
+}
+
 f.entry(title:_("Disable SSL Check"), field:"allowUntrustedCertificate") {
     f.checkbox()
 }
