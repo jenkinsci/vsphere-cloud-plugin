@@ -299,6 +299,21 @@ public class CloudProvisioningAlgorithmTest {
         assertThat(actuals, everyItem(startsWith(prefix)));
     }
 
+    @Test
+    public void shouldPreProvisionNodesWhenNotEnough() {
+        // we don't care about cap here
+        // Given
+        int provisioned = 3;
+        int planned = 2;
+        final CloudProvisioningRecord record = createInstance(10, provisioned, planned);
+
+        // When 
+        int instanceMin = record.getTemplate().getInstancesMin();
+
+        // Then
+        assertThat(CloudProvisioningAlgorithm.shouldPreProvisionNodes(record), equalTo(instanceMin - (provisioned + planned))); 
+    }
+
     private CloudProvisioningRecord createInstance(int capacity, int provisioned, int planned) {
         final int iNum = ++instanceNumber;
         final vSphereCloudSlaveTemplate template = stubTemplate(iNum + "cap" + capacity, capacity);
@@ -316,7 +331,7 @@ public class CloudProvisioningAlgorithmTest {
 
     private static vSphereCloudSlaveTemplate stubTemplate(String prefix, int templateInstanceCap) {
         return new vSphereCloudSlaveTemplate(prefix, "", null, null, false, null, null, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, null, new JNLPLauncher(),
+                null, null, null, false, false, 0, 0, false, null, null, 2, null, new JNLPLauncher(),
                 RetentionStrategy.NOOP, null, null);
     }
 

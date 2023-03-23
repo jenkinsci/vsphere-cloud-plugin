@@ -85,6 +85,7 @@ public class ConfigurationAsCodeTest {
         assertThat(template.getTemplateInstanceCap(), is(5));
         assertThat(template.getUseSnapshot(), is(true));
         assertThat(template.getWaitForVMTools(), is(true));
+        assertThat(template.getInstancesMin(), is(3));
         List<? extends VSphereGuestInfoProperty> guestInfoProperties = template.getGuestInfoProperties();
         assertThat(guestInfoProperties, hasSize(1));
         VSphereGuestInfoProperty guestInfoProperty = guestInfoProperties.get(0);
