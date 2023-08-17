@@ -211,7 +211,7 @@ public class VSphere {
      *            parameter can be read by the VMware Tools on the client OS.
      *            e.g. a variable named "guestinfo.Foo" with value "Bar" could
      *            be read on the guest using the command-line
-     *            <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     *            {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * @param customizationSpec
      *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
@@ -1092,7 +1092,7 @@ public class VSphere {
      * <p>
      * e.g. a variable named "guestinfo.Foo" with value "Bar" could be read on
      * the guest using the command-line
-     * <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * </p>
      * 
      * @param vmName

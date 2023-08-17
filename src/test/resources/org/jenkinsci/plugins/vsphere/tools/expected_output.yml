@@ -13,7 +13,7 @@
       labelString: "windows vsphere"
       launchDelay: 60
       launcher:
-        jnlp:
+        inbound:
           tunnel: "jenkins:"
       limitedRunCount: 1
       linkedClone: true
