@@ -222,7 +222,8 @@ public class VSphere {
             // NOTE: This "if" clause may be superfluous - just that previously
             // this message was only logged by cloneVm() or deployVm()... so for
             // least surprise and unexpected noise in the logs, effectively kept
-            // so for upgraded plugins.
+            // so for upgraded plugins where we can also directly call this method
+            // as a "buildStep" under a "vSphere" pipeline step.
             if (useCurrentSnapshot) {
                 // Called from cloneVm() above.
                 logMessage(jLogger, "Creating a " + (linkedClone ? "shallow" : "deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");

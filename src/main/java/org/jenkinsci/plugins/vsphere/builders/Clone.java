@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.HashMap;
+import java.util.Map;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -60,20 +62,44 @@ public class Clone extends VSphereBuildStep {
     private final Integer timeoutInSeconds;
     private String IP;
 
+    /** Optionally used by {@code #linkedClone} setting or on its own,
+     *  conflicts with {@code #namedSnapshot}. Is {@code null} by default. */
+    private final Boolean useCurrentSnapshot;
+    /** Optionally used by {@code #linkedClone} setting or on its own,
+     *  conflicts with {@code #useCurrentSnapshot}. Is {@code null} by default. */
+    private final String namedSnapshot;
+    private final Map<String, String> extraConfigParameters;
+
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
                  String resourcePool, String cluster, String datastore, String folder,
-                 boolean powerOn, Integer timeoutInSeconds, String customizationSpec) throws VSphereException {
+                 boolean powerOn, Integer timeoutInSeconds, String customizationSpec,
+                 Boolean useCurrentSnapshot, String namedSnapshot,
+                 Map<String, String> extraConfigParameters) throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
-        this.resourcePool=resourcePool;
-        this.cluster=cluster;
-        this.datastore=datastore;
-        this.folder=folder;
-        this.customizationSpec=customizationSpec;
-        this.powerOn=powerOn;
+        this.resourcePool = resourcePool;
+        this.cluster = cluster;
+        this.datastore = datastore;
+        this.folder = folder;
+        this.customizationSpec = customizationSpec;
+        this.powerOn = powerOn;
         this.timeoutInSeconds = timeoutInSeconds;
+        this.useCurrentSnapshot = useCurrentSnapshot;
+
+        // Config form data may involve empty strings - treat them as null
+        if (namedSnapshot == null || namedSnapshot.isEmpty()) {
+            this.namedSnapshot = null;
+        } else {
+            this.namedSnapshot = namedSnapshot;
+        }
+
+        if (extraConfigParameters == null || extraConfigParameters.isEmpty()) {
+            this.extraConfigParameters = null;
+        } else {
+            this.extraConfigParameters = extraConfigParameters;
+        }
     }
 
     public String getSourceName() {
@@ -86,6 +112,27 @@ public class Clone extends VSphereBuildStep {
 
     public boolean isLinkedClone() {
         return linkedClone;
+    }
+
+    public String getNamedSnapshot() {
+        return namedSnapshot;
+    }
+
+    public boolean isUseCurrentSnapshot() {
+        if (useCurrentSnapshot == null) {
+            if (namedSnapshot == null) {
+                // Hard-coded default in VSphere.cloneVm()
+                // TOTHINK: Should this rely on linkedClone value?
+                return true;
+            }
+
+            // Will use specified named snapshot
+            return false;
+        }
+
+        // Caller had an explicit request
+        // Note that if linkedClone==true, at least some snapshot must be used
+        return useCurrentSnapshot;
     }
 
     public String getCluster() {
@@ -117,6 +164,10 @@ public class Clone extends VSphereBuildStep {
             return TIMEOUT_DEFAULT;
         }
         return timeoutInSeconds.intValue();
+    }
+
+    public Map<String, String> getExtraConfigParameters() {
+        return extraConfigParameters;
     }
 
     @Override
@@ -163,6 +214,8 @@ public class Clone extends VSphereBuildStep {
         String expandedFolder = folder;
         String expandedResourcePool = resourcePool;
         String expandedCustomizationSpec = customizationSpec;
+        String expandedNamedSnapshot = namedSnapshot;
+        Map<String, String> expandedExtraConfigParameters;
         EnvVars env;
         try {
             env = run.getEnvironment(listener);
@@ -179,9 +232,29 @@ public class Clone extends VSphereBuildStep {
             expandedFolder = env.expand(folder);
             expandedResourcePool = env.expand(resourcePool);
             expandedCustomizationSpec = env.expand(customizationSpec);
+            if (namedSnapshot != null) {
+                expandedNamedSnapshot = env.expand(namedSnapshot);
+            }
         }
-        vsphere.cloneVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
+
+        if (extraConfigParameters != null && !(extraConfigParameters.isEmpty())) {
+            // Always pass a copy of the non-trivial original parameter map
+            // (expanded or not), just in case, to protect caller's data.
+            expandedExtraConfigParameters = new HashMap<String, String>();
+            if (run instanceof AbstractBuild) {
+                extraConfigParameters.forEach((k, v) -> expandedExtraConfigParameters.put(k, env.expand(v)));
+            } else {
+                expandedExtraConfigParameters.putAll(extraConfigParameters);
+            }
+        } else {
+            // Only init to null here, due to lambda used in forEach() above
+            expandedExtraConfigParameters = null;
+        }
+
+        vsphere.cloneOrDeployVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
+                expandedDatastore, expandedFolder, this.isUseCurrentSnapshot(), expandedNamedSnapshot,
+                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec, jLogger);
+
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
         if (powerOn && timeoutInSecondsForGetIp>0) {
             VSphereLogger.vsLogger(jLogger, "Powering on VM \""+expandedClone+"\".  Waiting for its IP for the next "+timeoutInSecondsForGetIp+" seconds.");
@@ -264,7 +337,11 @@ public class Clone extends VSphereBuildStep {
                                          @QueryParameter String serverName,
                                          @QueryParameter String sourceName, @QueryParameter String clone,
                                          @QueryParameter String resourcePool, @QueryParameter String cluster,
-                                         @QueryParameter String customizationSpec) {
+                                         @QueryParameter String customizationSpec,
+                                         @QueryParameter Boolean linkedClone,
+                                         @QueryParameter Boolean useCurrentSnapshot,
+                                         @QueryParameter String namedSnapshot) {
+            // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
@@ -285,9 +362,21 @@ public class Clone extends VSphereBuildStep {
                 if (vm == null)
                     return FormValidation.error(Messages.validation_notFound("sourceName"));
 
-                VirtualMachineSnapshot snap = vm.getCurrentSnapShot();
-                if (snap == null)
-                    return FormValidation.error(Messages.validation_noSnapshots());
+                if (linkedClone || useCurrentSnapshot || (namedSnapshot != null && !(namedSnapshot.isEmpty()))) {
+                    // Use-case (according to parameters) requires a snapshot
+                    VirtualMachineSnapshot snap;
+                    if (namedSnapshot == null || namedSnapshot.isEmpty()) {
+                        // either useCurrentSnapshot or linkedClone is true
+                        snap = vm.getCurrentSnapShot();
+                    } else {
+                        // namedSnapshot is non-trivial
+                        if (useCurrentSnapshot)
+                            return FormValidation.error(Messages.validation_useCurrentAndNamedSnapshots());
+                        snap = vsphere.getSnapshotInTree(vm, namedSnapshot);
+                    }
+                    if (snap == null)
+                        return FormValidation.error(Messages.validation_noSnapshots());
+                }
 
                 if(customizationSpec != null && customizationSpec.length() > 0 &&
                         vsphere.getCustomizationSpecByName(customizationSpec) == null) {
