@@ -147,7 +147,6 @@ public class VSphere {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
         cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
@@ -170,7 +169,6 @@ public class VSphere {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
         cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
@@ -220,6 +218,20 @@ public class VSphere {
      *             if anything goes wrong.
      */
     public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        if (namedSnapshot == null && extraConfigParameters == null) {
+            // NOTE: This "if" clause may be superfluous - just that previously
+            // this message was only logged by cloneVm() or deployVm()... so for
+            // least surprise and unexpected noise in the logs, effectively kept
+            // so for upgraded plugins.
+            if (useCurrentSnapshot) {
+                // Called from cloneVm() above.
+                logMessage(jLogger, "Creating a " + (linkedClone ? "shallow" : "deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
+            } else {
+                // Called from deployVm() above.
+                logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
+            }
+        }
+
         try {
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if (sourceVm==null) {
