@@ -252,11 +252,11 @@ public class VSphere {
 
             if (namedSnapshot != null && !namedSnapshot.isEmpty()) {
                 if (useCurrentSnapshot) {
-                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + "  \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
+                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + " \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
-                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
+                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + " \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \"" + namedSnapshot + "\".");
                 cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
@@ -264,7 +264,7 @@ public class VSphere {
             if (useCurrentSnapshot) {
                 final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
                 if (currentSnapShot==null) {
-                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
+                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + " \"" + sourceName + "\" requires at least one snapshot.");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
