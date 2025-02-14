@@ -4,35 +4,17 @@
  */
 package org.jenkinsci.plugins;
 
-import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
-
-import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.AbortException;
 import hudson.Extension;
-import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.TaskListener;
 import hudson.model.Computer;
-import hudson.model.Descriptor;
-import hudson.model.ItemGroup;
 import hudson.model.Descriptor.FormException;
 import hudson.slaves.*;
-import hudson.util.FormValidation;
 
 import java.io.IOException;
 
-import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
-import java.util.ArrayList;
 import java.util.List;
-
-import jenkins.model.Jenkins;
 
 /**
  *

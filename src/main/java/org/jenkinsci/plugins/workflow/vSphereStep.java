@@ -13,7 +13,7 @@ import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer;
-import org.jenkinsci.plugins.vsphere.builders.*;
+import org.jenkinsci.plugins.vsphere.builders.ExposeGuestInfo;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepDescriptorImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractStepImpl;
 import org.jenkinsci.plugins.workflow.steps.AbstractSynchronousNonBlockingStepExecution;

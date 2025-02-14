@@ -14,7 +14,6 @@ import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.Issue;
