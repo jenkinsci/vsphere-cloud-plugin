@@ -1,6 +1,7 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 import static org.hamcrest.CoreMatchers.*;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
