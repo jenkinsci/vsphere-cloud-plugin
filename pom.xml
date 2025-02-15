@@ -5,7 +5,8 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.31</version>
+        <version>5.7</version>
+        <relativePath />
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -24,34 +25,8 @@
         </license>
     </licenses>
 
-    <developers>
-        <developer>
-            <id>jswager</id>
-            <name>Jason Swager</name>
-            <email>jswager@alohaoi.com</email>
-            <roles>
-                <role>maintainer (retired)</role>
-            </roles>
-        </developer>
-        <developer>
-            <id>elordahl</id>
-            <name>Eric Lordahl</name>
-            <email>elordahl@vt.edu</email>
-            <roles>
-                <role>maintainer (retired)</role>
-            </roles>
-        </developer>
-        <developer>
-            <id>pjdarton</id>
-            <name>Peter Darton</name>
-            <roles>
-                <role>maintainer</role>
-            </roles>
-        </developer>
-    </developers>
-
     <scm>
-        <connection>scm:git:git://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
+        <connection>scm:git:https://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
         <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
         <tag>${scmTag}</tag>
@@ -60,8 +35,9 @@
     <properties>
         <revision>2.28</revision>
         <changelist>-SNAPSHOT</changelist>
-        <java.level>8</java.level>
-        <jenkins.version>2.263.1</jenkins.version>
+        <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
+        <jenkins.baseline>2.479</jenkins.baseline>
+        <jenkins.version>${jenkins.baseline}.1</jenkins.version>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
@@ -69,8 +45,8 @@
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.263.x</artifactId>
-                <version>984.vb5eaac999a7e</version>
+                <artifactId>bom-${jenkins.baseline}.x</artifactId>
+                <version>4136.vca_c3202a_7fd1</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -114,7 +90,6 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>node-iterator-api</artifactId>
-            <version>1.5</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
