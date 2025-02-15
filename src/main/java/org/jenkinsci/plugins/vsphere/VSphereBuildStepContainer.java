@@ -155,7 +155,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             Folder prevFolder = null;
 
             try {
-                String[] path = Stapler.getCurrentRequest().getRequestURI().split("/");
+                String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
                 for (String item : path) {
 
                     if (item.equals("job") || item.equals("jenkins"))
