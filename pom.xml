@@ -5,7 +5,8 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.72</version>
+        <version>5.7</version>
+        <relativePath />
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -61,8 +62,8 @@
         <revision>2.28</revision>
         <changelist>-SNAPSHOT</changelist>
         <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
-        <jenkins.baseline>2.387</jenkins.baseline>
-        <jenkins.version>${jenkins.baseline}.3</jenkins.version>
+        <jenkins.baseline>2.479</jenkins.baseline>
+        <jenkins.version>${jenkins.baseline}.1</jenkins.version>
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
@@ -72,7 +73,7 @@
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
                 <artifactId>bom-${jenkins.baseline}.x</artifactId>
-                <version>2329.v078520e55c19</version>
+                <version>3944.v1a_e4f8b_452db_</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -116,7 +117,6 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>node-iterator-api</artifactId>
-            <version>49.v58a_8b_35f8363</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
