@@ -49,7 +49,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -114,6 +113,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final boolean saveFailure;
     private final String targetResourcePool;
     private final String targetHost;
+    private final int instancesMin;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -152,6 +152,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final boolean saveFailure,
                                      final String targetResourcePool,
                                      final String targetHost,
+                                     final int instancesMin,
                                      final String credentialsId /*deprecated*/,
                                      final ComputerLauncher launcher,
                                      final RetentionStrategy<?> retentionStrategy,
@@ -181,6 +182,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.saveFailure = saveFailure;
         this.targetResourcePool = targetResourcePool;
         this.targetHost = targetHost;
+        this.instancesMin = instancesMin;
         this.credentialsId = credentialsId;
         this.nodeProperties = Util.fixNull(nodeProperties);
         this.guestInfoProperties = Util.fixNull(guestInfoProperties);
@@ -270,6 +272,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     public int getLimitedRunCount() {
         return this.limitedRunCount;
+    }
+
+    public int getInstancesMin() {
+        return this.instancesMin;
     }
 
     public boolean getSaveFailure() {
@@ -548,6 +554,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
         public FormValidation doCheckLimitedRunCount(@QueryParameter String limitedRunCount) {
             return FormValidation.validateNonNegativeInteger(limitedRunCount);
+        }
+
+        public FormValidation doCheckInstancesMin(@QueryParameter String instancesMin) {
+            return FormValidation.validateNonNegativeInteger(instancesMin);
         }
 
         public FormValidation doCheckTemplateInstanceCap(@QueryParameter String templateInstanceCap) {
