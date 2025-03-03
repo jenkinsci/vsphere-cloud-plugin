@@ -26,7 +26,7 @@ import org.jenkinsci.plugins.vsphere.tools.*;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
-import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerRequest2;
 
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.IOException;
@@ -603,8 +603,8 @@ public class vSphereCloud extends Cloud {
         String[] path = new String[0];
         Folder prevFolder = null;
 
-        if (Stapler.getCurrentRequest() != null){
-            path = Stapler.getCurrentRequest().getRequestURI().split("/");
+        if (Stapler.getCurrentRequest2() != null){
+            path = Stapler.getCurrentRequest2().getRequestURI().split("/");
         } else if (jobName != null) {
             path = jobName.split("/");
         }
@@ -685,7 +685,7 @@ public class vSphereCloud extends Cloud {
         }
 
         @Override
-        public boolean configure(StaplerRequest req, JSONObject o)
+        public boolean configure(StaplerRequest2 req, JSONObject o)
                 throws FormException {
             vsHost = o.getString("vsHost");
             username = o.getString("username");

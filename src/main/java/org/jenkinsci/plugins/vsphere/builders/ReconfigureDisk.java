@@ -34,7 +34,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
-import javax.servlet.ServletException;
+import jakarta.servlet.ServletException;
 
 import java.io.IOException;
 import java.io.PrintStream;
