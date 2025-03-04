@@ -35,6 +35,7 @@ jenkins:
             templateInstanceCap: 5
             useSnapshot: true
             waitForVMTools: true
+        useNoDelayProvisioner: true
         vsConnectionConfig:
           vsHost: "https://company-vsphere"
         vsDescription: "Company vSphere"
