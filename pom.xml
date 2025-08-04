@@ -5,7 +5,8 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>4.31</version>
+        <version>5.7</version>
+        <relativePath />
     </parent>
 
     <artifactId>vsphere-cloud</artifactId>
@@ -14,7 +15,7 @@
 
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
-    <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
+    <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
     <licenses>
         <license>
             <name>Apache Software License, Version 2.0</name>
@@ -51,17 +52,19 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/jenkinsci/vsphere-cloud-plugin.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/jenkinsci/vsphere-cloud-plugin.git</developerConnection>
-        <url>https://github.com/jenkinsci/vsphere-cloud-plugin</url>
+        <connection>scm:git:https://github.com/${gitHubRepo}.git</connection>
+        <developerConnection>scm:git:git@github.com:${gitHubRepo}.git</developerConnection>
+        <url>https://github.com/${gitHubRepo}</url>
         <tag>${scmTag}</tag>
     </scm>
 
     <properties>
         <revision>2.28</revision>
         <changelist>-SNAPSHOT</changelist>
-        <java.level>8</java.level>
-        <jenkins.version>2.263.1</jenkins.version>
+        <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
+        <jenkins.baseline>2.479</jenkins.baseline>
+        <jenkins.version>${jenkins.baseline}.1</jenkins.version>
+        <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
         <spotbugs.skip>true</spotbugs.skip>
     </properties>
 
@@ -69,8 +72,8 @@
         <dependencies>
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
-                <artifactId>bom-2.263.x</artifactId>
-                <version>984.vb5eaac999a7e</version>
+                <artifactId>bom-${jenkins.baseline}.x</artifactId>
+                <version>3944.v1a_e4f8b_452db_</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -114,7 +117,6 @@
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>node-iterator-api</artifactId>
-            <version>1.5</version>
         </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
@@ -127,7 +129,6 @@
         <dependency>
             <groupId>io.jenkins.plugins</groupId>
             <artifactId>jaxb</artifactId>
-            <version>2.3.6-1</version>
         </dependency>
         <dependency>
             <groupId>io.jenkins</groupId>
