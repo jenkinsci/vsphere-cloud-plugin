@@ -15,7 +15,7 @@
 
     <name>vSphere Plugin</name>
     <description>Integrates Jenkins with a vSphere server</description>
-    <url>https://github.com/jenkinsci/${project.artifactId}-plugin</url>
+    <url>https://github.com/${gitHubRepo}</url>
     <licenses>
         <license>
             <name>Apache Software License, Version 2.0</name>
