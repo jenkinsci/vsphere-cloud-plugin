@@ -45,7 +45,7 @@ class CloudProvisioningStateTest {
     static void setupClass() {
         stubVSphereCloudTemplates = new ArrayList<>();
         final VSphereConnectionConfig vsConnectionConfig = new VSphereConnectionConfig("vsHost", false, "credentialsId");
-        stubVSphereCloud = new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, stubVSphereCloudTemplates);
+        stubVSphereCloud = new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, false, stubVSphereCloudTemplates);
     }
 
     @BeforeEach
