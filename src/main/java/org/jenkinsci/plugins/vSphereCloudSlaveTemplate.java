@@ -51,7 +51,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
@@ -644,7 +644,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
          * @return the filtered list
          */
         @SuppressWarnings("unchecked")
-        @Nonnull
+        @NonNull
         @Restricted(NoExternalUse.class) // used by Jelly EL only
         public List<NodePropertyDescriptor> getNodePropertiesDescriptors() {
             List<NodePropertyDescriptor> result = new ArrayList<>();
@@ -727,7 +727,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         addEnvVars(knownVariables, listener, Jenkins.getInstance().getGlobalNodeProperties());
         addEnvVars(knownVariables, listener, this.nodeProperties);
         addEnvVar(knownVariables, "NODE_NAME", cloneName);
-        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : Util.join(getLabelSet(), " "));
+        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : getLabelSet().stream().map(Object::toString).collect(Collectors.joining(" ")));
         addEnvVar(knownVariables, "cluster", this.cluster);
         addEnvVar(knownVariables, "datastore", this.datastore);
         addEnvVar(knownVariables, "folder", this.folder);

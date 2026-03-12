@@ -31,7 +31,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -57,7 +57,7 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
     }
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			rename(run, launcher, listener);
 		} catch (Exception e) {

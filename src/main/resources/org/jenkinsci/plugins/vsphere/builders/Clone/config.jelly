@@ -28,6 +28,14 @@ limitations under the License.
     <f:checkbox  />
   </f:entry>
 
+  <f:entry title="${%Use Current Snapshot?}" field="useCurrentSnapshot">
+    <f:checkbox  />
+  </f:entry>
+
+  <f:entry title="${%Use Named Snapshot?}" field="namedSnapshot">
+    <f:textbox  />
+  </f:entry>
+
   <f:entry title="${%Cluster}" field="cluster">
     <f:textbox  />
   </f:entry>
@@ -53,6 +61,8 @@ limitations under the License.
       <f:number clazz="required non-negative-number" default="${descriptor.defaultTimeoutInSeconds}" />
     </f:entry>
   </f:optionalBlock>
+
+  <!-- TODO: How can we specify an optional Map<String,String> to set extraConfigParameters? -->
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster"/>
 </j:jelly>

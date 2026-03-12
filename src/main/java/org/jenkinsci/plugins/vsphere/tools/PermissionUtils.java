@@ -21,11 +21,11 @@ public class PermissionUtils {
     }
 
     /**
-     * Throws unless the user has permission to update this slave.
+     * Throws unless the user has permission to update this agent.
      * 
      * @param context
      *            The <code>@AncestorInPath</code> {@link ItemGroup} that
-     *            contains the slave.
+     *            contains the agent.
      * @throws AccessDeniedException
      *             if the user does not have permission.
      */

@@ -100,15 +100,15 @@ Whether to use each VM once before disposing of it (the "Run-Once" strategy) or 
 If your builds require a fresh VM then use "Run-Once", otherwise the "Keep-Until-Idle" will be more efficient.
 
 GuestInfo properties (mentioned above) allow you to pass information from Jenkins to the newly started VMs.
-If you are using the SSH launch method then you may not need this, but if you are using Java Web Start (JNLP) then this will be needed to tell your slave.jar process where the Jenkins server is, what node it is, the JNLP "secret" etc.
-For example, to pass the data necessary for the newly-started VM to start a JNLP slave.jar process and connect back to Jenkins, you could set the following GuestInfo properties:
+If you are using the SSH launch method then you may not need this, but if you are using Java Web Start (JNLP) then this will be needed to tell your agent.jar process where the Jenkins server is, what node it is, the JNLP "secret" etc.
+For example, to pass the data necessary for the newly-started VM to start a JNLP agent.jar process and connect back to Jenkins, you could set the following GuestInfo properties:
 
 ![](images/vSphere-GuestInfo-JNLPExample.png)
 
 You would then need to ensure that, after bootup,
 your VM would automatically use the vmware tools to reach each of these properties
 (e.g. `vmtoolsd --cmd "info-get guestinfo.SLAVE_JNLP_URL"` to request the jnlp URL)
-before starting the slave.jar with those arguments.
+before starting the agent.jar with those arguments.
 
 All the rest of the configuration variables are the same as when you define a Static Node.
 Please see below for information on setting those configuration parameters.
