@@ -28,6 +28,8 @@ import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.cloudbees.plugins.credentials.domains.HostnameRequirement;
+import com.vmware.vim25.ws.ApacheHttpClient;
+import com.vmware.vim25.ws.WSClient;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
@@ -37,11 +39,14 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import java.util.Collections;
+import java.util.List;
+
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 
 import org.apache.commons.lang.StringUtils;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -58,16 +63,71 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     private final @CheckForNull String vsHost;
     private /*final*/ boolean allowUntrustedCertificate;
     private final @CheckForNull String credentialsId;
-    
+
+    private enum HttpClientClassName {
+        ApacheHttpClientClass("ApacheHttpClient"),
+        WSClientClass("WSClient");
+
+        public final String name;
+
+        private HttpClientClassName(String name) {
+            this.name = name;
+        }
+    }
+
+    private static Class<?> httpClientNameToClass(String httpClientClassName) {
+        if (httpClientClassName.equals(HttpClientClassName.ApacheHttpClientClass.name)) {
+            return ApacheHttpClient.class;
+        }
+        return WSClient.class;
+    }
+
+    private static String httpClientClassToName(Class<?> httpClientClass) {
+        if (httpClientClass == ApacheHttpClient.class) {
+            return HttpClientClassName.ApacheHttpClientClass.name;
+        }
+        return HttpClientClassName.WSClientClass.name;
+    }
+
+    private String httpClientClassName;
+
+    private static Class<?> httpClientClass;
+
+    public static Class<?> setupGlobalHttpClientClass() {
+        if (VSphereConnectionConfig.httpClientClass == null) {
+            VSphereConnectionConfig.httpClientClass = WSClient.class;
+            List<vSphereCloud> clouds = vSphereCloud.findAllVsphereClouds(null);
+            if (clouds.size() > 0) {
+                VSphereConnectionConfig.httpClientClass
+                        = httpClientNameToClass(clouds.get(0).getVsConnectionConfig().httpClientClassName);
+            }
+        }
+        return VSphereConnectionConfig.httpClientClass;
+    }
+
+    public static String getHttpClientClassName() {
+        return httpClientClassToName(setupGlobalHttpClientClass());
+    }
+
+    @DataBoundSetter
+    public void setHttpClientClassName(String httpClientClassName) {
+        this.httpClientClassName = (httpClientClassName == null) ? getHttpClientClassName() : httpClientClassName;
+        for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
+            cloud.getVsConnectionConfig().httpClientClassName = this.httpClientClassName;
+        }
+        VSphereConnectionConfig.httpClientClass = httpClientNameToClass(this.httpClientClassName);
+    }
+
     @DataBoundConstructor
-    public VSphereConnectionConfig(String vsHost, String credentialsId) {
+    public VSphereConnectionConfig(String vsHost, String credentialsId, String httpClientClassName) {
         this.vsHost = vsHost;
         this.credentialsId = credentialsId;
+        setHttpClientClassName(httpClientClassName);
     }
 
     /** Full constructor for internal use, initializes all fields */
     public VSphereConnectionConfig(String vsHost, boolean allowUntrustedCertificate, String credentialsId) {
-        this(vsHost, credentialsId);
+        this(vsHost, credentialsId, null);
         setAllowUntrustedCertificate(allowUntrustedCertificate);
     }
 
@@ -117,6 +177,18 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         @Override
         public String getDisplayName() {
             return "N/A";
+        }
+
+        public ListBoxModel doFillHttpClientClassNameItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+
+            ListBoxModel items = new ListBoxModel(new ListBoxModel.Option("Use HttpURLConnection to connect to the vSphere cloud",
+                    VSphereConnectionConfig.HttpClientClassName.WSClientClass.name,
+                    VSphereConnectionConfig.HttpClientClassName.WSClientClass.name.equals(getHttpClientClassName())),
+                    new ListBoxModel.Option("Use CloseableHttpClient to connect to the vSphere cloud",
+                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name,
+                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name.equals(getHttpClientClassName())));
+            return items;
         }
 
         public FormValidation doCheckVsHost(@QueryParameter String value) {
