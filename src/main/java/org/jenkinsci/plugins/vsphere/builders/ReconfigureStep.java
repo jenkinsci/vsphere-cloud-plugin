@@ -23,7 +23,7 @@ import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.IOException;
 import java.util.List;
 
@@ -67,7 +67,7 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException;
 
-    public abstract void perform(@Nonnull Run<?, ?> run, FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
+    public abstract void perform(@NonNull Run<?, ?> run, FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException;
 
     protected VirtualDevice findDeviceByLabel(VirtualDevice[] devices, String label) {
         for(VirtualDevice d : devices) {

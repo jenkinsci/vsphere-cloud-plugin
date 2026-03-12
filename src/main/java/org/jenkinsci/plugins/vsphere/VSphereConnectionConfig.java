@@ -36,8 +36,9 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import java.util.Collections;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 
 import org.apache.commons.lang.StringUtils;
@@ -140,14 +141,9 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         public ListBoxModel doFillCredentialsIdItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String vsHost) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final Jenkins instance = Jenkins.getInstance(); 
-            if (instance != null) {
-                return new StandardListBoxModel().withEmptySelection().withMatching(
-                    CREDENTIALS_MATCHER, CredentialsProvider.lookupCredentials(StandardCredentials.class,
-                    instance, ACL.SYSTEM, getDomainRequirement(vsHost))
-                );
-            }
-            return new StandardListBoxModel();
+            return new StandardListBoxModel().includeEmptyValue()
+                .includeMatchingAs(ACL.SYSTEM, Jenkins.getInstance(), StandardCredentials.class,
+                    Collections.singletonList(getDomainRequirement(vsHost)), CREDENTIALS_MATCHER);
         }
 
         public FormValidation doCheckCredentialsId(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
@@ -212,12 +208,12 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                 CredentialsMatchers.instanceOf(StandardUsernamePasswordCredentials.class)
         );
         
-        private static @Nonnull DomainRequirement getDomainRequirement(String hostname) {
+        private static @NonNull DomainRequirement getDomainRequirement(String hostname) {
             return new HostnameRequirement(hostname);
         }
         
         public static @CheckForNull StandardCredentials lookupCredentials
-                        (@CheckForNull String credentialsId, @Nonnull String vsHost) {
+                        (@CheckForNull String credentialsId, @NonNull String vsHost) {
             final Jenkins instance = Jenkins.getInstance();            
             if (instance != null && credentialsId != null) {
                 return CredentialsMatchers.firstOrNull(

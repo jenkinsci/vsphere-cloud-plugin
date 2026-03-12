@@ -16,8 +16,12 @@
 
 package org.jenkinsci.plugins.vsphere;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.Extension;
 import hudson.model.ExecutorListener;
 import hudson.model.Descriptor;
+import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.Executor;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
@@ -31,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.jenkinsci.Symbol;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -168,12 +173,25 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     }
 
     @Restricted(NoExternalUse.class)
+    @Extension
     public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
+    /**
+     * JENKINS-69035: runOnceCloud is not unique. Keeping it as a legacy to not break compatibility.
+     */
+    @Symbol({"vsphereRunOnceCloud", "runOnceCloud"})
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
         @Override
         public String getDisplayName() {
             return "vSphere Run-Once Retention Strategy";
+        }
+    }
+
+    @Extension
+    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
+        @Override
+        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
+            return !(descriptor instanceof DescriptorImpl);
         }
     }
 }

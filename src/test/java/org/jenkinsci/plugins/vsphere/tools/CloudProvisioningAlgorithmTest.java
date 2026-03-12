@@ -1,6 +1,6 @@
 package org.jenkinsci.plugins.vsphere.tools;
-
-import static org.junit.Assert.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.hamcrest.CoreMatchers.*;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
@@ -13,21 +13,21 @@ import java.util.LinkedHashSet;
 import java.util.List;
 
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class CloudProvisioningAlgorithmTest {
+class CloudProvisioningAlgorithmTest {
 
     /** Used when faking up test data */
     private int instanceNumber;
 
-    @Before
-    public void setup() {
+    @BeforeEach
+    void setup() {
         instanceNumber = 0;
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenNoOptionsThenReturnsNull() {
+    void findTemplateWithMostFreeCapacityGivenNoOptionsThenReturnsNull() {
         // Given
         final List<CloudProvisioningRecord> emptyList = Collections.emptyList();
 
@@ -39,7 +39,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenSomeActiveAndOneUnusedThenPrefersUnusedTemplate() {
+    void findTemplateWithMostFreeCapacityGivenSomeActiveAndOneUnusedThenPrefersUnusedTemplate() {
         // Given
         final CloudProvisioningRecord zeroOfTwo = createInstance(2, 0, 0);
         final CloudProvisioningRecord onePlannedOfTwo = createInstance(2, 0, 1);
@@ -57,7 +57,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenEqualCapsThenDistributesTheLoadEvenly() {
+    void findTemplateWithMostFreeCapacityGivenEqualCapsThenDistributesTheLoadEvenly() {
         // Given
         final CloudProvisioningRecord a = createInstance(2, 0, 0);
         final CloudProvisioningRecord b = createInstance(2, 0, 0);
@@ -69,7 +69,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenEqualCapsButExistingUsageThenDistributesTheLoadEvenly() {
+    void findTemplateWithMostFreeCapacityGivenEqualCapsButExistingUsageThenDistributesTheLoadEvenly() {
         // Given
         final CloudProvisioningRecord a = createInstance(2, 2, 0);
         final CloudProvisioningRecord b = createInstance(2, 1, 0);
@@ -81,7 +81,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenNoCapsThenDistributesTheLoadEvenly() {
+    void findTemplateWithMostFreeCapacityGivenNoCapsThenDistributesTheLoadEvenly() {
         // Given
         final CloudProvisioningRecord a = createInstance(0, 0, 0);
         final CloudProvisioningRecord b = createInstance(0, 0, 0);
@@ -93,12 +93,12 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly() {
+    void findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly() {
         findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly(true);
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly2() {
+    void findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly2() {
         findTemplateWithMostFreeCapacityGivenUnequalCapsThenDistributesTheLoadFairly(false);
     }
 
@@ -114,12 +114,12 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenOneCappedAndOneUncappedThenDistributesTheLoadEvenlyUntilCapReached() {
+    void findTemplateWithMostFreeCapacityGivenOneCappedAndOneUncappedThenDistributesTheLoadEvenlyUntilCapReached() {
         findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEvenlyUntilCapReached(true);
     }
 
     @Test
-    public void findTemplateWithMostFreeCapacityGivenOneUncappedAndOneCappedThenDistributesTheLoadEvenlyUntilCapReached() {
+    void findTemplateWithMostFreeCapacityGivenOneUncappedAndOneCappedThenDistributesTheLoadEvenlyUntilCapReached() {
         findTemplateWithMostFreeCapacityGivenDifferentCapnessThenDistributesTheLoadEvenlyUntilCapReached(false);
     }
 
@@ -150,22 +150,22 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void toBigIntegerGivenTwoPow128MinusOneThenReturnsTwoPow128MinusOne() {
+    void toBigIntegerGivenTwoPow128MinusOneThenReturnsTwoPow128MinusOne() {
         testToBigInteger(-1, -1, "340282366920938463463374607431768211455");
     }
 
     @Test
-    public void toBigIntegerGivenTwoPow64PlusOneThenReturnsTwoPow64PlusOne() {
+    void toBigIntegerGivenTwoPow64PlusOneThenReturnsTwoPow64PlusOne() {
         testToBigInteger(1, 1, "18446744073709551617");
     }
 
     @Test
-    public void toBigIntegerGivenZeroThenReturnsZero() {
+    void toBigIntegerGivenZeroThenReturnsZero() {
         testToBigInteger(0, 0, "0");
     }
 
     @Test
-    public void toBigIntegerGivenPowersOfTwoThenReturnsPowersOfTwo() {
+    void toBigIntegerGivenPowersOfTwoThenReturnsPowersOfTwo() {
         long lsb = 1;
         long msb = 0;
         BigInteger big = new BigInteger("1");
@@ -182,7 +182,7 @@ public class CloudProvisioningAlgorithmTest {
         }
     }
 
-    private void testToBigInteger(long msb, long lsb, String expected) {
+    private static void testToBigInteger(long msb, long lsb, String expected) {
         // Given
         final BigInteger expectedValue = new BigInteger(expected);
         final byte[] expectedBytes = expectedValue.toByteArray();
@@ -196,7 +196,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findUnusedNameGivenZeroOfTwoExistsThenReturnsOneThenTwo() {
+    void findUnusedNameGivenZeroOfTwoExistsThenReturnsOneThenTwo() {
         // Given
         final CloudProvisioningRecord record = createInstance(2, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
@@ -215,7 +215,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findUnusedNameGivenMiddleOfThreeStillExistsThenReturnsOneThenThree() {
+    void findUnusedNameGivenMiddleOfThreeStillExistsThenReturnsOneThenThree() {
         // Given
         final CloudProvisioningRecord record = createInstance(3, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
@@ -236,7 +236,7 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findUnusedNameGivenNoSpaceThenThrowsIllegalStateException() {
+    void findUnusedNameGivenNoSpaceThenThrowsIllegalStateException() {
         // Given
         final CloudProvisioningRecord record = createInstance(3, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
@@ -246,21 +246,16 @@ public class CloudProvisioningAlgorithmTest {
         record.setCurrentlyUnwanted(unwanted, false);
         record.addCurrentlyActive(active);
         record.addCurrentlyPlanned(planned);
-        final List<CloudProvisioningRecord> records = Arrays.asList(record);
+        final List<CloudProvisioningRecord> records = List.of(record);
         final CloudProvisioningRecord shouldBeNull = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(records);
         assertThat(shouldBeNull, nullValue());
 
         // When
-        try {
-            final String unexpected = CloudProvisioningAlgorithm.findUnusedName(record);
-            fail("Expected IllegalStateException, got '" + unexpected + "'.");
-        } catch (IllegalStateException expected) {
-            // Then passed.
-        }
+        assertThrows(IllegalStateException.class, () -> CloudProvisioningAlgorithm.findUnusedName(record));
     }
 
     @Test
-    public void findUnusedNameGivenOneOfTwoHasEndedThenReturnsOne() {
+    void findUnusedNameGivenOneOfTwoHasEndedThenReturnsOne() {
         // Given
         final CloudProvisioningRecord record = createInstance(2, 0, 0);
         final String prefix = record.getTemplate().getCloneNamePrefix();
@@ -280,11 +275,11 @@ public class CloudProvisioningAlgorithmTest {
     }
 
     @Test
-    public void findUnusedNameGivenUncappedInstancesThenReturnsUniqueNames() {
+    void findUnusedNameGivenUncappedInstancesThenReturnsUniqueNames() {
         // Given
         final CloudProvisioningRecord record = createInstance(0, 5, 6);
         final String prefix = record.getTemplate().getCloneNamePrefix();
-        final List<String> actuals = new ArrayList<String>();
+        final List<String> actuals = new ArrayList<>();
 
         // When
         for (int i = 0; i < 100; i++) {
@@ -294,7 +289,7 @@ public class CloudProvisioningAlgorithmTest {
         }
 
         // Then
-        final List<String> uniques = new ArrayList<String>(new LinkedHashSet<String>(actuals));
+        final List<String> uniques = new ArrayList<>(new LinkedHashSet<>(actuals));
         assertThat(actuals, equalTo(uniques));
         assertThat(actuals, everyItem(startsWith(prefix)));
     }

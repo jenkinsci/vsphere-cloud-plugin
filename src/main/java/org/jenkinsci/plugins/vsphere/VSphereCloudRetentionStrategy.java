@@ -1,6 +1,10 @@
 package org.jenkinsci.plugins.vsphere;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.Extension;
 import hudson.model.Descriptor;
+import hudson.model.DescriptorVisibilityFilter;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.RetentionStrategy;
 
@@ -28,6 +32,7 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
     }
 
     @Restricted(NoExternalUse.class)
+    @Extension
     public static final DescriptorImpl DESCRIPTOR = new DescriptorImpl();
 
     public static final class DescriptorImpl extends Descriptor<RetentionStrategy<?>> {
@@ -36,7 +41,15 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
             return "vSphere Keep-Until-Idle Retention Strategy";
         }
     }
-    
+
+    @Extension
+    public static class DescriptorVisibilityFilterImpl extends DescriptorVisibilityFilter {
+        @Override
+        public boolean filter(@CheckForNull Object context, @NonNull Descriptor descriptor) {
+            return !(descriptor instanceof DescriptorImpl);
+        }
+    }
+
     private Object readResolve() {
         // without this, super.idleMinutes is not restored from persistence
         return new VSphereCloudRetentionStrategy(idleMinutes);

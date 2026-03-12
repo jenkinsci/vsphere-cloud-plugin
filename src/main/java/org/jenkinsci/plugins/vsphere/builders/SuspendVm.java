@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -51,7 +51,7 @@ public class SuspendVm extends VSphereBuildStep implements SimpleBuildStep {
 	}
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			suspend(run, launcher, listener);
 		} catch (Exception e) {

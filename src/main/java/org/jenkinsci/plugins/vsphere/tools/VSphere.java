@@ -24,8 +24,8 @@ import java.util.Map;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.apache.commons.lang.StringUtils;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -69,7 +69,7 @@ public class VSphere {
     private final String session;
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
-    private VSphere(@Nonnull String url, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
             this.url = new URL(url);
             final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
@@ -90,7 +90,7 @@ public class VSphere {
      * @throws VSphereException If an error occurred.
      * @return A connected instance.
      */
-    public static VSphere connect(@Nonnull VSphereConnectionConfig connectionDetails) throws VSphereException {
+    public static VSphere connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
         final String server = connectionDetails.getVsHost() + "/sdk";
         final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
@@ -109,7 +109,7 @@ public class VSphere {
      * @deprecated Use {@link #connect(VSphereConnectionConfig)} instead.
      */
     @Deprecated
-    public static VSphere connect(@Nonnull String server, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    public static VSphere connect(@NonNull String server, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         return new VSphere(server, ignoreCert, user, pw);
     }
 
@@ -147,7 +147,6 @@ public class VSphere {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
         cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
@@ -170,7 +169,6 @@ public class VSphere {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
         cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
     }
 
@@ -211,7 +209,7 @@ public class VSphere {
      *            parameter can be read by the VMware Tools on the client OS.
      *            e.g. a variable named "guestinfo.Foo" with value "Bar" could
      *            be read on the guest using the command-line
-     *            <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     *            {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * @param customizationSpec
      *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
@@ -220,6 +218,21 @@ public class VSphere {
      *             if anything goes wrong.
      */
     public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        if (namedSnapshot == null && extraConfigParameters == null) {
+            // NOTE: This "if" clause may be superfluous - just that previously
+            // this message was only logged by cloneVm() or deployVm()... so for
+            // least surprise and unexpected noise in the logs, effectively kept
+            // so for upgraded plugins where we can also directly call this method
+            // as a "buildStep" under a "vSphere" pipeline step.
+            if (useCurrentSnapshot) {
+                // Called from cloneVm() above.
+                logMessage(jLogger, "Creating a " + (linkedClone ? "shallow" : "deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
+            } else {
+                // Called from deployVm() above.
+                logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
+            }
+        }
+
         try {
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if (sourceVm==null) {
@@ -239,11 +252,11 @@ public class VSphere {
 
             if (namedSnapshot != null && !namedSnapshot.isEmpty()) {
                 if (useCurrentSnapshot) {
-                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + "  \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
+                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + " \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
-                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
+                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + " \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \"" + namedSnapshot + "\".");
                 cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
@@ -251,7 +264,7 @@ public class VSphere {
             if (useCurrentSnapshot) {
                 final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
                 if (currentSnapShot==null) {
-                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
+                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + " \"" + sourceName + "\" requires at least one snapshot.");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
@@ -1092,7 +1105,7 @@ public class VSphere {
      * <p>
      * e.g. a variable named "guestinfo.Foo" with value "Bar" could be read on
      * the guest using the command-line
-     * <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * </p>
      * 
      * @param vmName
