@@ -13,7 +13,7 @@ import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 /**
- * How we decide what template to create the next slave on.
+ * How we decide what template to create the next agent on.
  */
 public final class CloudProvisioningAlgorithm {
     private CloudProvisioningAlgorithm() {
@@ -58,7 +58,7 @@ public final class CloudProvisioningAlgorithm {
      * </ul>
      * 
      * @param record
-     *            Our record regarding the template the slave will be created
+     *            Our record regarding the template the agent will be created
      *            from.
      * @return A name for the new node. This will start with the
      *         {@link vSphereCloudSlaveTemplate#getCloneNamePrefix()}.

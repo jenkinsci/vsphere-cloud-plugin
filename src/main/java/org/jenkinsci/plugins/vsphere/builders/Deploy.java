@@ -27,7 +27,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -123,7 +123,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
             deployFromTemplate(run, launcher, listener);
         } catch (Exception e) {

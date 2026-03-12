@@ -1,6 +1,6 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <table width="100%">
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form" xmlns:v="/lib/vsphere">
+    <v:blockWrapper>
         <f:entry title="${%Clone Name Prefix}" field="cloneNamePrefix">
             <f:textbox/>
         </f:entry>
@@ -133,5 +133,5 @@
             </div>
         </f:entry>
 
-    </table>
+    </v:blockWrapper>
 </j:jelly>

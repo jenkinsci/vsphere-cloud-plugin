@@ -37,8 +37,8 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import java.util.Collections;
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 
 import org.apache.commons.lang.StringUtils;
@@ -208,12 +208,12 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                 CredentialsMatchers.instanceOf(StandardUsernamePasswordCredentials.class)
         );
         
-        private static @Nonnull DomainRequirement getDomainRequirement(String hostname) {
+        private static @NonNull DomainRequirement getDomainRequirement(String hostname) {
             return new HostnameRequirement(hostname);
         }
         
         public static @CheckForNull StandardCredentials lookupCredentials
-                        (@CheckForNull String credentialsId, @Nonnull String vsHost) {
+                        (@CheckForNull String credentialsId, @NonNull String vsHost) {
             final Jenkins instance = Jenkins.getInstance();            
             if (instance != null && credentialsId != null) {
                 return CredentialsMatchers.firstOrNull(
