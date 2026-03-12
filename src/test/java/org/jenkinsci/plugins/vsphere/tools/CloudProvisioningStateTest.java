@@ -6,11 +6,10 @@ import static org.hamcrest.CoreMatchers.any;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.everyItem;
-import static org.hamcrest.collection.IsArrayContainingInOrder.arrayContaining;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.collection.ArrayMatching.arrayContaining;
 import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
-import static org.junit.Assert.assertThat;
 import hudson.model.Node.Mode;
-import hudson.slaves.NodeProperty;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 
@@ -30,12 +29,11 @@ import org.hamcrest.collection.IsIterableWithSize;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
-import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
-public class CloudProvisioningStateTest {
+class CloudProvisioningStateTest {
     private static List<vSphereCloudSlaveTemplate> stubVSphereCloudTemplates;
     private static vSphereCloud stubVSphereCloud;
     private int recordNumber;
@@ -43,19 +41,19 @@ public class CloudProvisioningStateTest {
     private Logger testLogger;
     private List<LogRecord> loggedMessages;
 
-    @BeforeClass
-    public static void setupClass() {
-        stubVSphereCloudTemplates = new ArrayList<vSphereCloudSlaveTemplate>();
+    @BeforeAll
+    static void setupClass() {
+        stubVSphereCloudTemplates = new ArrayList<>();
         final VSphereConnectionConfig vsConnectionConfig = new VSphereConnectionConfig("vsHost", false, "credentialsId");
         stubVSphereCloud = new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, stubVSphereCloudTemplates);
     }
 
-    @Before
-    public void setup() {
+    @BeforeEach
+    void setup() {
         stubVSphereCloudTemplates.clear();
         recordNumber = 0;
         nodeNumber = 0;
-        loggedMessages = new ArrayList<LogRecord>();
+        loggedMessages = new ArrayList<>();
         Logger logger = Logger.getLogger("CloudProvisioningStateTest");
         logger.setLevel(Level.ALL);
         final Handler[] handlers = logger.getHandlers();
@@ -81,7 +79,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void constructorGivenCalledThenLogsConstructions() {
+    void constructorGivenCalledThenLogsConstructions() {
         // Given
         final Object[] expectedArgs = { stubVSphereCloud.toString() };
 
@@ -93,7 +91,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void provisioningStartedGivenNoPreviousStateThenLogs() {
+    void provisioningStartedGivenNoPreviousStateThenLogs() {
         // Given
         final String nodeName = createNodeName();
         final Object[] expectedArgs = { nodeName };
@@ -109,7 +107,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void provisioningStartedGivenPreviouslyStartedThenWarns() {
+    void provisioningStartedGivenPreviouslyStartedThenWarns() {
         // Given
         final String nodeName = createNodeName();
         final Object[] expectedArgs = { nodeName };
@@ -126,7 +124,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void normalLifecycleGivenNoErrorsThenLogs() {
+    void normalLifecycleGivenNoErrorsThenLogs() {
         // Given
         final String nodeName = createNodeName();
         final Object[] expectedArgs = { nodeName };
@@ -142,12 +140,11 @@ public class CloudProvisioningStateTest {
 
         // Then
         assertThat(loggedMessages, everyItem(logMessage(Level.FINE, expectedArgs)));
-        assertThat(loggedMessages, IsIterableWithSize.<LogRecord> iterableWithSize(4));
+        assertThat(loggedMessages, IsIterableWithSize.iterableWithSize(4));
     }
 
-    @SuppressWarnings("unchecked")
     @Test
-    public void failedToProvisionGivenNothingOutOfSequenceThenLogs() {
+    void failedToProvisionGivenNothingOutOfSequenceThenLogs() {
         // Given
         final String nodeName = createNodeName();
         final Object[] expectedArgs = { nodeName };
@@ -164,11 +161,11 @@ public class CloudProvisioningStateTest {
                 loggedMessages,
                 contains(logMessage(Level.FINE, expectedArgs),
                         logMessage(containsString("failed"), Level.INFO, expectedArgs)));
-        assertThat(loggedMessages, IsIterableWithSize.<LogRecord> iterableWithSize(2));
+        assertThat(loggedMessages, IsIterableWithSize.iterableWithSize(2));
     }
 
     @Test
-    public void provisionGivenOutOfOrderSequenceThenComplains() {
+    void provisionGivenOutOfOrderSequenceThenComplains() {
         // Given
         final String nodeName = createNodeName();
         final Object[] expectedArgs = { nodeName };
@@ -227,7 +224,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void pruneUnwantedRecordsGivenUnknownTemplatesThenRemovesRecordsForEmptyDeletedTemplates() {
+    void pruneUnwantedRecordsGivenUnknownTemplatesThenRemovesRecordsForEmptyDeletedTemplates() {
         // Given
         final String deletedAndInactiveNodeName = createNodeName();
         final String deletedButActiveNodeName = createNodeName();
@@ -264,7 +261,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void countNodesGivenNoTemplatesOrSlavesThenReturnsZero() {
+    void countNodesGivenNoTemplatesOrSlavesThenReturnsZero() {
         // Given
         final CloudProvisioningState instance = createInstance();
 
@@ -276,7 +273,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void countNodesGivenNoSlavesInAnyTemplatesThenReturnsZero() {
+    void countNodesGivenNoSlavesInAnyTemplatesThenReturnsZero() {
         // Given
         final CloudProvisioningState instance = createInstance();
         createRecord(instance);
@@ -294,7 +291,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void countNodesGiven2ActiveSlavesThenReturns2() {
+    void countNodesGiven2ActiveSlavesThenReturns2() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord activeRecord = createRecord(instance);
@@ -309,7 +306,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void countNodesGiven2UnwantedSlavesThenReturns2() {
+    void countNodesGiven2UnwantedSlavesThenReturns2() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord activeRecord = createRecord(instance);
@@ -324,7 +321,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void countNodesGiven3ActiveAnd4PendingSlavesThenReturns7() {
+    void countNodesGiven3ActiveAnd4PendingSlavesThenReturns7() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord recordWith2Active = createRecord(instance);
@@ -345,7 +342,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void getUnwantedVMsThatNeedDeletingGivenNothingNeedsDeletingThenReturnsNothing() {
+    void getUnwantedVMsThatNeedDeletingGivenNothingNeedsDeletingThenReturnsNothing() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord recordWith2Active = createRecord(instance);
@@ -354,7 +351,7 @@ public class CloudProvisioningStateTest {
         final CloudProvisioningRecord recordWith1Active1Planned = createRecord(instance);
         recordWith1Active1Planned.addCurrentlyActive(createNodeName());
         recordWith1Active1Planned.addCurrentlyPlanned(createNodeName());
-        final List<String> expected = Arrays.asList();
+        final List<String> expected = List.of();
 
         // When
         final List<String> actual = instance.getUnwantedVMsThatNeedDeleting();
@@ -363,7 +360,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void getUnwantedVMsThatNeedDeletingGivenSeveralUnwantedThenReturnsDeletableVMsInCorrectOrder() {
+    void getUnwantedVMsThatNeedDeletingGivenSeveralUnwantedThenReturnsDeletableVMsInCorrectOrder() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord r1 = createRecord(instance);
@@ -391,7 +388,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void unwantedSlaveNowDeletedGivenNothingElseToDeleteThenNothingRemains() {
+    void unwantedSlaveNowDeletedGivenNothingElseToDeleteThenNothingRemains() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord r1 = createRecord(instance);
@@ -400,7 +397,7 @@ public class CloudProvisioningStateTest {
         instance.recordExistingUnwantedVM(r1t, r1unwanted1);
         final int numberOfNodesBeforeDeletion = instance.countNodes();
         assertThat(numberOfNodesBeforeDeletion, equalTo(1));
-        final List<String> noNodes = Arrays.asList();
+        final List<String> noNodes = List.of();
 
         // When
         final Boolean actualIsOkToDelete = instance.isOkToDeleteUnwantedVM(r1unwanted1);
@@ -415,7 +412,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void unwantedSlaveNotDeletedGivenNothingElseToDeleteThenFailedDeletionRemains() {
+    void unwantedSlaveNotDeletedGivenNothingElseToDeleteThenFailedDeletionRemains() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord r1 = createRecord(instance);
@@ -424,7 +421,7 @@ public class CloudProvisioningStateTest {
         instance.recordExistingUnwantedVM(r1t, r1unwanted1);
         final int numberOfNodesBeforeDeletion = instance.countNodes();
         assertThat(numberOfNodesBeforeDeletion, equalTo(1));
-        final List<String> sameNodeRemains = Arrays.asList(r1unwanted1);
+        final List<String> sameNodeRemains = List.of(r1unwanted1);
 
         // When
         final Boolean actualIsOkToDelete = instance.isOkToDeleteUnwantedVM(r1unwanted1);
@@ -439,7 +436,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void isOkToDeleteUnwantedVMGivenNobodyElseDeletingVMThenReturnsTrueOnceAndFalseThereafter() {
+    void isOkToDeleteUnwantedVMGivenNobodyElseDeletingVMThenReturnsTrueOnceAndFalseThereafter() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord r1 = createRecord(instance);
@@ -459,7 +456,7 @@ public class CloudProvisioningStateTest {
     }
 
     @Test
-    public void isOkToDeleteUnwantedVMGivenDeletionInProgressVMThenReturnsFalseUntilDeletionFails() {
+    void isOkToDeleteUnwantedVMGivenDeletionInProgressVMThenReturnsFalseUntilDeletionFails() {
         // Given
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord r1 = createRecord(instance);
@@ -490,21 +487,19 @@ public class CloudProvisioningStateTest {
         final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
                 null, "snapshotName", false, "cluster", "resourcePool", "datastore", "folder", "customizationSpec", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", null,
-                new JNLPLauncher(), RetentionStrategy.NOOP, Collections.<NodeProperty<?>> emptyList(),
-                Collections.<VSphereGuestInfoProperty> emptyList());
+                new JNLPLauncher(), RetentionStrategy.NOOP, Collections.emptyList(),
+                Collections.emptyList());
         stubVSphereCloudTemplates.add(template);
-        final List<vSphereCloudSlaveTemplate> templates = new ArrayList<vSphereCloudSlaveTemplate>();
+        final List<vSphereCloudSlaveTemplate> templates = new ArrayList<>();
         templates.add(template);
         final List<CloudProvisioningRecord> records = instance.calculateProvisionableTemplates(templates);
-        assertThat(records, IsIterableWithSize.<CloudProvisioningRecord> iterableWithSize(1));
-        final CloudProvisioningRecord record = records.get(0);
-        return record;
+        assertThat(records, IsIterableWithSize.iterableWithSize(1));
+	    return records.get(0);
     }
 
     private String createNodeName() {
         nodeNumber++;
-        final String nodeName = "N#" + nodeNumber;
-        return nodeName;
+        return "N#" + nodeNumber;
     }
 
     private void userHasDeletedSlaveTemplate(CloudProvisioningRecord record) {
@@ -512,8 +507,8 @@ public class CloudProvisioningStateTest {
     }
 
     private static Matcher<LogRecord> logMessage(final Level expectedLevel, final Object... expectedArgs) {
-        final List<Matcher<? super String>> messageMatchers = new ArrayList<Matcher<? super String>>(
-                expectedArgs.length);
+        final List<Matcher<? super String>> messageMatchers = new ArrayList<>(
+		        expectedArgs.length);
         for (int i = 0; i < expectedArgs.length; i++) {
             final String expectedString = "{" + i + "}";
             messageMatchers.add(containsString(expectedString));
@@ -531,37 +526,36 @@ public class CloudProvisioningStateTest {
             final Object... expectedArgs) {
         final Matcher<Level> levelMatcher = equalTo(expectedLevel);
         final Matcher<Object[]> parametersMatcher = arrayContaining(expectedArgs);
-        final Matcher<LogRecord> itemMatcher = new TypeSafeMatcher<LogRecord>(LogRecord.class) {
-            @Override
-            public boolean matchesSafely(LogRecord actual) {
-                final String actualMessage = actual.getMessage();
-                final Level actualLevel = actual.getLevel();
-                final Object[] actualParameters = actual.getParameters();
-                return messageMatcher.matches(actualMessage) && levelMatcher.matches(actualLevel)
-                        && parametersMatcher.matches(actualParameters);
-            }
+        return new TypeSafeMatcher<>(LogRecord.class) {
+	        @Override
+	        public boolean matchesSafely(LogRecord actual) {
+		        final String actualMessage = actual.getMessage();
+		        final Level actualLevel = actual.getLevel();
+		        final Object[] actualParameters = actual.getParameters();
+		        return messageMatcher.matches(actualMessage) && levelMatcher.matches(actualLevel)
+				        && parametersMatcher.matches(actualParameters);
+	        }
 
-            @Override
-            public void describeTo(Description description) {
-                description.appendText("LogRecord(");
-                description.appendText("message ").appendDescriptionOf(messageMatcher);
-                description.appendText(" && level ").appendDescriptionOf(levelMatcher);
-                description.appendText(" && parameters ").appendDescriptionOf(parametersMatcher);
-                description.appendText(")");
-            }
+	        @Override
+	        public void describeTo(Description description) {
+		        description.appendText("LogRecord(");
+		        description.appendText("message ").appendDescriptionOf(messageMatcher);
+		        description.appendText(" && level ").appendDescriptionOf(levelMatcher);
+		        description.appendText(" && parameters ").appendDescriptionOf(parametersMatcher);
+		        description.appendText(")");
+	        }
 
-            @Override
-            protected void describeMismatchSafely(LogRecord actual, Description description) {
-                final String actualMessage = actual.getMessage();
-                final Level actualLevel = actual.getLevel();
-                final Object[] actualParameters = actual.getParameters();
-                description.appendText("was LogRecord(");
-                description.appendText("message=\"").appendValue(actualMessage);
-                description.appendText("\", level ").appendValue(actualLevel);
-                description.appendText(", parameters ").appendValueList("[", ",", "]", actualParameters);
-                description.appendText(")");
-            }
+	        @Override
+	        protected void describeMismatchSafely(LogRecord actual, Description description) {
+		        final String actualMessage = actual.getMessage();
+		        final Level actualLevel = actual.getLevel();
+		        final Object[] actualParameters = actual.getParameters();
+		        description.appendText("was LogRecord(");
+		        description.appendText("message=\"").appendValue(actualMessage);
+		        description.appendText("\", level ").appendValue(actualLevel);
+		        description.appendText(", parameters ").appendValueList("[", ",", "]", actualParameters);
+		        description.appendText(")");
+	        }
         };
-        return itemMatcher;
     }
 }

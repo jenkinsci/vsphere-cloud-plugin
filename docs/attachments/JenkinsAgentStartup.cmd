@@ -482,7 +482,7 @@ GOTO :eof
 )
 @CALL :logMessage "INFO" "PUSHD %SLAVE_HOME%"
 @PUSHD "%SLAVE_HOME%" || EXIT /b 1
-@SET _cmdLine=%JAVA_HOME%bin\java -Djava.util.logging.config.file=jenkins-slave.logging.properties %SLAVE_JVM_ARGS% -jar slave.jar -jnlpUrl %SLAVE_JNLP_URL% %SLAVE_PARAMS%
+@SET _cmdLine="%JAVA_HOME%bin\java" -Djava.util.logging.config.file=jenkins-slave.logging.properties %SLAVE_JVM_ARGS% -jar slave.jar -jnlpUrl %SLAVE_JNLP_URL% %SLAVE_PARAMS%
 @CALL :logMessage "INFO" "%_cmdLine%"
 @%_cmdLine%
 @CALL :logMessage "INFO" "... slave has exited with code %ERRORLEVEL%"
