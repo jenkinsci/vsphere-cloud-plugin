@@ -8,15 +8,14 @@ import io.jenkins.plugins.casc.ConfigurationContext;
 import io.jenkins.plugins.casc.ConfiguratorRegistry;
 import io.jenkins.plugins.casc.misc.ConfiguredWithCode;
 import io.jenkins.plugins.casc.misc.JenkinsConfiguredWithCodeRule;
+import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
 import java.util.List;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
-import org.junit.ClassRule;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 
 import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
@@ -28,37 +27,35 @@ import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.core.Is.is;
 
-public class ConfigurationAsCodeTest {
-
-    @Rule
-    public JenkinsConfiguredWithCodeRule r = new JenkinsConfiguredWithCodeRule();
+@WithJenkinsConfiguredWithCode
+class ConfigurationAsCodeTest {
 
     @Test
     @ConfiguredWithCode("configuration-as-code.yml")
-    public void should_support_configuration_as_code() {
+    void should_support_configuration_as_code(JenkinsConfiguredWithCodeRule r) {
         validateCasCLoading((vSphereCloud) r.jenkins.clouds.get(0));
     }
 
     @Test
     @Issue("JENKINS-69035")
     @ConfiguredWithCode("configuration-as-code-legacy.yml")
-    public void should_support_legacy_configuration_as_code() {
+    void should_support_legacy_configuration_as_code(JenkinsConfiguredWithCodeRule r) {
         validateCasCLoading((vSphereCloud) r.jenkins.clouds.get(0));
     }
 
     @Test
     @ConfiguredWithCode("configuration-as-code.yml")
-    public void should_support_configuration_export() throws Exception {
+    void should_support_configuration_export(JenkinsConfiguredWithCodeRule r) throws Exception {
         validateCasCExport();
     }
 
     @Test
     @ConfiguredWithCode("configuration-as-code-legacy.yml")
-    public void should_support_legacy_configuration_export() throws Exception {
+    void should_support_legacy_configuration_export(JenkinsConfiguredWithCodeRule r) throws Exception {
         validateCasCExport();
     }
-    
-    private void validateCasCLoading(vSphereCloud cloud) {
+
+    private static void validateCasCLoading(vSphereCloud cloud) {
         assertThat(cloud.getVsDescription(), is("Company vSphere"));
         assertThat(cloud.getVsHost(), is("https://company-vsphere"));
         assertThat(cloud.getInstanceCap(), is(100));
@@ -102,7 +99,7 @@ public class ConfigurationAsCodeTest {
         RunOnceCloudRetentionStrategy runOnce = (RunOnceCloudRetentionStrategy) retentionStrategy;
         assertThat(runOnce.getIdleMinutes(), is(2));
     }
-    
+
     private void validateCasCExport() throws Exception {
         ConfiguratorRegistry registry = ConfiguratorRegistry.get();
         ConfigurationContext context = new ConfigurationContext(registry);
@@ -113,6 +110,6 @@ public class ConfigurationAsCodeTest {
         String expected = toStringFromYamlFile(this, "expected_output.yml");
 
         assertThat(exported, is(expected));
-        
+
     }
 }
