@@ -10,7 +10,7 @@ As a short summary, release 2.28 was the last manually cut release, in March 202
 
 Releases with major number `3.x` are published with an automated procedure and a monotonously incrementing semantic version format.
 
-Releases with major number `4.x` would mark some breaking change, like JDK deprecation.
+Releases with major number `4.x` mark the breaking change of JDK 17 deprecation by dependency of the plugin (yavijava) and so requirement of a newer Jenkins LTS core which can no longer run with JDK 17 either (to avoid potential mismatches).
 
 ### [Version 2.28](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.28)
 * There may be more works not tracked in this file since summer 2022

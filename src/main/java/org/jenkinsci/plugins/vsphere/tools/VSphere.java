@@ -681,7 +681,7 @@ public class VSphere {
         // try to fetch data store directly from cluster if above approach doesn't work
         ClusterComputeResource clusterResource = (ClusterComputeResource) rootEntity;
 
-        for (Datastore dataStore : clusterResource.getDatastores()) {
+        for (Datastore dataStore : clusterResource.getDatastore()) {
             if (dataStore.getName().equals(datastoreName)) {
                 return dataStore;
             }
@@ -860,7 +860,7 @@ public class VSphere {
 
             VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
 
-            snapshot.renameSnapshot(newName, newDescription);
+            snapshot.rename(newName, newDescription);
 
             LOGGER.log(Level.FINER, "VM Snapshot was renamed successfully.");
             return;
@@ -1043,7 +1043,7 @@ public class VSphere {
             String name) throws VSphereException {
         try {
             Datacenter datacenter = getDataCenter(virtualMachine);
-            for (Network network : datacenter.getNetworks()) {
+            for (Network network : datacenter.getNetwork()) {
                 if (network instanceof Network &&
                         (name.isEmpty() || network.getName().contentEquals(name))) {
                     return network;
@@ -1066,7 +1066,7 @@ public class VSphere {
             String name) throws VSphereException {
         try {
             Datacenter datacenter = getDataCenter(virtualMachine);
-            for (Network network : datacenter.getNetworks()) {
+            for (Network network : datacenter.getNetwork()) {
                 if (network instanceof DistributedVirtualPortgroup &&
                         (name.isEmpty() || network.getName().contentEquals(name))) {
                     return (DistributedVirtualPortgroup)network;
