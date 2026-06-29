@@ -40,8 +40,8 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.Stapler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.IOException;
@@ -122,7 +122,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
 
     @Extension
     public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
-        private static final Logger LOGGER = LoggerFactory.getLogger(VSphereBuildStepContainerDescriptor.class);
+        private static final Logger LOGGER = Logger.getLogger(VSphereBuildStepContainerDescriptor.class.getName());
 
         @Initializer(before = InitMilestone.PLUGINS_STARTED)
         public static void addAliases() {
@@ -192,7 +192,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 }
             } catch (Exception e) {
 
-                LOGGER.error(e.toString(), e);
+                LOGGER.log(Level.SEVERE, e.toString(), e);
             }
 
             return select;
