@@ -77,8 +77,6 @@
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
         <spotbugs.skip>true</spotbugs.skip>
         <ban-junit4-imports.skip>false</ban-junit4-imports.skip>
-        <!-- yavijava 9.x is compiled for JDK 21; require JDK 21 to match -->
-        <maven.compiler.release>21</maven.compiler.release>
     </properties>
 
     <dependencyManagement>
@@ -89,12 +87,6 @@
                 <version>6641.vfe1b_b_3c48a_4a_</version>
                 <scope>import</scope>
                 <type>pom</type>
-            </dependency>
-            <!-- yavijava 9.0.2 requires slf4j-api 2.0.17; override the BOM's 2.0.16 -->
-            <dependency>
-                <groupId>org.slf4j</groupId>
-                <artifactId>slf4j-api</artifactId>
-                <version>2.0.17</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
