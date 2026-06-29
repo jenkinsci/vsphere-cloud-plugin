@@ -1,8 +1,22 @@
 # Change Log
 
-## Unreleased
-A pre-release can be downloaded from https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/
+For current change log please see GitHub release pages at
+https://github.com/jenkinsci/vsphere-cloud-plugin/releases
+
+Pre-release builds can be downloaded (before they expire) from
+https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/
+
+As a short summary, release 2.28 was the last manually cut release, in March 2026.
+
+Releases with major number `3.x` are published with an automated procedure and a monotonously incrementing semantic version format.
+
+Releases with major number `4.x` would mark some breaking change, like JDK deprecation.
+
+### [Version 2.28](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.28)
+* There may be more works not tracked in this file since summer 2022
 * Resolve JCasC runOnceCloud retention strategy clash with anka-build plugin ([#132](https://github.com/jenkinsci/docker-plugin/pull/132))
+* Expose all options of `cloneOrDeployVm()` method in buildStep `Clone`, allow to use `namedSnapshot` and `extraConfigParameters` ([#137](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/137))
+* Code base modernization for the plugin production code and its self-tests.
 
 ### [Version 2.27](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.27)
 _May 12th, 2022_:
