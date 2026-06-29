@@ -12,6 +12,7 @@
 ## Documentation:
 * [Jenkins configuration](docs/jenkins-configuration.md)
 * [VM setup hints](docs/vm-configuration.md)
+* [Using the plugin in pipelines](docs/pipeline.md)
 * [Miscellaneous](docs/misc.md)
 
 ## Release history:
