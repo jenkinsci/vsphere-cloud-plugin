@@ -14,25 +14,25 @@ import java.util.logging.Logger;
  * eliminating the per-operation login/logout overhead that occurs when every API call
  * creates and destroys its own session.
  *
- * <h3>Caller contract</h3>
+ * <p><b>Caller contract:</b></p>
  * <ol>
  *   <li>Obtain the shared connection via {@link #acquire()}.</li>
- *   <li>Use it normally — all public {@link VSphere} methods work as usual.</li>
+ *   <li>Use it normally - all public {@link VSphere} methods work as usual.</li>
  *   <li>Call {@link VSphere#disconnect()} when done.  For pooled connections this is a
  *       no-op; the pool controls the real session lifecycle.</li>
  * </ol>
  *
- * <h3>Background maintenance</h3>
+ * <p><b>Background maintenance:</b></p>
  * <ul>
- *   <li><b>Health check</b> — if {@code healthCheckIntervalSecs > 0}, a daemon thread
- *       periodically issues a lightweight {@code getCurrentTime()} call and reconnects
+ *   <li><b>Health check</b> - if {@code healthCheckIntervalSecs > 0}, a daemon thread
+ *       periodically issues a lightweight {@code currentTime()} call and reconnects
  *       automatically on failure.</li>
- *   <li><b>Session age limit</b> — if {@code sessionMaxAgeSecs > 0}, the session is
+ *   <li><b>Session age limit</b> - if {@code sessionMaxAgeSecs > 0}, the session is
  *       proactively restarted once it has been alive for that many seconds, both in the
  *       background and on the next {@link #acquire()} call.</li>
- *   <li><b>Use-count limit</b> — if {@code sessionMaxUses > 0}, the session is restarted
+ *   <li><b>Use-count limit</b> - if {@code sessionMaxUses > 0}, the session is restarted
  *       on the next {@link #acquire()} once that many acquisitions have been made.</li>
- *   <li><b>Idle timeout</b> — if {@code idleTimeoutSecs > 0}, the session is disconnected
+ *   <li><b>Idle timeout</b> - if {@code idleTimeoutSecs > 0}, the session is disconnected
  *       (and lazily reconnected on the next {@link #acquire()}) after the connection has
  *       not been acquired for that many seconds.</li>
  * </ul>
