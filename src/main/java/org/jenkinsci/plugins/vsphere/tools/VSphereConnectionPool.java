@@ -111,7 +111,7 @@ public class VSphereConnectionPool {
                 && (System.currentTimeMillis() - connectionCreatedAtMs) > (long) sessionMaxAgeSecs * 1000L;
         boolean usesExhausted = sessionMaxUses > 0 && useCount >= sessionMaxUses;
         if (ageExpired || usesExhausted) {
-            LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: restarting session — "
+            LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: restarting session - "
                     + (ageExpired ? "max age reached" : "max uses reached"));
             disconnectQuietly();
             connect();
@@ -143,7 +143,7 @@ public class VSphereConnectionPool {
                 return;
             }
             LOGGER.warning("vSphere connection pool [" + config.getVsHost()
-                    + "]: health check failed — reconnecting");
+                    + "]: health check failed - reconnecting");
             disconnectQuietly();
             try {
                 connect();
@@ -166,7 +166,7 @@ public class VSphereConnectionPool {
                 long ageMs = System.currentTimeMillis() - connectionCreatedAtMs;
                 if (ageMs > (long) sessionMaxAgeSecs * 1000L) {
                     LOGGER.info("vSphere connection pool [" + config.getVsHost()
-                            + "]: proactive reconnect — max session age reached");
+                            + "]: proactive reconnect - max session age reached");
                     disconnectQuietly();
                     try {
                         connect();
@@ -184,7 +184,7 @@ public class VSphereConnectionPool {
                 long idleMs = System.currentTimeMillis() - lastAcquiredAtMs;
                 if (idleMs > (long) idleTimeoutSecs * 1000L) {
                     LOGGER.info(String.format(
-                            "vSphere connection pool [%s]: disconnecting — idle for %ds (limit %ds)",
+                            "vSphere connection pool [%s]: disconnecting - idle for %ds (limit %ds)",
                             config.getVsHost(), idleMs / 1000, idleTimeoutSecs));
                     disconnectQuietly();
                 }
