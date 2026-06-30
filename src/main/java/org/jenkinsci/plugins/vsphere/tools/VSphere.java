@@ -69,6 +69,12 @@ public class VSphere {
     private final String session;
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
+    /**
+     * When true, {@link #disconnect()} is a no-op; lifecycle is managed by
+     * {@link VSphereConnectionPool}.
+     */
+    private volatile boolean pooled = false;
+
     private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
             this.url = new URL(url);
@@ -116,15 +122,59 @@ public class VSphere {
     /**
      * Disconnect from vSphere server.
      * <p>
+     * When this instance is managed by a {@link VSphereConnectionPool} the call is
+     * silently ignored; the pool handles the actual session lifecycle.
+     * </p>
+     * <p>
      * Note: This logs any {@link Exception} it encounters - it does not pass
      * them to get to the calling method.
      * </p>
      */
     public void disconnect() {
+        if (pooled) {
+            return;
+        }
         try {
             this.getServiceInstance().getServerConnection().logout();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Caught exception when trying to disconnect vSphere.", e);
+        }
+    }
+
+    /**
+     * Marks this instance as owned by a {@link VSphereConnectionPool} so that
+     * {@link #disconnect()} becomes a no-op for ordinary callers.
+     * Package-private — only {@link VSphereConnectionPool} should call this.
+     */
+    void markAsPooled() {
+        pooled = true;
+    }
+
+    /**
+     * Disconnects the underlying session regardless of the pooled flag.
+     * Called by {@link VSphereConnectionPool} when it actually wants to tear down
+     * the session (restart, idle timeout, shutdown).
+     * Package-private — only {@link VSphereConnectionPool} should call this.
+     */
+    void forceDisconnect() {
+        pooled = false;
+        disconnect();
+    }
+
+    /**
+     * Checks whether the current vSphere session is still alive by issuing a
+     * lightweight {@code getCurrentTime()} call.
+     *
+     * @return {@code true} if the session responds normally; {@code false} if it
+     *         has expired or the server is unreachable.
+     */
+    public boolean isSessionAlive() {
+        try {
+            getServiceInstance().currentTime();
+            return true;
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "vSphere session alive-check failed", e);
+            return false;
         }
     }
 

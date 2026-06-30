@@ -24,6 +24,7 @@ import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
 import org.kohsuke.stapler.StaplerRequest2;
@@ -60,9 +61,21 @@ public class vSphereCloud extends Cloud {
     private final int instanceCap;
     private final List<? extends vSphereCloudSlaveTemplate> templates;
 
+    /** When true, all API calls share one long-lived session via {@link VSphereConnectionPool}. */
+    private boolean useConnectionPool = false;
+    /** Seconds between pool session health checks; 0 disables health checks. */
+    private int poolHealthCheckIntervalSecs = 0;
+    /** Restart the pooled session after this many seconds (0 = never restart based on age). */
+    private int sessionMaxAgeSecs = 0;
+    /** Restart the pooled session after this many uses (0 = never restart based on uses). */
+    private int sessionMaxUses = 0;
+    /** Disconnect the pooled session after this many idle seconds (0 = keep alive indefinitely). */
+    private int poolIdleTimeoutSecs = 0;
+
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient CloudProvisioningState templateState;
+    private transient volatile VSphereConnectionPool connectionPool;
 
     private static final java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
 
@@ -215,6 +228,77 @@ public class vSphereCloud extends Cloud {
         return this.templates;
     }
 
+    public boolean isUseConnectionPool() {
+        return useConnectionPool;
+    }
+
+    @DataBoundSetter
+    public void setUseConnectionPool(boolean useConnectionPool) {
+        this.useConnectionPool = useConnectionPool;
+        resetPool();
+    }
+
+    public int getPoolHealthCheckIntervalSecs() {
+        return poolHealthCheckIntervalSecs;
+    }
+
+    @DataBoundSetter
+    public void setPoolHealthCheckIntervalSecs(int poolHealthCheckIntervalSecs) {
+        this.poolHealthCheckIntervalSecs = poolHealthCheckIntervalSecs;
+        resetPool();
+    }
+
+    public int getSessionMaxAgeSecs() {
+        return sessionMaxAgeSecs;
+    }
+
+    @DataBoundSetter
+    public void setSessionMaxAgeSecs(int sessionMaxAgeSecs) {
+        this.sessionMaxAgeSecs = sessionMaxAgeSecs;
+        resetPool();
+    }
+
+    public int getSessionMaxUses() {
+        return sessionMaxUses;
+    }
+
+    @DataBoundSetter
+    public void setSessionMaxUses(int sessionMaxUses) {
+        this.sessionMaxUses = sessionMaxUses;
+        resetPool();
+    }
+
+    public int getPoolIdleTimeoutSecs() {
+        return poolIdleTimeoutSecs;
+    }
+
+    @DataBoundSetter
+    public void setPoolIdleTimeoutSecs(int poolIdleTimeoutSecs) {
+        this.poolIdleTimeoutSecs = poolIdleTimeoutSecs;
+        resetPool();
+    }
+
+    /** Shuts down any running pool and clears the reference so it is recreated on next use. */
+    private synchronized void resetPool() {
+        if (connectionPool != null) {
+            connectionPool.shutdown();
+            connectionPool = null;
+        }
+    }
+
+    /** Returns (lazily creating) the connection pool for this cloud instance. */
+    private synchronized VSphereConnectionPool getOrCreatePool(VSphereConnectionConfig config) {
+        if (connectionPool == null) {
+            connectionPool = new VSphereConnectionPool(
+                    config,
+                    poolHealthCheckIntervalSecs,
+                    sessionMaxAgeSecs,
+                    sessionMaxUses,
+                    poolIdleTimeoutSecs);
+        }
+        return connectionPool;
+    }
+
     private vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
         if (this.templates == null || vmName == null)
             return null;
@@ -299,6 +383,9 @@ public class vSphereCloud extends Cloud {
             throw new VSphereException("vSphere username is not specified");
         }
 
+        if (useConnectionPool) {
+            return getOrCreatePool(connectionConfig).acquire();
+        }
         return VSphere.connect(connectionConfig);
     }
 
@@ -704,6 +791,22 @@ public class vSphereCloud extends Cloud {
         }
 
         public FormValidation doCheckInstanceCap(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckPoolHealthCheckIntervalSecs(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckSessionMaxAgeSecs(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckSessionMaxUses(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckPoolIdleTimeoutSecs(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
         }
     }

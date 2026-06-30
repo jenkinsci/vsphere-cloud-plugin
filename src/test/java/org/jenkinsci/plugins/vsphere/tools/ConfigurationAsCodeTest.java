@@ -55,6 +55,28 @@ class ConfigurationAsCodeTest {
         validateCasCExport();
     }
 
+    @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
+    void pool_is_disabled_by_default_when_not_specified_in_yaml(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.isUseConnectionPool(), is(false));
+        assertThat(cloud.getPoolHealthCheckIntervalSecs(), is(0));
+        assertThat(cloud.getSessionMaxAgeSecs(), is(0));
+        assertThat(cloud.getSessionMaxUses(), is(0));
+        assertThat(cloud.getPoolIdleTimeoutSecs(), is(0));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-pool.yml")
+    void should_load_pool_configuration_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.isUseConnectionPool(), is(true));
+        assertThat(cloud.getPoolHealthCheckIntervalSecs(), is(60));
+        assertThat(cloud.getSessionMaxAgeSecs(), is(3600));
+        assertThat(cloud.getSessionMaxUses(), is(500));
+        assertThat(cloud.getPoolIdleTimeoutSecs(), is(300));
+    }
+
     private static void validateCasCLoading(vSphereCloud cloud) {
         assertThat(cloud.getVsDescription(), is("Company vSphere"));
         assertThat(cloud.getVsHost(), is("https://company-vsphere"));

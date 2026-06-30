@@ -1,0 +1,14 @@
+jenkins:
+  systemMessage: "Hello World"
+  clouds:
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        useConnectionPool: true
+        poolHealthCheckIntervalSecs: 60
+        sessionMaxAgeSecs: 3600
+        sessionMaxUses: 500
+        poolIdleTimeoutSecs: 300
+        vsConnectionConfig:
+          vsHost: "https://company-vsphere"
+        vsDescription: "Pool Test vSphere"

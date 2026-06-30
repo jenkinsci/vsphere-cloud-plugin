@@ -1,0 +1,9 @@
+<div>
+  Maximum lifetime of a pooled session in seconds, measured from when the session was
+  established.<br/>
+  Once this limit is reached the pool proactively logs out the old session and creates a
+  fresh one before serving the next request.<br/>
+  This is useful if your vCenter enforces a maximum session duration (e.g. 8 hours) or
+  if you want to rotate credentials regularly.<br/>
+  Set to <b>0</b> to never restart based on session age.
+</div>

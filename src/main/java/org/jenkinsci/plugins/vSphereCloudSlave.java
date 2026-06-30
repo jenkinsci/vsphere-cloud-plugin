@@ -18,6 +18,8 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
@@ -419,17 +421,22 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             throwUnlessUserHasPermissionToConfigureSlave(context);
             try {
                 vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
-                VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
-                if (vm == null) {
-                    return FormValidation.error("Virtual Machine was not found");
-                }
-                if (!snapName.isEmpty()) {
-                    VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
-                    if (snap == null) {
-                        return FormValidation.error("Virtual Machine snapshot was not found");
+                VSphere vs = vsC.vSphereInstance();
+                try {
+                    VirtualMachine vm = vs.getVmByName(vmName);
+                    if (vm == null) {
+                        return FormValidation.error("Virtual Machine was not found");
                     }
+                    if (!snapName.isEmpty()) {
+                        VirtualMachineSnapshot snap = vs.getSnapshotInTree(vm, snapName);
+                        if (snap == null) {
+                            return FormValidation.error("Virtual Machine snapshot was not found");
+                        }
+                    }
+                    return FormValidation.ok("Virtual Machine found successfully");
+                } finally {
+                    vs.disconnect();
                 }
-                return FormValidation.ok("Virtual Machine found successfully");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

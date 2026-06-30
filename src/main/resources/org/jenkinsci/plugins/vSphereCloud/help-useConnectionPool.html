@@ -1,0 +1,56 @@
+<div>
+  <p>
+    When enabled, all vSphere API calls made by this cloud share one long-lived session
+    instead of performing a full <em>login → operation → logout</em> cycle for every
+    individual request (clone, power-on, snapshot revert, delete, …).
+    This eliminates dozens of redundant authentication round-trips per agent lifecycle,
+    reducing load on the vCenter and speeding up provisioning.
+  </p>
+  <p>
+    The shared session is created on the first request and kept alive in the background
+    according to the health-check, age, use-count, and idle-timeout settings below.
+    If the session expires unexpectedly (e.g. the vCenter was restarted) the pool
+    reconnects automatically on the next request.
+  </p>
+  <p>
+    Leave disabled if you prefer the original stateless behaviour (a fresh login per
+    operation), for example when multiple Jenkins controllers share the same vCenter
+    account with a strict concurrent-session limit.
+  </p>
+
+  <h4>Configuration via JCasC (Configuration as Code)</h4>
+  <p>
+    Add the following keys under the <code>vSphere</code> cloud entry in your
+    <code>jenkins.yaml</code>.  Only <code>useConnectionPool: true</code> is required;
+    the remaining keys default to <code>0</code> (feature disabled).
+  </p>
+  <pre>
+jenkins:
+  clouds:
+    - vSphere:
+        vsDescription: "My vCenter"
+        vsConnectionConfig:
+          vsHost: "https://vcenter.example.com"
+          credentialsId: "vcenter-creds"
+        instanceCap: 20
+        maxOnlineSlaves: 0
+
+        # --- Connection pool settings ---
+        useConnectionPool: true
+
+        # Re-check session health every 60 seconds (0 = disabled)
+        poolHealthCheckIntervalSecs: 60
+
+        # Restart the session after 1 hour regardless of activity (0 = never)
+        sessionMaxAgeSecs: 3600
+
+        # Restart after 500 uses (0 = never)
+        sessionMaxUses: 500
+
+        # Disconnect after 5 minutes of no activity (0 = keep alive forever)
+        poolIdleTimeoutSecs: 300
+
+        templates:
+          - ...
+  </pre>
+</div>
