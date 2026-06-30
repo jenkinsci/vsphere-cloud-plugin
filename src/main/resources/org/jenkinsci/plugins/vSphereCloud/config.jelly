@@ -14,6 +14,26 @@
         <f:entry title="${%Template Instance Cap}" field="instanceCap" description="0 means unlimited.">
             <f:textbox clazz="required number" default="0"/>
         </f:entry>
+
+        <f:entry title="${%Reuse vSphere session (connection pool)}" field="useConnectionPool">
+            <f:checkbox/>
+        </f:entry>
+        <f:entry title="${%Pool health-check interval (seconds)}" field="poolHealthCheckIntervalSecs"
+                 description="0 — no periodic health checks.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool session max age (seconds)}" field="sessionMaxAgeSecs"
+                 description="0 — never restart based on age.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool session max uses}" field="sessionMaxUses"
+                 description="0 — never restart based on use count.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool idle disconnect timeout (seconds)}" field="poolIdleTimeoutSecs"
+                 description="0 — keep the session alive indefinitely.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
     </f:advanced>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">
