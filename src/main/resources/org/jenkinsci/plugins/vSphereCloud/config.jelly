@@ -15,23 +15,23 @@
             <f:textbox clazz="required number" default="0"/>
         </f:entry>
 
-        <f:entry title="${%Reuse vSphere session (connection pool)}" field="useConnectionPool">
+        <f:entry title="${%Use vSphere connection pool}" field="useConnectionPool">
             <f:checkbox/>
         </f:entry>
-        <f:entry title="${%Pool health-check interval (seconds)}" field="poolHealthCheckIntervalSecs"
-                 description="0 — no periodic health checks.">
+        <f:entry title="${%Pool health check interval in seconds}" field="poolHealthCheckIntervalSecs"
+                 description="0 - no periodic health checks are performed.">
             <f:textbox clazz="number" default="0"/>
         </f:entry>
-        <f:entry title="${%Pool session max age (seconds)}" field="sessionMaxAgeSecs"
-                 description="0 — never restart based on age.">
+        <f:entry title="${%Pool session max age in seconds}" field="sessionMaxAgeSecs"
+                 description="0 - the session is never restarted based on age.">
             <f:textbox clazz="number" default="0"/>
         </f:entry>
         <f:entry title="${%Pool session max uses}" field="sessionMaxUses"
-                 description="0 — never restart based on use count.">
+                 description="0 - the session is never restarted based on use count.">
             <f:textbox clazz="number" default="0"/>
         </f:entry>
-        <f:entry title="${%Pool idle disconnect timeout (seconds)}" field="poolIdleTimeoutSecs"
-                 description="0 — keep the session alive indefinitely.">
+        <f:entry title="${%Pool idle disconnect timeout in seconds}" field="poolIdleTimeoutSecs"
+                 description="0 - the connection is kept alive indefinitely.">
             <f:textbox clazz="number" default="0"/>
         </f:entry>
     </f:advanced>
