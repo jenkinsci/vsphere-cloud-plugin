@@ -163,7 +163,7 @@ public class VSphere {
 
     /**
      * Checks whether the current vSphere session is still alive by issuing a
-     * lightweight {@code getCurrentTime()} call.
+     * lightweight {@code currentTime()} call.
      *
      * @return {@code true} if the session responds normally; {@code false} if it
      *         has expired or the server is unreachable.
