@@ -291,6 +291,7 @@ public class vSphereCloud extends Cloud {
         if (connectionPool == null) {
             connectionPool = new VSphereConnectionPool(
                     config,
+                    this,
                     poolHealthCheckIntervalSecs,
                     sessionMaxAgeSecs,
                     sessionMaxUses,

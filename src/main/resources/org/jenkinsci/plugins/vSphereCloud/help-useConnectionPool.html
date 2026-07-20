@@ -17,6 +17,11 @@
     operation), for example when multiple Jenkins controllers share the same vCenter
     account with a strict concurrent-session limit.
   </p>
+  <p>
+    Saving this cloud's configuration (from the UI or via JCasC reload) always replaces
+    it with a fresh pool using the new settings; the previous pool - and any session it
+    still holds open - is logged out shortly afterwards.
+  </p>
 
   <h4>Configuration via JCasC (Configuration as Code)</h4>
   <p>

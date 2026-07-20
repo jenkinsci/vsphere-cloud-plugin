@@ -1,8 +1,12 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
+import hudson.slaves.Cloud;
+import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
+import java.lang.ref.WeakReference;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -53,6 +57,7 @@ public class VSphereConnectionPool {
     private static final Logger LOGGER = Logger.getLogger(VSphereConnectionPool.class.getName());
 
     private final VSphereConnectionConfig config;
+    private final WeakReference<Cloud> owner;
 
     private final int healthCheckIntervalSecs;
     private final int sessionMaxAgeSecs;
@@ -75,12 +80,31 @@ public class VSphereConnectionPool {
             int sessionMaxAgeSecs,
             int sessionMaxUses,
             int idleTimeoutSecs) {
+        this(config, null, healthCheckIntervalSecs, sessionMaxAgeSecs, sessionMaxUses, idleTimeoutSecs);
+    }
+
+    /**
+     * @param owner the {@link Cloud} this pool belongs to, used only so that
+     *              {@link VSphereConnectionPoolRegistry} can detect and shut down pools
+     *              left behind by a cloud instance that was replaced by reconfiguration
+     *              (e.g. saving the Jenkins global config). May be {@code null} (e.g. in
+     *              tests), in which case this pool is never auto-reaped as an orphan.
+     */
+    public VSphereConnectionPool(
+            @NonNull VSphereConnectionConfig config,
+            @CheckForNull Cloud owner,
+            int healthCheckIntervalSecs,
+            int sessionMaxAgeSecs,
+            int sessionMaxUses,
+            int idleTimeoutSecs) {
         this.config = config;
+        this.owner = owner == null ? null : new WeakReference<>(owner);
         this.healthCheckIntervalSecs = Math.max(0, healthCheckIntervalSecs);
         this.sessionMaxAgeSecs       = Math.max(0, sessionMaxAgeSecs);
         this.sessionMaxUses          = Math.max(0, sessionMaxUses);
         this.idleTimeoutSecs         = Math.max(0, idleTimeoutSecs);
         startScheduler();
+        VSphereConnectionPoolRegistry.register(this);
     }
 
     /**
@@ -104,8 +128,36 @@ public class VSphereConnectionPool {
      * After this call the pool must not be used.
      */
     public synchronized void shutdown() {
+        VSphereConnectionPoolRegistry.unregister(this);
         stopScheduler();
         disconnectQuietly();
+    }
+
+    /**
+     * Returns {@code true} if the {@link Cloud} this pool was created for is no longer
+     * present in {@code Jenkins.get().clouds} (e.g. it was replaced by a reconfiguration
+     * of the global/folder cloud config), meaning this pool's background thread and any
+     * session it still holds are now orphaned.  A pool created without an owner (e.g. in
+     * tests) is never considered orphaned.
+     */
+    boolean isOrphaned() {
+        if (owner == null) {
+            return false;
+        }
+        Cloud cloud = owner.get();
+        if (cloud == null) {
+            return true;
+        }
+        Jenkins jenkins = Jenkins.getInstanceOrNull();
+        if (jenkins == null) {
+            return false;
+        }
+        for (Cloud live : jenkins.clouds) {
+            if (live == cloud) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // -------------------------------------------------------------------------
