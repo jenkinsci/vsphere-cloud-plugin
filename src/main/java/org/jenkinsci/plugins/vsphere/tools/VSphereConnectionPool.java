@@ -5,6 +5,7 @@ import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -27,15 +28,21 @@ import java.util.logging.Logger;
  *   <li><b>Health check</b> - if {@code healthCheckIntervalSecs > 0}, a daemon thread
  *       periodically issues a lightweight {@code currentTime()} call and reconnects
  *       automatically on failure.</li>
- *   <li><b>Session age limit</b> - if {@code sessionMaxAgeSecs > 0}, the session is
- *       proactively restarted once it has been alive for that many seconds, both in the
- *       background and on the next {@link #acquire()} call.</li>
+ *   <li><b>Session age limit</b> - if {@code sessionMaxAgeSecs > 0}, a one-shot timer is
+ *       armed for the exact moment the session reaches that age, at which point it is
+ *       proactively restarted (also re-checked defensively on the next
+ *       {@link #acquire()} call).</li>
  *   <li><b>Use-count limit</b> - if {@code sessionMaxUses > 0}, the session is restarted
  *       on the next {@link #acquire()} once that many acquisitions have been made.</li>
- *   <li><b>Idle timeout</b> - if {@code idleTimeoutSecs > 0}, the session is disconnected
- *       (and lazily reconnected on the next {@link #acquire()}) after the connection has
- *       not been acquired for that many seconds.</li>
+ *   <li><b>Idle timeout</b> - if {@code idleTimeoutSecs > 0}, a one-shot timer is armed
+ *       for the exact moment the connection has gone unused for that many seconds, at
+ *       which point it is disconnected (and lazily reconnected on the next
+ *       {@link #acquire()}). The timer is re-armed on every {@link #acquire()}.</li>
  * </ul>
+ *
+ * <p>Session age and idle timeout are enforced by dedicated one-shot alarms rather than
+ * periodic polling, so they fire at (approximately) the exact configured deadline instead
+ * of some time after it.
  *
  * <p>A value of {@code 0} disables the corresponding feature.
  *
@@ -57,6 +64,8 @@ public class VSphereConnectionPool {
     private long connectionCreatedAtMs;
     private long lastAcquiredAtMs;
     private long useCount;
+    private ScheduledFuture<?> ageExpiryFuture;
+    private ScheduledFuture<?> idleExpiryFuture;
 
     private ScheduledExecutorService scheduler;
 
@@ -86,6 +95,7 @@ public class VSphereConnectionPool {
         lastAcquiredAtMs = System.currentTimeMillis();
         useCount++;
         connection.markAsPooled();
+        scheduleIdleExpiry();
         return connection;
     }
 
@@ -125,6 +135,68 @@ public class VSphereConnectionPool {
         lastAcquiredAtMs      = connectionCreatedAtMs;
         useCount              = 0;
         LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: session established");
+        scheduleAgeExpiry();
+        scheduleIdleExpiry();
+    }
+
+    // Arms (or re-arms) a one-shot timer for the exact moment the current session
+    // reaches sessionMaxAgeSecs. Called with this locked.
+    private void scheduleAgeExpiry() {
+        if (ageExpiryFuture != null) {
+            ageExpiryFuture.cancel(false);
+            ageExpiryFuture = null;
+        }
+        if (sessionMaxAgeSecs <= 0 || scheduler == null) {
+            return;
+        }
+        ageExpiryFuture = scheduler.schedule(this::onAgeExpired, sessionMaxAgeSecs, TimeUnit.SECONDS);
+    }
+
+    // Arms (or re-arms) a one-shot timer for the exact moment the connection will have
+    // been idle (unacquired) for idleTimeoutSecs. Called with this locked.
+    private void scheduleIdleExpiry() {
+        if (idleExpiryFuture != null) {
+            idleExpiryFuture.cancel(false);
+            idleExpiryFuture = null;
+        }
+        if (idleTimeoutSecs <= 0 || scheduler == null) {
+            return;
+        }
+        idleExpiryFuture = scheduler.schedule(this::onIdleExpired, idleTimeoutSecs, TimeUnit.SECONDS);
+    }
+
+    // Called from the background scheduler thread, at the exact session-age deadline
+    private void onAgeExpired() {
+        synchronized (this) {
+            if (connection == null) return;
+            LOGGER.info("vSphere connection pool [" + config.getVsHost()
+                    + "]: proactive reconnect - max session age reached");
+            disconnectQuietly();
+            try {
+                connect();
+            } catch (VSphereException e) {
+                LOGGER.log(Level.SEVERE,
+                        "vSphere connection pool [" + config.getVsHost()
+                                + "]: proactive reconnect failed", e);
+                // connection remains null; next acquire() will retry
+            }
+        }
+    }
+
+    // Called from the background scheduler thread, at the exact idle-timeout deadline
+    private void onIdleExpired() {
+        synchronized (this) {
+            if (connection == null) return;
+            long idleMs = System.currentTimeMillis() - lastAcquiredAtMs;
+            LOGGER.info(String.format(
+                    "vSphere connection pool [%s]: disconnecting - idle for %ds (limit %ds)",
+                    config.getVsHost(), idleMs / 1000, idleTimeoutSecs));
+            disconnectQuietly();
+            if (ageExpiryFuture != null) {
+                ageExpiryFuture.cancel(false);
+                ageExpiryFuture = null;
+            }
+        }
     }
 
     private void disconnectQuietly() {
@@ -156,42 +228,6 @@ public class VSphereConnectionPool {
         }
     }
 
-    // Called from the background scheduler thread
-    private void scheduledMaintenance() {
-        synchronized (this) {
-            if (connection == null) return;
-
-            // Proactive age-based restart (before callers run into an expired session)
-            if (sessionMaxAgeSecs > 0) {
-                long ageMs = System.currentTimeMillis() - connectionCreatedAtMs;
-                if (ageMs > (long) sessionMaxAgeSecs * 1000L) {
-                    LOGGER.info("vSphere connection pool [" + config.getVsHost()
-                            + "]: proactive reconnect - max session age reached");
-                    disconnectQuietly();
-                    try {
-                        connect();
-                    } catch (VSphereException e) {
-                        LOGGER.log(Level.SEVERE,
-                                "vSphere connection pool [" + config.getVsHost()
-                                        + "]: proactive reconnect failed", e);
-                    }
-                    return;
-                }
-            }
-
-            // Idle disconnect
-            if (idleTimeoutSecs > 0 && lastAcquiredAtMs > 0) {
-                long idleMs = System.currentTimeMillis() - lastAcquiredAtMs;
-                if (idleMs > (long) idleTimeoutSecs * 1000L) {
-                    LOGGER.info(String.format(
-                            "vSphere connection pool [%s]: disconnecting - idle for %ds (limit %ds)",
-                            config.getVsHost(), idleMs / 1000, idleTimeoutSecs));
-                    disconnectQuietly();
-                }
-            }
-        }
-    }
-
     private void startScheduler() {
         boolean needsScheduler = healthCheckIntervalSecs > 0
                 || idleTimeoutSecs > 0
@@ -211,20 +247,8 @@ public class VSphereConnectionPool {
                     healthCheckIntervalSecs, healthCheckIntervalSecs, TimeUnit.SECONDS);
         }
 
-        if (idleTimeoutSecs > 0 || sessionMaxAgeSecs > 0) {
-            // Pick a maintenance interval that fires frequently enough to be useful
-            // but not so often that it wastes resources.
-            int maintenanceSecs = 30;
-            if (idleTimeoutSecs > 0) {
-                maintenanceSecs = Math.min(maintenanceSecs, Math.max(5, idleTimeoutSecs / 2));
-            }
-            if (sessionMaxAgeSecs > 0) {
-                maintenanceSecs = Math.min(maintenanceSecs, Math.max(5, sessionMaxAgeSecs / 4));
-            }
-            scheduler.scheduleAtFixedRate(
-                    this::scheduledMaintenance,
-                    maintenanceSecs, maintenanceSecs, TimeUnit.SECONDS);
-        }
+        // Age-expiry and idle-expiry are armed as exact one-shot alarms from connect()
+        // and acquire() respectively, once a connection actually exists.
     }
 
     private void stopScheduler() {
