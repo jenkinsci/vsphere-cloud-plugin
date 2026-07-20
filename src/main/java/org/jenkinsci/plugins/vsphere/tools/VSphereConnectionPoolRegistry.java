@@ -1,5 +1,7 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -7,7 +9,8 @@ import java.util.logging.Logger;
 /**
  * Tracks every {@link VSphereConnectionPool} currently in existence, so that pools left
  * behind by a replaced/removed {@code vSphereCloud} instance (e.g. after the cloud config
- * is re-saved from the UI or JCasC) can be found and shut down.
+ * is re-saved from the UI or JCasC) can be found and shut down, and so that all pools can
+ * be logged out together when Jenkins itself shuts down.
  *
  * <p>Without this, a pool's background thread (and any vCenter session it holds open)
  * would otherwise keep running indefinitely under its old settings, invisible to anyone
@@ -45,6 +48,17 @@ final class VSphereConnectionPoolRegistry {
                 LOGGER.info("Shutting down orphaned vSphere connection pool left behind by a replaced/removed cloud");
                 pool.shutdown();
             }
+        }
+    }
+
+    /**
+     * Shuts down (and unregisters) every currently-registered pool, regardless of whether
+     * its owning cloud is still live. Used when Jenkins itself is shutting down, so that
+     * pooled sessions are logged out rather than left dangling on the vCenter side.
+     */
+    static void shutdownAll() {
+        for (VSphereConnectionPool pool : new ArrayList<>(LIVE_POOLS)) {
+            pool.shutdown();
         }
     }
 }

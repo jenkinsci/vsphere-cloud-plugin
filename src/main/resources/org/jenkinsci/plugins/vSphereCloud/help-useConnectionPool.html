@@ -20,7 +20,8 @@
   <p>
     Saving this cloud's configuration (from the UI or via JCasC reload) always replaces
     it with a fresh pool using the new settings; the previous pool - and any session it
-    still holds open - is logged out shortly afterwards.
+    still holds open - is logged out shortly afterwards. All pooled sessions are also
+    logged out when Jenkins itself shuts down.
   </p>
 
   <h4>Configuration via JCasC (Configuration as Code)</h4>
