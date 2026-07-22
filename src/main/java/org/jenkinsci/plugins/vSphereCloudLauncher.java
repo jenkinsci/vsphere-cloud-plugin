@@ -492,7 +492,13 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                           TaskListener taskListener)
             throws IOException, InterruptedException, VSphereException {
         if (!snapName.isEmpty()) {
-            VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
+            VSphere tmpVs = vsC.vSphereInstance();
+            VirtualMachineSnapshot snap;
+            try {
+                snap = tmpVs.getSnapshotInTree(vm, snapName);
+            } finally {
+                tmpVs.disconnect();
+            }
             if (snap == null) {
                 throw new IOException("Virtual Machine snapshot cannot be found");
             }

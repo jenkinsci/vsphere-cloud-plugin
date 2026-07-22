@@ -1,0 +1,16 @@
+<div>
+  Maximum lifetime of a pooled session in seconds, measured from when the session was
+  established.<br/>
+  Once this limit is reached the pool proactively logs out the old session and creates a
+  fresh one; this is enforced by a dedicated timer armed for the exact deadline (not a
+  periodic poll), so the rotation happens right at the configured age rather than some
+  time after it.<br/>
+  This is useful if your vCenter enforces a maximum session duration (e.g. 8 hours) or
+  if you want to rotate credentials regularly.<br/>
+  If <b>Pool idle disconnect timeout</b> is also set, and no Jenkins operation has
+  actually used the session since it was established, reaching the max age disconnects
+  the session instead of rotating it - the idle setting takes priority over rotating a
+  session nobody is using, so an unused session does not keep reconnecting forever when
+  the max age is shorter than the idle timeout.<br/>
+  Set to <b>0</b> to never restart based on session age.
+</div>
