@@ -35,7 +35,12 @@ import java.util.logging.Logger;
  *   <li><b>Session age limit</b> - if {@code sessionMaxAgeSecs > 0}, a one-shot timer is
  *       armed for the exact moment the session reaches that age, at which point it is
  *       proactively restarted (also re-checked defensively on the next
- *       {@link #acquire()} call).</li>
+ *       {@link #acquire()} call) - unless {@code idleTimeoutSecs > 0} and no consumer has
+ *       acquired the session since it was established, in which case it is disconnected
+ *       instead of restarted, deferring to the idle policy. Without this, a
+ *       {@code sessionMaxAgeSecs} smaller than {@code idleTimeoutSecs} would otherwise
+ *       reconnect an unused session forever, since each reconnect also resets the idle
+ *       clock and the idle timeout would never get a chance to win.</li>
  *   <li><b>Use-count limit</b> - if {@code sessionMaxUses > 0}, the session is restarted
  *       on the next {@link #acquire()} once that many acquisitions have been made.</li>
  *   <li><b>Idle timeout</b> - if {@code idleTimeoutSecs > 0}, a one-shot timer is armed
@@ -221,6 +226,24 @@ public class VSphereConnectionPool {
     private void onAgeExpired() {
         synchronized (this) {
             if (connection == null) return;
+            if (idleTimeoutSecs > 0 && useCount == 0) {
+                // No consumer has acquired this session since it was established (only
+                // background health-checks, if any, run without going through
+                // acquire()). Reconnecting here would just start a brand new session
+                // that is equally unused and would reset the idle clock too, looping
+                // forever whenever sessionMaxAgeSecs < idleTimeoutSecs. Defer to the
+                // idle policy instead: disconnect and let the next real acquire() (if
+                // any) lazily reconnect.
+                LOGGER.info("vSphere connection pool [" + config.getVsHost()
+                        + "]: max session age reached, but session has not been used since "
+                        + "it was established - disconnecting instead of reconnecting (idle policy applies)");
+                disconnectQuietly();
+                if (idleExpiryFuture != null) {
+                    idleExpiryFuture.cancel(false);
+                    idleExpiryFuture = null;
+                }
+                return;
+            }
             LOGGER.info("vSphere connection pool [" + config.getVsHost()
                     + "]: proactive reconnect - max session age reached");
             disconnectQuietly();
