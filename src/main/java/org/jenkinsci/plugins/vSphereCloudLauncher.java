@@ -197,7 +197,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         }
 
                         vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-                        Task task = snap.revertToSnapshot_Task(null);
+                        Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
                         if (!task.waitForTask().equals(Task.SUCCESS)) {
                             throw new IOException("Error while reverting to virtual machine snapshot");
                         }
@@ -504,7 +504,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             }
 
             vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-            Task task = snap.revertToSnapshot_Task(null);
+            Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
             if (!task.waitForTask().equals(Task.SUCCESS)) {
                 throw new IOException("Error while reverting to virtual machine snapshot");
             }
