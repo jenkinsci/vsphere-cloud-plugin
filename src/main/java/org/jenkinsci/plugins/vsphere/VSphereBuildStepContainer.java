@@ -90,11 +90,14 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             //TODO - also need to improve logging here.
 
             // select by hash if we have one
+            final vSphereCloud cloud;
             if (serverHash != null) {
-                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, run.getEnvironment(listener).get("JOB_NAME")).vSphereInstance();
+                cloud = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, run.getEnvironment(listener).get("JOB_NAME"));
             } else {
-                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, run.getEnvironment(listener).get("JOB_NAME")).vSphereInstance();
+                cloud = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, run.getEnvironment(listener).get("JOB_NAME"));
             }
+            cloud.waitWhileInMaintenanceMode(listener);
+            vsphere = cloud.vSphereInstance();
 
             buildStep.setVsphere(vsphere);
             if (run instanceof AbstractBuild) {

@@ -1,0 +1,44 @@
+<div>
+  <p>
+    Puts this vSphere cloud into maintenance mode, for example while the backing vCenter
+    server itself is being patched, rebooted, or otherwise unavailable for VM operations.
+  </p>
+  <p>
+    While checked, any consumer that would otherwise talk to vCenter to change VM state -
+    a <code>vsphere</code> build step or pipeline call (power on/off, revert to snapshot,
+    clone, delete, reconfigure, …), a new agent being provisioned from a template, or an
+    existing agent being launched or shut down/reverted/suspended as an idle action - logs
+    the message configured below to its console (build log or agent launch log) and then
+    blocks, retrying periodically, until this checkbox is unchecked again. It does not
+    abort or fail the calling build/agent action; it simply waits.
+  </p>
+  <p>
+    This setting is saved as part of this cloud's configuration, so it survives a Jenkins
+    restart: if Jenkins restarts while vCenter is still under maintenance, consumers will
+    still find the cloud marked offline and continue to wait rather than failing outright.
+  </p>
+
+  <h4>Configuration via JCasC (Configuration as Code)</h4>
+  <p>
+    Add the following keys under the <code>vSphere</code> cloud entry in your
+    <code>jenkins.yaml</code>. Both default to disabled/empty.
+  </p>
+  <pre>
+jenkins:
+  clouds:
+    - vSphere:
+        vsDescription: "My vCenter"
+        vsConnectionConfig:
+          vsHost: "https://vcenter.example.com"
+          credentialsId: "vcenter-creds"
+        instanceCap: 20
+        maxOnlineSlaves: 0
+
+        # --- Maintenance mode ---
+        maintenanceMode: true
+        maintenanceMessage: "vCenter is undergoing scheduled maintenance until 18:00 UTC."
+
+        templates:
+          - ...
+  </pre>
+</div>

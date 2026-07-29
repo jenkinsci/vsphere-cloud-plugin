@@ -7,6 +7,15 @@
         <f:property field="vsConnectionConfig"/>
     </f:entry>
 
+    <f:entry title="${%Maintenance mode (offline)}" field="maintenanceMode"
+             description="When checked, VM operations against this cloud (build steps, pipeline calls, agent provisioning/launch/idle actions) log a message and block until this is unchecked.">
+        <f:checkbox/>
+    </f:entry>
+    <f:entry title="${%Maintenance mode message}" field="maintenanceMessage"
+             description="MOTD-style message logged to consumers while this cloud is in maintenance mode.">
+        <f:textbox/>
+    </f:entry>
+
     <f:advanced>
         <f:entry title="${%Max number of VMs online}" field="maxOnlineSlaves" description="0 means unlimited.">
             <f:textbox clazz="required number"/>

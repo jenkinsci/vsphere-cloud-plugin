@@ -16,6 +16,11 @@ The "vSphere Host" is the name of the VMware vCenter service endpoint;
 it usually has a format of
 `https://host-name-or-IP-address`
 
+The cloud configuration can be placed into maintenance mode to prevent access
+to the vSphere server (e.g. while that is being updated or rebooted)
+from the Jenkins jobs. They whould unblock automatically when the
+maintenance mode is disabled.
+
 The credentials specify the username and password used to log in to the vSphere Host.
 If you do not have existing credentials defined for this within Jenkins then you will need to "Add" them and then refresh/reload this page.
 

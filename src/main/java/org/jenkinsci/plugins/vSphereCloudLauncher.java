@@ -178,6 +178,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 VSphere v = null;
                 try {
                     vSphereCloud.Log(slaveComputer, taskListener, "Starting Virtual Machine...");
+                    vsC.waitWhileInMaintenanceMode(taskListener);
 
                     Calendar cal = Calendar.getInstance();
                     cal.add(Calendar.MINUTE, 5);
@@ -321,6 +322,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             vsC.markVMOffline(slaveComputer.getDisplayName(), vmName);
             final VirtualMachine vm;
             if( !MACHINE_ACTION.NOTHING.equals(localIdle) ) {
+                vsC.waitWhileInMaintenanceMode(taskListener);
                 v = vsC.vSphereInstance();
                 vm = v.getVmByName(vmName);
             } else {

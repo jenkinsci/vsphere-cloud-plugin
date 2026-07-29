@@ -72,6 +72,11 @@ public class vSphereCloud extends Cloud {
     /** Disconnect the pooled session after this many idle seconds (0 = keep alive indefinitely). */
     private int poolIdleTimeoutSecs = 0;
 
+    /** When true, this cloud is considered to be undergoing vCenter maintenance; VM-state-changing operations block until this is turned off. */
+    private boolean maintenanceMode = false;
+    /** MOTD-style message shown to consumers (build console / agent launch log) while this cloud is in maintenance mode. */
+    private String maintenanceMessage = "";
+
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient CloudProvisioningState templateState;
@@ -278,6 +283,24 @@ public class vSphereCloud extends Cloud {
         resetPool();
     }
 
+    public boolean isMaintenanceMode() {
+        return maintenanceMode;
+    }
+
+    @DataBoundSetter
+    public void setMaintenanceMode(boolean maintenanceMode) {
+        this.maintenanceMode = maintenanceMode;
+    }
+
+    public String getMaintenanceMessage() {
+        return maintenanceMessage;
+    }
+
+    @DataBoundSetter
+    public void setMaintenanceMessage(String maintenanceMessage) {
+        this.maintenanceMessage = maintenanceMessage;
+    }
+
     /** Shuts down any running pool and clears the reference so it is recreated on next use. */
     private synchronized void resetPool() {
         if (connectionPool != null) {
@@ -388,6 +411,57 @@ public class vSphereCloud extends Cloud {
             return getOrCreatePool(connectionConfig).acquire();
         }
         return VSphere.connect(connectionConfig);
+    }
+
+    /** Minimum time between repeated "still in maintenance mode" log lines while blocked, to avoid flooding logs. */
+    private static final long MAINTENANCE_LOG_INTERVAL_MS = 60_000L;
+    /** How long to sleep between polls while blocked waiting for maintenance mode to end. */
+    private static final long MAINTENANCE_POLL_INTERVAL_MS = 5_000L;
+
+    /**
+     * If this cloud (or whichever {@link vSphereCloud} instance now holds its configuration - Jenkins
+     * constructs a brand-new {@link Cloud} instance on every reconfiguration rather than mutating the
+     * existing one, see {@link #resolveCurrentInstance()}) is in maintenance mode, logs the configured
+     * message to {@code listener} and blocks the calling thread, polling every
+     * {@link #MAINTENANCE_POLL_INTERVAL_MS}, until maintenance mode is turned off. Returns immediately
+     * if the cloud is not currently in maintenance mode.
+     */
+    public void waitWhileInMaintenanceMode(TaskListener listener) throws InterruptedException {
+        if (!maintenanceMode) {
+            return;
+        }
+        vSphereCloud current = resolveCurrentInstance();
+        if (!current.maintenanceMode) {
+            return;
+        }
+        long lastLogAtMs = 0L;
+        do {
+            long now = System.currentTimeMillis();
+            if (now - lastLogAtMs >= MAINTENANCE_LOG_INTERVAL_MS) {
+                final String message = current.maintenanceMessage;
+                Log(listener, "vSphere cloud '%s' is in maintenance mode%s; waiting for it to come back online before proceeding...",
+                        current.getVsDescription(),
+                        (message == null || message.trim().isEmpty()) ? "" : (": " + message));
+                lastLogAtMs = now;
+            }
+            Thread.sleep(MAINTENANCE_POLL_INTERVAL_MS);
+            current = current.resolveCurrentInstance();
+        } while (current.maintenanceMode);
+        Log(listener, "vSphere cloud '%s' is no longer in maintenance mode; resuming.", getVsDescription());
+    }
+
+    /**
+     * Re-resolves the live {@link vSphereCloud} instance sharing this cloud's description, in case
+     * Jenkins replaced it with a new instance since this reference was obtained. Falls back to
+     * {@code this} if no such cloud can currently be found (e.g. it was deleted).
+     */
+    private vSphereCloud resolveCurrentInstance() {
+        for (Cloud c : Jenkins.getInstance().clouds) {
+            if (c instanceof vSphereCloud && vsDescription.equals(((vSphereCloud) c).getVsDescription())) {
+                return (vSphereCloud) c;
+            }
+        }
+        return this;
     }
 
     @Override
@@ -809,6 +883,13 @@ public class vSphereCloud extends Cloud {
 
         public FormValidation doCheckPoolIdleTimeoutSecs(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckMaintenanceMode(@QueryParameter boolean value) {
+            if (value) {
+                return FormValidation.warning("This cloud's VM operations will block (and log a message to consumers) until maintenance mode is turned off.");
+            }
+            return FormValidation.ok();
         }
     }
 }

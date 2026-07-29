@@ -1,0 +1,11 @@
+jenkins:
+  systemMessage: "Hello World"
+  clouds:
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        maintenanceMode: true
+        maintenanceMessage: "vCenter is undergoing scheduled maintenance."
+        vsConnectionConfig:
+          vsHost: "https://company-vsphere"
+        vsDescription: "Maintenance Test vSphere"

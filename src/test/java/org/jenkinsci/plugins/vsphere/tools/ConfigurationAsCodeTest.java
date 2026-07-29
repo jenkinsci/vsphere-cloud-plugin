@@ -77,6 +77,22 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getPoolIdleTimeoutSecs(), is(300));
     }
 
+    @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
+    void maintenance_mode_is_disabled_by_default_when_not_specified_in_yaml(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.isMaintenanceMode(), is(false));
+        assertThat(cloud.getMaintenanceMessage(), is(""));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-maintenance.yml")
+    void should_load_maintenance_mode_configuration_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.isMaintenanceMode(), is(true));
+        assertThat(cloud.getMaintenanceMessage(), is("vCenter is undergoing scheduled maintenance."));
+    }
+
     private static void validateCasCLoading(vSphereCloud cloud) {
         assertThat(cloud.getVsDescription(), is("Company vSphere"));
         assertThat(cloud.getVsHost(), is("https://company-vsphere"));
