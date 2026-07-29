@@ -519,6 +519,10 @@ public class VSphere {
     }
 
     public void revertToSnapshot(String vmName, String snapName) throws VSphereException {
+        revertToSnapshot(vmName, snapName, false);
+    }
+
+    public void revertToSnapshot(String vmName, String snapName, boolean suppressPowerOn) throws VSphereException {
 
         VirtualMachine vm = getVmByName(vmName);
         VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
@@ -529,7 +533,7 @@ public class VSphere {
         }
 
         try {
-            Task task = snap.revertToSnapshot_Task(null);
+            Task task = snap.revertToSnapshot_Task(null, Boolean.valueOf(suppressPowerOn));
             if (!task.waitForTask().equals(Task.SUCCESS)) {
                 final String msg = "Could not revert to snapshot '" + snap.toString() + "' for virtual machine:'" + vm.getName()+"'";
                 LOGGER.log(Level.SEVERE, msg);

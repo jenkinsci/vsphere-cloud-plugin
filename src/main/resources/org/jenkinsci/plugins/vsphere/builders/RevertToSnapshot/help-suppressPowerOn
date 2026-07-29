@@ -1,0 +1,5 @@
+<div>
+ Leave the VM powered off after reverting, regardless of the power state captured in the
+ snapshot. When unchecked (the default), the VM is restored to the power state recorded in
+ the snapshot.
+</div>

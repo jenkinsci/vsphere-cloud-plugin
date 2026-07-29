@@ -34,6 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -41,8 +42,9 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 
-	private final String vm;    
+	private final String vm;
 	private final String snapshotName;
+    private boolean suppressPowerOn;
 
 	@DataBoundConstructor
 	public RevertToSnapshot(final String vm, final String snapshotName) throws VSphereException {
@@ -56,6 +58,15 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 
 	public String getSnapshotName() {
 		return snapshotName;
+	}
+
+	public boolean isSuppressPowerOn() {
+		return suppressPowerOn;
+	}
+
+	@DataBoundSetter
+	public void setSuppressPowerOn(boolean suppressPowerOn) {
+		this.suppressPowerOn = suppressPowerOn;
 	}
 
 	@Override
@@ -117,7 +128,7 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Reverting to snapshot \""+expandedSnap+"\" for VM "+expandedVm+"...");
-		vsphere.revertToSnapshot(expandedVm, expandedSnap);
+		vsphere.revertToSnapshot(expandedVm, expandedSnap, suppressPowerOn);
 		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;
