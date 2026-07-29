@@ -23,8 +23,10 @@ import java.util.logging.Logger;
  * <ol>
  *   <li>Obtain the shared connection via {@link #acquire()}.</li>
  *   <li>Use it normally - all public {@link VSphere} methods work as usual.</li>
- *   <li>Call {@link VSphere#disconnect()} when done.  For pooled connections this is a
- *       no-op; the pool controls the real session lifecycle.</li>
+ *   <li>Call {@link VSphere#disconnect()} exactly once when done.  For pooled connections
+ *       this releases the borrow back to the pool (see {@link #release()}) rather than
+ *       logging out directly; the pool controls the real session lifecycle and defers
+ *       disconnecting an orphaned pool until every outstanding borrow is released.</li>
  * </ol>
  *
  * <p><b>Background maintenance:</b></p>
@@ -74,6 +76,8 @@ public class VSphereConnectionPool {
     private long connectionCreatedAtMs;
     private long lastAcquiredAtMs;
     private long useCount;
+    private int borrowCount;
+    private boolean pendingShutdown;
     private ScheduledFuture<?> ageExpiryFuture;
     private ScheduledFuture<?> idleExpiryFuture;
 
@@ -114,8 +118,11 @@ public class VSphereConnectionPool {
 
     /**
      * Returns the pooled {@link VSphere} connection, creating or restarting it if
-     * necessary.  The returned instance is marked as pooled so that callers'
-     * {@link VSphere#disconnect()} calls are no-ops.
+     * necessary. The returned instance is marked as pooled so that callers'
+     * {@link VSphere#disconnect()} calls release it back to this pool instead of logging
+     * out directly. Every {@code acquire()} must eventually be matched by exactly one
+     * {@link VSphere#disconnect()} call on the returned instance, so that {@link #shutdown()}
+     * can tell when it is safe to actually tear down the session - see {@link #release()}.
      *
      * @throws VSphereException if establishing the session fails.
      */
@@ -123,18 +130,58 @@ public class VSphereConnectionPool {
         ensureConnected();
         lastAcquiredAtMs = System.currentTimeMillis();
         useCount++;
-        connection.markAsPooled();
+        borrowCount++;
+        connection.markAsPooled(this);
         scheduleIdleExpiry();
         return connection;
     }
 
     /**
-     * Disconnects the current session (if any) and shuts down all background threads.
-     * After this call the pool must not be used.
+     * Called by a pooled {@link VSphere} instance's {@link VSphere#disconnect()} to signal
+     * that the caller which {@link #acquire() acquired} it is done with it. If
+     * {@link #shutdown()} was requested while the connection was still borrowed, performs
+     * the deferred disconnect once the last outstanding borrower releases it.
+     */
+    synchronized void release() {
+        if (borrowCount > 0) {
+            borrowCount--;
+        }
+        if (pendingShutdown && borrowCount <= 0) {
+            VSphereConnectionPoolRegistry.unregister(this);
+            disconnectQuietly();
+            pendingShutdown = false;
+        }
+    }
+
+    /**
+     * Visible for testing: simulates {@code count} outstanding un-released
+     * {@link #acquire()} calls, without needing a live vCenter connection
+     * to actually acquire one.<br/>
+     *
+     * Marked "Deprecated": should not be used by "real" code paths.
+     */
+    @Deprecated
+    synchronized void setBorrowCountForTesting(int count) {
+        this.borrowCount = count;
+    }
+
+    /**
+     * Shuts down all background threads and, unless the connection is still borrowed by an
+     * in-flight caller (see {@link #acquire()}/{@link #release()}), disconnects the current
+     * session immediately. If it is still borrowed, the actual disconnect is deferred until
+     * the last borrower releases it, so an in-flight vCenter operation (e.g. a build step
+     * that started before this pool's owning cloud was replaced) is not cut off mid-call.
+     * After this call the pool must not be used to {@link #acquire()} further connections.
      */
     public synchronized void shutdown() {
-        VSphereConnectionPoolRegistry.unregister(this);
         stopScheduler();
+        if (borrowCount > 0) {
+            pendingShutdown = true;
+            LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: shutdown requested while "
+                    + borrowCount + " caller(s) still hold the connection; deferring disconnect until released");
+            return;
+        }
+        VSphereConnectionPoolRegistry.unregister(this);
         disconnectQuietly();
     }
 
@@ -187,7 +234,7 @@ public class VSphereConnectionPool {
 
     private void connect() throws VSphereException {
         connection = VSphere.connect(config);
-        connection.markAsPooled();
+        connection.markAsPooled(this);
         connectionCreatedAtMs = System.currentTimeMillis();
         lastAcquiredAtMs      = connectionCreatedAtMs;
         useCount              = 0;

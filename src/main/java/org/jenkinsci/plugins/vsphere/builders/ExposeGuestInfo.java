@@ -221,11 +221,12 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                                          @QueryParameter String serverName,
                                          @QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (vm.length() == 0 || serverName.length()==0)
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));
@@ -240,6 +241,10 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }

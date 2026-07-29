@@ -115,6 +115,53 @@ class VSphereConnectionPoolSettingsTest {
     }
 
     // -----------------------------------------------------------------------
+    // Deferred shutdown while the connection is still borrowed (JENKINS maintenance-mode
+    // reap race: an orphaned pool must not be disconnected out from under an in-flight
+    // caller that acquired it before the pool's owning cloud was replaced).
+    // -----------------------------------------------------------------------
+
+    @Test
+    void shutdown_is_deferred_while_the_connection_is_still_borrowed() {
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 0, 0, 0, 0);
+        try {
+            pool.setBorrowCountForTesting(2);
+
+            pool.shutdown();
+            assertThat("still borrowed, so shutdown must be deferred",
+                    VSphereConnectionPoolRegistry.isTracked(pool), is(true));
+
+            pool.release();
+            assertThat("one borrower released, one still outstanding: still deferred",
+                    VSphereConnectionPoolRegistry.isTracked(pool), is(true));
+
+            pool.release();
+            assertThat("last borrower released: deferred shutdown now completes",
+                    VSphereConnectionPoolRegistry.isTracked(pool), is(false));
+        } finally {
+            pool.shutdown(); // safety net; must be a no-op if already shut down
+        }
+    }
+
+    @Test
+    void shutdown_is_immediate_when_not_borrowed() {
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 0, 0, 0, 0);
+        pool.shutdown();
+        assertThat(VSphereConnectionPoolRegistry.isTracked(pool), is(false));
+    }
+
+    @Test
+    void release_without_a_matching_acquire_does_not_underflow_or_throw() {
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 0, 0, 0, 0);
+        try {
+            pool.release(); // no prior acquire(); must not throw or go negative
+            pool.shutdown();
+            assertThat(VSphereConnectionPoolRegistry.isTracked(pool), is(false));
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
 

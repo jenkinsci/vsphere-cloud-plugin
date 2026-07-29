@@ -1,0 +1,14 @@
+<div>
+  <p>
+    An MOTD-style message logged (in addition to a standard "in maintenance mode" line)
+    to any consumer that is currently blocked waiting for
+    <b>Maintenance mode (offline)</b> to be turned off, e.g. to explain why and for how
+    long the vCenter server is unavailable. Purely informational; leave blank to log only
+    the standard message.
+  </p>
+  <p>
+    The message is re-read periodically while a consumer is waiting, so editing it (without
+    unchecking maintenance mode) updates the text seen by builds/agents that are already
+    blocked, the next time they log.
+  </p>
+</div>

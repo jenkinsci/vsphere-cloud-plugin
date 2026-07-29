@@ -149,6 +149,7 @@ public class ConvertToVm extends VSphereBuildStep {
                                          @QueryParameter String template, @QueryParameter String resourcePool,
                                          @QueryParameter String cluster) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
 
                 if (serverName.length() == 0 || template.length() == 0
@@ -158,7 +159,7 @@ public class ConvertToVm extends VSphereBuildStep {
                 if (template.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("Template"));
 
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);
                 if (vm == null)
                     return FormValidation.error(Messages.validation_notFound("template"));
@@ -169,6 +170,10 @@ public class ConvertToVm extends VSphereBuildStep {
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }
