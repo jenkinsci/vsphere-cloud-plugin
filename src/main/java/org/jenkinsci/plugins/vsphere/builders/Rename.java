@@ -145,12 +145,13 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
 				@QueryParameter String oldName,
                 @QueryParameter String newName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 
 				if (serverName.length() == 0 || oldName.length()==0 || newName.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 
 				VirtualMachine vmObj = vsphere.getVmByName(oldName);
 				if (vmObj == null)
@@ -159,6 +160,10 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}

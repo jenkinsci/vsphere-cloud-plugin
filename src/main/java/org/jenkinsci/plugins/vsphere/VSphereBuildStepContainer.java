@@ -90,14 +90,13 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             //TODO - also need to improve logging here.
 
             // select by hash if we have one
-            final vSphereCloud cloud;
-            if (serverHash != null) {
-                cloud = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, run.getEnvironment(listener).get("JOB_NAME"));
-            } else {
-                cloud = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, run.getEnvironment(listener).get("JOB_NAME"));
-            }
-            cloud.waitWhileInMaintenanceMode(listener);
-            vsphere = cloud.vSphereInstance();
+            final String jobName = run.getEnvironment(listener).get("JOB_NAME");
+            resolveCloud(expandedServerName, jobName).waitWhileInMaintenanceMode(listener);
+            // Re-resolve rather than reusing the instance above: Jenkins replaces a
+            // reconfigured Cloud with a brand-new instance (e.g. the admin toggling
+            // maintenance mode back off while we were blocked), so the instance we just
+            // waited on may no longer be the live one by the time waiting is done.
+            vsphere = resolveCloud(expandedServerName, jobName).vSphereInstance();
 
             buildStep.setVsphere(vsphere);
             if (run instanceof AbstractBuild) {
@@ -113,6 +112,13 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 vsphere.disconnect();
             }
         }
+    }
+
+    private vSphereCloud resolveCloud(String expandedServerName, String jobName) throws VSphereException {
+        if (serverHash != null) {
+            return VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, jobName);
+        }
+        return VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, jobName);
     }
 
     private void startLogs(PrintStream logger, String serverName) {

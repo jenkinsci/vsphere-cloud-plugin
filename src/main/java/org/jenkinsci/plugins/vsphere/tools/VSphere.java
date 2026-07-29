@@ -70,10 +70,12 @@ public class VSphere {
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
     /**
-     * When true, {@link #disconnect()} is a no-op; lifecycle is managed by
-     * {@link VSphereConnectionPool}.
+     * When non-null, this instance is managed by a {@link VSphereConnectionPool}:
+     * {@link #disconnect()} calls back into {@link VSphereConnectionPool#release()}
+     * instead of logging out, so the pool can defer the real disconnect until every
+     * borrower has released it.
      */
-    private volatile boolean pooled = false;
+    private volatile VSphereConnectionPool owningPool = null;
 
     private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
@@ -122,8 +124,10 @@ public class VSphere {
     /**
      * Disconnect from vSphere server.
      * <p>
-     * When this instance is managed by a {@link VSphereConnectionPool} the call is
-     * silently ignored; the pool handles the actual session lifecycle.
+     * When this instance is managed by a {@link VSphereConnectionPool}, this instead
+     * signals the pool that this caller is done with it (via
+     * {@link VSphereConnectionPool#release()}); the pool decides when the underlying
+     * session actually gets logged out.
      * </p>
      * <p>
      * Note: This logs any {@link Exception} it encounters - it does not pass
@@ -131,7 +135,9 @@ public class VSphere {
      * </p>
      */
     public void disconnect() {
-        if (pooled) {
+        final VSphereConnectionPool pool = owningPool;
+        if (pool != null) {
+            pool.release();
             return;
         }
         try {
@@ -142,22 +148,22 @@ public class VSphere {
     }
 
     /**
-     * Marks this instance as owned by a {@link VSphereConnectionPool} so that
-     * {@link #disconnect()} becomes a no-op for ordinary callers.
+     * Marks this instance as owned by {@code pool}, so that {@link #disconnect()}
+     * releases it back to the pool instead of logging out directly.
      * Package-private — only {@link VSphereConnectionPool} should call this.
      */
-    void markAsPooled() {
-        pooled = true;
+    void markAsPooled(VSphereConnectionPool pool) {
+        owningPool = pool;
     }
 
     /**
-     * Disconnects the underlying session regardless of the pooled flag.
+     * Disconnects the underlying session regardless of pooled status.
      * Called by {@link VSphereConnectionPool} when it actually wants to tear down
      * the session (restart, idle timeout, shutdown).
      * Package-private — only {@link VSphereConnectionPool} should call this.
      */
     void forceDisconnect() {
-        pooled = false;
+        owningPool = null;
         disconnect();
     }
 

@@ -273,12 +273,13 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 @QueryParameter String template, @QueryParameter String clone,
                 @QueryParameter String resourcePool, @QueryParameter String cluster) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (template.length() == 0 || clone.length()==0 || serverName.length()==0
                         || cluster.length()==0 )
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 //TODO what if clone name is variable?
                 VirtualMachine cloneVM = vsphere.getVmByName(clone);
@@ -298,6 +299,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }

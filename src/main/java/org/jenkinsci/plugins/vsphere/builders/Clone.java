@@ -299,11 +299,12 @@ public class Clone extends VSphereBuildStep {
                                                   @QueryParameter String serverName,
                                                   @QueryParameter String sourceName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (serverName == null){
                     return FormValidation.error(Messages.validation_required("serverName"));
                 }
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 VirtualMachine virtualMachine = vsphere.getVmByName(sourceName);
                 if (virtualMachine == null) {
@@ -314,6 +315,10 @@ public class Clone extends VSphereBuildStep {
                 }
             } catch (VSphereException ve) {
                 return FormValidation.error("Cannot connect to vsphere. "+ve.getMessage());
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
             return FormValidation.ok();
         }
@@ -343,12 +348,13 @@ public class Clone extends VSphereBuildStep {
                                          @QueryParameter String namedSnapshot) {
             // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
                         || cluster.length()==0 )
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 //TODO what if clone name is variable?
                 VirtualMachine cloneVM = vsphere.getVmByName(clone);
@@ -386,6 +392,10 @@ public class Clone extends VSphereBuildStep {
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }
