@@ -396,7 +396,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
         final PrintStream logger = listener.getLogger();
-        getParent().waitWhileInMaintenanceMode(listener);
         final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
         final vSphereCloudProvisionedSlave slave;
