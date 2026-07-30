@@ -190,7 +190,7 @@ public class vSphereCloud extends Cloud {
 
     public Object readResolve() throws IOException {
         if (vsConnectionConfig == null) {
-            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null);
+            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null, null);
         }
         if (this.templates != null) {
             for (vSphereCloudSlaveTemplate template : templates) {
@@ -792,9 +792,11 @@ public class vSphereCloud extends Cloud {
             }
         }
 
-        for (Cloud cloud : Jenkins.getInstance().clouds) {
-            if (cloud instanceof vSphereCloud) {
-                vSphereClouds.add((vSphereCloud) cloud);
+        if (Jenkins.getInstance() != null) {
+            for (Cloud cloud : Jenkins.getInstance().clouds) {
+                if (cloud instanceof vSphereCloud) {
+                    vSphereClouds.add((vSphereCloud) cloud);
+                }
             }
         }
         return vSphereClouds;
