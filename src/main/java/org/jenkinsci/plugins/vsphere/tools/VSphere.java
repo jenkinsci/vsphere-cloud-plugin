@@ -27,7 +27,7 @@ import java.util.logging.Level;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
 import com.vmware.vim25.CustomizationSpecItem;

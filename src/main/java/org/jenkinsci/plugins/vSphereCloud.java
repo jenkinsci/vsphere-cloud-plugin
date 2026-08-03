@@ -19,7 +19,7 @@ import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import net.sf.json.JSONObject;
-import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
