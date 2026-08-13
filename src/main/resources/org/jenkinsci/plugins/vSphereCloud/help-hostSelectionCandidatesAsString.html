@@ -1,0 +1,19 @@
+<div>
+  (Optional) Default host allow-list for every template and build step that uses this
+  cloud and doesn't set its own candidate list, restricting what "Default Host Selection
+  Mode" above (or a template/build-step's own mode) is allowed to consider,
+  e.g. <tt>esx01.example.com, esx02.example.com, esx03.example.com</tt>.
+  <p>
+  In a pipeline or Configuration-as-Code YAML, you can use this same comma-separated
+  string form under the name <tt>hostSelectionCandidatesAsString</tt>, or instead give a
+  native list of individual host names under <tt>hostSelectionCandidates</tt> - whichever
+  is more convenient; both end up stored the same way.
+  </p>
+  <p>
+  A template or build step using this cloud can override this default with its own
+  candidate list - including setting it to a single comma (<tt>,</tt>), which explicitly
+  means "no restriction at this call site" and is treated differently from leaving it
+  blank (which inherits this cloud-wide default).
+  </p>
+  Leave blank if there is no cloud-wide restriction to apply by default.
+</div>

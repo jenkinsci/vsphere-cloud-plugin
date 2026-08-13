@@ -32,6 +32,70 @@ class VSphereHostSelectionTest {
     }
 
     @Test
+    void parseAllowListOrNullReturnsNullForBlankOrWhitespace() {
+        assertThat(VSphereHostSelection.parseAllowListOrNull(null), nullValue());
+        assertThat(VSphereHostSelection.parseAllowListOrNull(""), nullValue());
+        assertThat(VSphereHostSelection.parseAllowListOrNull("   "), nullValue());
+    }
+
+    @Test
+    void parseAllowListOrNullReturnsEmptySetForACommaSentinel() {
+        // Not blank after trim, so it survives as an explicit "override to nothing",
+        // distinct from a field that was never set at all.
+        assertThat(VSphereHostSelection.parseAllowListOrNull(","), is(Set.of()));
+    }
+
+    @Test
+    void parseAllowListOrNullParsesRealValuesNormally() {
+        assertThat(VSphereHostSelection.parseAllowListOrNull("esx1, esx2"), is(Set.of("esx1", "esx2")));
+    }
+
+    @Test
+    void toAllowListStringRoundTripsThroughParseAllowListOrNull() {
+        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(null)), nullValue());
+        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(Set.of())), is(Set.of()));
+        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(Set.of("esx1", "esx2"))),
+                is(Set.of("esx1", "esx2")));
+    }
+
+    @Test
+    void toAllowListStringUsesACommaForExplicitlyEmpty() {
+        assertThat(VSphereHostSelection.toAllowListString(null), is(""));
+        assertThat(VSphereHostSelection.toAllowListString(Set.of()), is(","));
+    }
+
+    @Test
+    void resolveModeInheritsCloudDefaultWhenOverrideIsBlank() {
+        assertThat(VSphereHostSelection.resolveMode("LEAST_LOADED", null), is("LEAST_LOADED"));
+        assertThat(VSphereHostSelection.resolveMode("LEAST_LOADED", ""), is("LEAST_LOADED"));
+        assertThat(VSphereHostSelection.resolveMode(null, null), nullValue());
+    }
+
+    @Test
+    void resolveModeNoneExplicitlyDisablesRegardlessOfCloudDefault() {
+        assertThat(VSphereHostSelection.resolveMode("LEAST_LOADED", "NONE"), is(""));
+        assertThat(VSphereHostSelection.resolveMode(null, "NONE"), is(""));
+    }
+
+    @Test
+    void resolveModeExplicitOverrideWins() {
+        assertThat(VSphereHostSelection.resolveMode("LEAST_LOADED", "DRS_RECOMMENDED"), is("DRS_RECOMMENDED"));
+        assertThat(VSphereHostSelection.resolveMode(null, "LEAST_LOADED"), is("LEAST_LOADED"));
+    }
+
+    @Test
+    void resolveCandidatesInheritsCloudDefaultWhenOverrideIsNull() {
+        assertThat(VSphereHostSelection.resolveCandidates(Set.of("esx1"), null), is(Set.of("esx1")));
+        assertThat(VSphereHostSelection.resolveCandidates(null, null), nullValue());
+    }
+
+    @Test
+    void resolveCandidatesExplicitOverrideWinsEvenWhenEmpty() {
+        assertThat(VSphereHostSelection.resolveCandidates(Set.of("esx1"), Set.of()), is(Set.of()));
+        assertThat(VSphereHostSelection.resolveCandidates(Set.of("esx1"), Set.of("esx2")), is(Set.of("esx2")));
+    }
+
+    @Test
     void parseAllowListReturnsEmptySetForNullOrBlank() {
         assertThat(VSphereHostSelection.parseAllowList(null), empty());
         assertThat(VSphereHostSelection.parseAllowList(""), empty());

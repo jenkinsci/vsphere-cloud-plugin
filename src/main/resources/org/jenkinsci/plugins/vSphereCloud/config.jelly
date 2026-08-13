@@ -43,6 +43,14 @@
                  description="0 - the connection is kept alive indefinitely.">
             <f:textbox clazz="number" default="0"/>
         </f:entry>
+
+        <f:entry title="${%Default Host Selection Mode}" field="hostSelectionMode">
+            <f:select/>
+        </f:entry>
+
+        <f:entry title="${%Default Host Selection Candidates}" field="hostSelectionCandidatesAsString">
+            <f:textbox/>
+        </f:entry>
     </f:advanced>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">

@@ -21,5 +21,13 @@
   or a host the account cannot actually write to, only surfaces as a vCenter-side error
   when a clone is attempted, not as a validation error here.
   </p>
-  Leave blank to consider every (usable) host in the configured cluster.
+  <p>
+  Leaving this <b>blank</b> inherits the cloud's own default candidate list (configured
+  on the vSphere Cloud itself), if any; if the cloud has no default either, every
+  (usable) host in the configured cluster is a candidate. To explicitly override the
+  cloud's default to "no restriction" for this call site specifically - rather than
+  inheriting whatever the cloud has configured - enter a single comma (<tt>,</tt>): this
+  is not blank, so it is treated as a deliberate override, but it still parses to zero
+  host names.
+  </p>
 </div>

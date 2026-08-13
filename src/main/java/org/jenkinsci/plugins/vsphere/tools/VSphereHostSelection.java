@@ -15,6 +15,13 @@ import java.util.Set;
  */
 public final class VSphereHostSelection {
 
+    /**
+     * Explicit "no host selection" override for a template/build-step's {@code
+     * hostSelectionMode}, distinct from leaving it blank (which means "inherit the
+     * cloud-level default" - see {@link #resolveMode}).
+     */
+    public static final String HOST_SELECTION_MODE_NONE = "NONE";
+
     private VSphereHostSelection() {
     }
 
@@ -124,6 +131,64 @@ public final class VSphereHostSelection {
             return "";
         }
         return String.join(", ", hosts);
+    }
+
+    /**
+     * Like {@link #parseAllowList}, but preserves the "not set at all" case as null
+     * instead of collapsing it to an empty set - needed so a blank {@code
+     * hostSelectionCandidatesAsString} can mean "inherit the cloud-level default" (see
+     * {@link #resolveCandidates}) while a deliberately non-blank-but-hostless value
+     * (e.g. a lone comma) can still mean "explicitly override to no restriction".
+     * Blank/whitespace-only input (including a single space) is treated as "not set";
+     * anything else is parsed normally, which may still yield an empty (non-null) set.
+     */
+    public static Set<String> parseAllowListOrNull(String hostSelectionCandidatesCsv) {
+        if (hostSelectionCandidatesCsv == null || hostSelectionCandidatesCsv.trim().isEmpty()) {
+            return null;
+        }
+        return parseAllowList(hostSelectionCandidatesCsv);
+    }
+
+    /**
+     * The inverse of {@link #parseAllowListOrNull}: renders null as "" (inherit), an
+     * empty set as a single comma (a visible, non-blank marker for "explicitly no
+     * restriction" that round-trips back through {@link #parseAllowListOrNull} to an
+     * empty - not null - set), and anything else as the plain comma-separated form.
+     */
+    public static String toAllowListString(Set<String> hosts) {
+        if (hosts == null) {
+            return "";
+        }
+        if (hosts.isEmpty()) {
+            return ",";
+        }
+        return toCsv(hosts);
+    }
+
+    /**
+     * Resolves a template/build-step's {@code hostSelectionMode} against its cloud's
+     * default: blank/null defers to {@code cloudDefault}; {@link #HOST_SELECTION_MODE_NONE}
+     * explicitly disables host selection regardless of the cloud default; any other
+     * value (a real mode) wins outright.
+     */
+    public static String resolveMode(String cloudDefault, String override) {
+        if (override == null || override.isEmpty()) {
+            return cloudDefault;
+        }
+        if (HOST_SELECTION_MODE_NONE.equals(override)) {
+            return "";
+        }
+        return override;
+    }
+
+    /**
+     * Resolves a template/build-step's {@code hostSelectionCandidates} against its
+     * cloud's default: null (never set at this level) defers to {@code cloudDefault};
+     * any explicitly-set value - including an empty set, meaning "explicitly no
+     * restriction" - wins outright.
+     */
+    public static Set<String> resolveCandidates(Set<String> cloudDefault, Set<String> override) {
+        return override != null ? override : cloudDefault;
     }
 
     /**

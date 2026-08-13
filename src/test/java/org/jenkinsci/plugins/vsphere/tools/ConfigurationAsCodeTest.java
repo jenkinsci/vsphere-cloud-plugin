@@ -85,10 +85,30 @@ class ConfigurationAsCodeTest {
         // Backward compatibility: templates defined before this feature existed must
         // keep behaving exactly as before (no host restriction of any kind).
         vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is(nullValue()));
+        assertThat(cloud.getHostSelectionCandidates(), is(nullValue()));
         vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
         assertThat(template.getTargetHost(), is(nullValue()));
         assertThat(template.getHostSelectionMode(), is(nullValue()));
         assertThat(template.getHostSelectionCandidates(), is(nullValue()));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-cloud-host-selection-defaults.yml")
+    void should_load_cloud_level_host_selection_defaults_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        // This fixture gives hostSelectionCandidates as a plain comma-separated scalar string,
+        // set directly on the cloud (not on any template).
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is("LEAST_LOADED"));
+        assertThat(cloud.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-cloud-host-selection-defaults-list.yml")
+    void should_load_cloud_level_host_selection_candidates_given_as_a_yaml_list(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is("DRS_RECOMMENDED"));
+        assertThat(cloud.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
     }
 
     @Test

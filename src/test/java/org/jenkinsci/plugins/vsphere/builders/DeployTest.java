@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.jenkinsci.plugins.structs.describable.DescribableModel;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
@@ -98,5 +99,48 @@ class DeployTest {
         step.setHostSelectionCandidatesAsString("esx01.example.com, esx02.example.com");
 
         assertThat(step.getHostSelectionCandidates(), is(Set.of("esx01.example.com", "esx02.example.com")));
+    }
+
+    @Test
+    void setHostSelectionCandidatesAsStringBlankMeansInherit() throws Exception {
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", "", null, false);
+
+        step.setHostSelectionCandidatesAsString("");
+
+        assertThat(step.getHostSelectionCandidates(), nullValue());
+    }
+
+    @Test
+    void setHostSelectionCandidatesAsStringCommaExplicitlyOverridesToEmpty() throws Exception {
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", "", null, false);
+
+        step.setHostSelectionCandidatesAsString(",");
+
+        assertThat(step.getHostSelectionCandidates(), is(Set.of()));
+        assertThat(step.getHostSelectionCandidatesAsString(), is(","));
+    }
+
+    @Test
+    void hostSelectionModeNoneIsStoredVerbatim() throws Exception {
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", "", null, false);
+
+        step.setHostSelectionMode("NONE");
+
+        assertThat(step.getHostSelectionMode(), is("NONE"));
+    }
+
+    @Test
+    void sourceCloudCanBeSetAndRetrieved() throws Exception {
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", "", null, false);
+        assertThat(step.getSourceCloud(), nullValue());
+
+        vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, null);
+        step.setSourceCloud(cloud);
+
+        assertThat(step.getSourceCloud(), is(cloud));
     }
 }

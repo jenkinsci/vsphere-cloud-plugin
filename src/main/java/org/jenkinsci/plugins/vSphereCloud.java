@@ -15,6 +15,7 @@ import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.slaves.SlaveComputer;
 import hudson.util.DescribableList;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
@@ -34,7 +35,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -76,6 +79,19 @@ public class vSphereCloud extends Cloud {
     private boolean maintenanceMode = false;
     /** MOTD-style message shown to consumers (build console / agent launch log) while this cloud is in maintenance mode. */
     private String maintenanceMessage = "";
+
+    /**
+     * Default {@code hostSelectionMode} for every template/build-step using this cloud,
+     * unless that call site sets its own (or opts out with "NONE"). Null/blank means no
+     * default - unchanged legacy behaviour if nothing sets a mode anywhere.
+     */
+    private String hostSelectionMode;
+    /**
+     * Default {@code hostSelectionCandidates} allow-list for every template/build-step
+     * using this cloud, unless that call site sets its own (including an explicit empty
+     * override). Null means no default - every host is a candidate unless overridden.
+     */
+    private Set<String> hostSelectionCandidates;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
@@ -299,6 +315,36 @@ public class vSphereCloud extends Cloud {
     @DataBoundSetter
     public void setMaintenanceMessage(String maintenanceMessage) {
         this.maintenanceMessage = maintenanceMessage;
+    }
+
+    /** Default {@code hostSelectionMode} for templates/build-steps that leave their own blank. */
+    public String getHostSelectionMode() {
+        return hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    /** Default {@code hostSelectionCandidates} for templates/build-steps that leave their own unset. */
+    public Set<String> getHostSelectionCandidates() {
+        return hostSelectionCandidates;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
     /** Shuts down any running pool and clears the reference so it is recreated on next use. */
@@ -890,6 +936,14 @@ public class vSphereCloud extends Cloud {
                 return FormValidation.warning("This cloud's VM operations will block (and log a message to consumers) until maintenance mode is turned off.");
             }
             return FormValidation.ok();
+        }
+
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - no cloud-wide default)", "");
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
         }
     }
 }

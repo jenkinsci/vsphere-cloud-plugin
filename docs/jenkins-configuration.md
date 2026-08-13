@@ -26,6 +26,14 @@ If you do not have existing credentials defined for this within Jenkins then you
 
 The "Test Connection" button will test to see if your vSphere is accessible with the specified host name, user name and password.
 
+Under "Advanced...", "Default Host Selection Mode" and "Default Host Selection Candidates"
+let you set a cloud-wide default for how clones are placed on a host, applied to every
+template and build step that uses this cloud and doesn't set its own value. See
+["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on)
+below - which hosts an account can write to, and whether DRS is licensed, are properties
+of this vCenter environment, so setting them once here avoids repeating the same choice
+on every template/pipeline call using this cloud.
+
 The user entered when defining the cloud will need to have the following vsphere permissions:
 
 |     |                                                                                                                                                      |
@@ -176,6 +184,13 @@ Three independent, optional mechanisms are available, in order of precedence:
 
 2. **Host Selection Mode** (`hostSelectionMode`) - used only when "Host" is blank, this
    lets the plugin pick automatically:
+   * *(blank)* - inherits the cloud's own "Default Host Selection Mode" (see
+     [vSphere Cloud Configuration](#vsphere-cloud-configuration) above), if any; if the
+     cloud has no default either, this is unchanged legacy behaviour.
+   * `NONE` - explicitly disables host selection **for this call site**, overriding the
+     cloud's default even if it has one configured. Use this on the specific
+     template/pipeline that should keep the old behaviour while everything else on the
+     same cloud follows the cloud-wide default.
    * `LEAST_LOADED` - the plugin reads current CPU/memory usage for each candidate host
      and picks the least loaded one itself. No DRS license/feature is required, so this
      works on Essentials/Standard editions or on a cluster with DRS turned off. It does
@@ -209,14 +224,22 @@ Three independent, optional mechanisms are available, in order of precedence:
    permission to a subset of hosts - so this is the mechanism to keep automatic selection
    within permitted hosts. It is **not verified live** against actual vCenter permissions:
    an incorrect entry, or a host the account cannot actually write to, only surfaces as a
-   vCenter-side error when a clone is attempted. Leave blank to consider every (connected,
-   non-maintenance-mode) host in the cluster.
+   vCenter-side error when a clone is attempted.
+   * *(blank)* - inherits the cloud's own "Default Host Selection Candidates", if any; if
+     the cloud has no default either, every (connected, non-maintenance-mode) host in the
+     cluster is a candidate.
+   * a single comma (`,`) - explicitly overrides to "no restriction" **for this call
+     site**, even if the cloud has a default candidate list configured. This is not
+     blank, so it's treated as a deliberate override rather than "inherit", even though
+     it also parses to zero host names.
 
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise
 Plus (or similar) and want placement to follow the same DRS policy as the rest of the
 cluster; use "Host Selection Candidates" whenever the automation account can't write to every
-host vCenter shows you.
+host vCenter shows you. If most templates/pipelines on a cloud should behave the same way,
+set the mode and/or candidates once on the cloud itself and only override at specific
+call sites that need to differ (including opting all the way back out with `NONE`/`,`).
 
 #### Convert VM to Template
 

@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.jenkinsci.plugins.structs.describable.DescribableModel;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
@@ -102,5 +103,50 @@ class CloneTest {
         step.setHostSelectionCandidatesAsString("esx01.example.com, esx02.example.com");
 
         assertThat(step.getHostSelectionCandidates(), is(Set.of("esx01.example.com", "esx02.example.com")));
+    }
+
+    @Test
+    void setHostSelectionCandidatesAsStringBlankMeansInherit() throws Exception {
+        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", false, null, null, null, null, null);
+
+        step.setHostSelectionCandidatesAsString("");
+
+        assertThat(step.getHostSelectionCandidates(), nullValue());
+    }
+
+    @Test
+    void setHostSelectionCandidatesAsStringCommaExplicitlyOverridesToEmpty() throws Exception {
+        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", false, null, null, null, null, null);
+
+        step.setHostSelectionCandidatesAsString(",");
+
+        assertThat(step.getHostSelectionCandidates(), is(Set.of()));
+        assertThat(step.getHostSelectionCandidatesAsString(), is(","));
+    }
+
+    @Test
+    void hostSelectionModeNoneIsStoredVerbatim() throws Exception {
+        // Translation of "NONE" into "no selection" happens only in
+        // VSphereHostSelection.resolveMode at perform-time, not in storage.
+        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", false, null, null, null, null, null);
+
+        step.setHostSelectionMode("NONE");
+
+        assertThat(step.getHostSelectionMode(), is("NONE"));
+    }
+
+    @Test
+    void sourceCloudCanBeSetAndRetrieved() throws Exception {
+        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
+                "", "", false, null, null, null, null, null);
+        assertThat(step.getSourceCloud(), nullValue());
+
+        vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, null);
+        step.setSourceCloud(cloud);
+
+        assertThat(step.getSourceCloud(), is(cloud));
     }
 }

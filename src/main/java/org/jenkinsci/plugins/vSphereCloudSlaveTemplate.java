@@ -321,14 +321,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
-    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    /**
+     * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
+     * string. Blank means "inherit the cloud's default candidate list" (see {@link
+     * vSphereCloud#getHostSelectionCandidates()}); a single comma explicitly overrides
+     * to "no restriction at this call site" - see {@link VSphereHostSelection#toAllowListString}.
+     */
     public String getHostSelectionCandidatesAsString() {
-        return VSphereHostSelection.toCsv(this.hostSelectionCandidates);
+        return VSphereHostSelection.toAllowListString(this.hostSelectionCandidates);
     }
 
     @DataBoundSetter
     public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
-        this.hostSelectionCandidates = VSphereHostSelection.parseAllowList(hostSelectionCandidatesCsv);
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
     /**
@@ -471,8 +476,13 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             useCurrentSnapshot = false;
             snapshotToUse = null;
         }
+        final vSphereCloud sourceCloud = getParent();
+        final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
+        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, this.hostSelectionMode, this.hostSelectionCandidates, logger);
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
@@ -619,7 +629,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
         public ListBoxModel doFillHostSelectionModeItems() {
             ListBoxModel items = new ListBoxModel();
-            items.add("(none - vCenter's own default placement)", "");
+            items.add("(none - inherit the cloud's default)", "");
+            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;

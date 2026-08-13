@@ -33,6 +33,7 @@ import java.util.Set;
 import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -166,14 +167,20 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
-    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    /**
+     * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
+     * string. Blank means "inherit the cloud's default candidate list" (see {@link
+     * org.jenkinsci.plugins.vSphereCloud#getHostSelectionCandidates()}); a single comma
+     * explicitly overrides to "no restriction at this call site" - see {@link
+     * VSphereHostSelection#toAllowListString}.
+     */
     public String getHostSelectionCandidatesAsString() {
-        return VSphereHostSelection.toCsv(hostSelectionCandidates);
+        return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
     }
 
     @DataBoundSetter
     public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
-        this.hostSelectionCandidates = VSphereHostSelection.parseAllowList(hostSelectionCandidatesCsv);
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
     @Override
@@ -267,7 +274,13 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, hostSelectionMode, expandedHostSelectionCandidates, jLogger);
+        final vSphereCloud sourceCloud = getSourceCloud();
+        final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
+        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, jLogger);
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
         if (!powerOn) {
             return true; // don't try to obtain IP if VM isn't being turned on.
@@ -339,7 +352,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
         public ListBoxModel doFillHostSelectionModeItems() {
             ListBoxModel items = new ListBoxModel();
-            items.add("(none - vCenter's own default placement)", "");
+            items.add("(none - inherit the cloud's default)", "");
+            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
