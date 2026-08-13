@@ -15,6 +15,23 @@ import org.junit.jupiter.api.Test;
 class VSphereHostSelectionTest {
 
     @Test
+    void toCsvReturnsEmptyStringForNullOrEmpty() {
+        assertThat(VSphereHostSelection.toCsv(null), is(""));
+        assertThat(VSphereHostSelection.toCsv(List.of()), is(""));
+    }
+
+    @Test
+    void toCsvJoinsWithCommaAndSpace() {
+        assertThat(VSphereHostSelection.toCsv(List.of("esx1", "esx2", "esx3")), is("esx1, esx2, esx3"));
+    }
+
+    @Test
+    void parseAllowListAndToCsvRoundTrip() {
+        Set<String> parsed = VSphereHostSelection.parseAllowList(" esx1 , esx2, esx3 ");
+        assertThat(VSphereHostSelection.toCsv(parsed), is("esx1, esx2, esx3"));
+    }
+
+    @Test
     void parseAllowListReturnsEmptySetForNullOrBlank() {
         assertThat(VSphereHostSelection.parseAllowList(null), empty());
         assertThat(VSphereHostSelection.parseAllowList(""), empty());
@@ -37,6 +54,15 @@ class VSphereHostSelectionTest {
                 List.of(connected, disconnected, inMaintenance), Set.of());
 
         assertThat(filtered, contains(connected));
+    }
+
+    @Test
+    void filterCandidatesTreatsNullAllowListAsNoRestriction() {
+        HostCandidate esx1 = candidate("esx1", true, false, 1000, 2000, 1000, 2000);
+
+        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(List.of(esx1), null);
+
+        assertThat(filtered, contains(esx1));
     }
 
     @Test

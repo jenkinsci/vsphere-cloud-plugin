@@ -43,8 +43,10 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -119,8 +121,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final String targetHost;
     /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code targetHost} is set. */
     private String hostSelectionMode;
-    /** Optional comma-separated allow-list restricting {@code hostSelectionMode}'s candidates. */
-    private String candidateHosts;
+    /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private Set<String> hostSelectionCandidates;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -300,13 +302,33 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.hostSelectionMode = hostSelectionMode;
     }
 
-    public String getCandidateHosts() {
-        return this.candidateHosts;
+    /** Canonical form, for pipeline/API/JCasC consumers. */
+    public Set<String> getHostSelectionCandidates() {
+        return this.hostSelectionCandidates;
+    }
+
+    /**
+     * Takes a flat list of individual host names - the natural shape for a pipeline or
+     * JCasC YAML caller that already has one. See {@link #setHostSelectionCandidatesAsString}
+     * for the comma-separated-string equivalent (used by the classic UI textbox). Both
+     * are kept as separate, concretely-typed properties rather than one that accepts
+     * either shape: Jenkins' JCasC introspection resolves exactly one configurator per
+     * property type, so a single {@code Object}-typed (or overloaded) setter is not
+     * reliably usable from YAML, even though pipeline's looser binding tolerates it.
+     */
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toCsv(this.hostSelectionCandidates);
     }
 
     @DataBoundSetter
-    public void setCandidateHosts(String candidateHosts) {
-        this.candidateHosts = candidateHosts;
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowList(hostSelectionCandidatesCsv);
     }
 
     /**
@@ -450,7 +472,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             snapshotToUse = null;
         }
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, this.hostSelectionMode, this.candidateHosts, logger);
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, this.hostSelectionMode, this.hostSelectionCandidates, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
@@ -610,7 +632,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 @QueryParameter String credentialsId, @QueryParameter String masterImageName,
                 @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot,
                 @QueryParameter String snapshotName,
-                @QueryParameter String targetHost, @QueryParameter String candidateHosts) {
+                @QueryParameter String targetHost, @QueryParameter String hostSelectionCandidatesAsString) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
                 final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
@@ -644,8 +666,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                         return FormValidation.error(Messages.validation_notFound("host \"" + targetHost + "\""));
                     }
 
-                    if (candidateHosts != null && !candidateHosts.isEmpty()) {
-                        for (String candidateHost : VSphereHostSelection.parseAllowList(candidateHosts)) {
+                    if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
+                        for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
                             if (!vsphere.hostExists(candidateHost)) {
                                 return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
                             }

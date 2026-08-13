@@ -26,7 +26,9 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -65,8 +67,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private String host;
     /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code host} is set. */
     private String hostSelectionMode;
-    /** Optional comma-separated allow-list restricting {@code hostSelectionMode}'s candidates. */
-    private String candidateHosts;
+    /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private Set<String> hostSelectionCandidates;
 
     @DataBoundConstructor
     public Deploy(String template, String clone, boolean linkedClone,
@@ -145,13 +147,33 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionMode = hostSelectionMode;
     }
 
-    public String getCandidateHosts() {
-        return candidateHosts;
+    /** Canonical form, for pipeline/API/JCasC consumers. */
+    public Set<String> getHostSelectionCandidates() {
+        return hostSelectionCandidates;
+    }
+
+    /**
+     * Takes a flat list of individual host names - the natural shape for a pipeline or
+     * JCasC YAML caller that already has one. See {@link #setHostSelectionCandidatesAsString}
+     * for the comma-separated-string equivalent (used by the classic UI textbox). Both
+     * are kept as separate, concretely-typed properties rather than one that accepts
+     * either shape: Jenkins' JCasC introspection resolves exactly one configurator per
+     * property type, so a single {@code Object}-typed (or overloaded) setter is not
+     * reliably usable from YAML, even though pipeline's looser binding tolerates it.
+     */
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toCsv(hostSelectionCandidates);
     }
 
     @DataBoundSetter
-    public void setCandidateHosts(String candidateHosts) {
-        this.candidateHosts = candidateHosts;
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowList(hostSelectionCandidatesCsv);
     }
 
     @Override
@@ -209,7 +231,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 String expandedFolder = folder;
                 String expandedCustomizationSpec = customizationSpec;
         String expandedHost = host;
-        String expandedCandidateHosts = candidateHosts;
+        Set<String> expandedHostSelectionCandidates = hostSelectionCandidates;
         EnvVars env;
         try {
             env = run.getEnvironment(listener);
@@ -228,8 +250,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             if (host != null) {
                 expandedHost = env.expand(host);
             }
-            if (candidateHosts != null) {
-                expandedCandidateHosts = env.expand(candidateHosts);
+            if (hostSelectionCandidates != null) {
+                expandedHostSelectionCandidates = new LinkedHashSet<>();
+                for (String candidateHost : hostSelectionCandidates) {
+                    expandedHostSelectionCandidates.add(env.expand(candidateHost));
+                }
             }
         }
 
@@ -242,7 +267,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, hostSelectionMode, expandedCandidateHosts, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, hostSelectionMode, expandedHostSelectionCandidates, jLogger);
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
         if (!powerOn) {
             return true; // don't try to obtain IP if VM isn't being turned on.
@@ -325,7 +350,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 @QueryParameter String serverName,
                 @QueryParameter String template, @QueryParameter String clone,
                 @QueryParameter String resourcePool, @QueryParameter String cluster,
-                @QueryParameter String host, @QueryParameter String candidateHosts) {
+                @QueryParameter String host, @QueryParameter String hostSelectionCandidatesAsString) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
@@ -354,8 +379,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                     return FormValidation.error(Messages.validation_notFound("host"));
                 }
 
-                if (candidateHosts != null && !candidateHosts.isEmpty()) {
-                    for (String candidateHost : VSphereHostSelection.parseAllowList(candidateHosts)) {
+                if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
+                    for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
                         if (!vsphere.hostExists(candidateHost)) {
                             return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
                         }

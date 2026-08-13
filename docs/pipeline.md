@@ -101,18 +101,23 @@ buildStep: [$class: 'Clone',
             extraConfigParameters: [:],    // extra VMX key-value pairs to set on the new VM (optional)
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
-            candidateHosts: ''             // (optional) comma-separated allow-list restricting hostSelectionMode's candidates
+            hostSelectionCandidates: []             // (optional) allow-list restricting hostSelectionMode's candidates
            ]
 ```
 
 The `datastore` option can be useful if your templates live on different storage (slower/cheaper) than production VMs, so run-time instances should not appear "near" their origin.
 
-`host`, `hostSelectionMode` and `candidateHosts` are all optional and, left blank, behave
+`host`, `hostSelectionMode` and `hostSelectionCandidates` are all optional and, left blank, behave
 exactly as before this feature was added (vCenter's own default placement). See
 ["Controlling which ESXi host a clone lands on"](jenkins-configuration.md#controlling-which-esxi-host-a-clone-lands-on)
 for the full explanation of each mode and when to prefer one over another (it mostly
 comes down to whether your vSphere edition/license has DRS, and whether the account
 Jenkins connects with can write to every host in the cluster).
+
+`hostSelectionCandidates` takes a list (`['esx01.example.com', 'esx02.example.com']`). If
+you'd rather build a comma-separated string, set `hostSelectionCandidatesAsString` instead
+(`'esx01.example.com, esx02.example.com'`) - use only one of the two; both end up stored
+the same way.
 
 The `useCurrentSnapshot` and `namedSnapshot` are mutually exclusive.
 
@@ -150,7 +155,7 @@ buildStep: [$class: 'Deploy',
             customizationSpec: '',
             host: '',                    // (optional) same meaning as on the Clone step
             hostSelectionMode: '',        // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED'
-            candidateHosts: ''            // (optional) comma-separated allow-list
+            hostSelectionCandidates: []            // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string
            ]
 ```
 
@@ -391,8 +396,11 @@ vSphere(
                 cluster: 'my-cluster',
                 resourcePool: 'Resources',
                 hostSelectionMode: 'LEAST_LOADED',
-                // Only consider hosts this service account can actually provision on:
-                candidateHosts: 'esx01.example.com, esx02.example.com, esx03.example.com',
+                // Only consider hosts this service account can actually provision on.
+                // A list, or a comma-separated string via hostSelectionCandidatesAsString,
+                // both work equally well:
+                hostSelectionCandidates: ['esx01.example.com', 'esx02.example.com', 'esx03.example.com'],
+                // hostSelectionCandidatesAsString: 'esx01.example.com, esx02.example.com, esx03.example.com',
                 powerOn: true]
 )
 ```
@@ -409,7 +417,7 @@ vSphere(
                 cluster: 'my-cluster',
                 resourcePool: 'Resources',
                 hostSelectionMode: 'DRS_RECOMMENDED',
-                candidateHosts: 'esx01.example.com, esx02.example.com, esx03.example.com',
+                hostSelectionCandidates: ['esx01.example.com', 'esx02.example.com', 'esx03.example.com'],
                 powerOn: true]
 )
 // If DRS is unavailable/unlicensed/disabled on the cluster, this automatically

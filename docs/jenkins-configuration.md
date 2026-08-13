@@ -82,7 +82,7 @@ Ticking this enables the following:
   Recommended for short-lived VMs as otherwise it takes longer to clone the disks than it does for anything else.
 * Enter Cluster, Resource Pool, Datastore, Folder, Customization Specification as required, this are settings how the clone will be created in vSphere.
 Enter "Resources" as default for "Resource Pool" if you haven't explicitly defined resource pools in vCenter.
-* Target Host, Host Selection Mode, Candidate Hosts (all optional, under "Advanced..."):
+* Target Host, Host Selection Mode, Host Selection Candidates (all optional, under "Advanced..."):
 control which ESXi host within the Cluster new clones are placed on.
 See ["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on) below for details and examples.
 Leaving these blank preserves the historical behaviour (vCenter's own default placement, unaffected by this feature).
@@ -141,7 +141,7 @@ Note that any such functionality is dependent on there being support for it in t
 This build step will clone an existing Template or VM to a new VM.
 Linked clones are optional.
 Cluster, Resource Pool, and Datastore can be specified.
-Under "Advanced...", Host, Host Selection Mode and Candidate Hosts can be used to control
+Under "Advanced...", Host, Host Selection Mode and Host Selection Candidates can be used to control
 which ESXi host the clone is placed on - see
 ["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on)
 below.
@@ -152,7 +152,7 @@ This build step will create a VM from the specified template.
 The template must have at least one snapshot before it can be cloned.
 A linked clone may optionally be chosen.
 The new VM will be placed in the same folder and storage device as the original template, and will use the specified ResourcePool and Cluster.
-Under "Advanced...", Host, Host Selection Mode and Candidate Hosts can be used to control
+Under "Advanced...", Host, Host Selection Mode and Host Selection Candidates can be used to control
 which ESXi host the clone is placed on - see
 ["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on)
 below.
@@ -191,20 +191,31 @@ Three independent, optional mechanisms are available, in order of precedence:
      is the recommended choice for enterprise environments that already rely on DRS, so
      that Jenkins agent placement follows the same policy as everything else.
 
-3. **Candidate Hosts** (`candidateHosts`) - an optional comma-separated allow-list, e.g.
-   `esx01.example.com, esx02.example.com, esx03.example.com`, that restricts what "Host
-   Selection Mode" is allowed to consider. Not every host visible in a cluster is
-   necessarily usable by the vCenter account running the connection - a vCenter admin
-   may restrict provisioning permission to a subset of hosts - so this is the mechanism
-   to keep automatic selection within permitted hosts. It is **not verified live**
-   against actual vCenter permissions: an incorrect entry, or a host the account cannot
-   actually write to, only surfaces as a vCenter-side error when a clone is attempted.
-   Leave blank to consider every (connected, non-maintenance-mode) host in the cluster.
+   Either mode needs a cluster to search within. If "Cluster" is left blank, the plugin
+   will use the vCenter's only cluster when there is exactly one; if there are zero or
+   several clusters, it logs a message and falls back to letting vCenter decide (as if
+   `hostSelectionMode` had been left blank too), rather than guessing.
+
+3. **Host Selection Candidates** - an optional allow-list that restricts what "Host
+   Selection Mode" is allowed to consider. In the classic UI it's a single comma-separated
+   textbox (`hostSelectionCandidatesAsString`), e.g.
+   `esx01.example.com, esx02.example.com, esx03.example.com`. In a pipeline or
+   Configuration-as-Code YAML you can use that same comma-separated string under the name
+   `hostSelectionCandidatesAsString`, or instead give a native list of host names under
+   `hostSelectionCandidates` (`['esx01.example.com', 'esx02.example.com']`) - whichever is
+   more convenient; both end up stored the same way (use only one of the two per
+   template/step). Not every host visible in a cluster is necessarily usable by the
+   vCenter account running the connection - a vCenter admin may restrict provisioning
+   permission to a subset of hosts - so this is the mechanism to keep automatic selection
+   within permitted hosts. It is **not verified live** against actual vCenter permissions:
+   an incorrect entry, or a host the account cannot actually write to, only surfaces as a
+   vCenter-side error when a clone is attempted. Leave blank to consider every (connected,
+   non-maintenance-mode) host in the cluster.
 
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise
 Plus (or similar) and want placement to follow the same DRS policy as the rest of the
-cluster; use "Candidate Hosts" whenever the automation account can't write to every
+cluster; use "Host Selection Candidates" whenever the automation account can't write to every
 host vCenter shows you.
 
 #### Convert VM to Template

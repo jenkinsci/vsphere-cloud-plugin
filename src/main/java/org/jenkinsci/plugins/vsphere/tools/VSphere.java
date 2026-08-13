@@ -217,15 +217,15 @@ public class VSphere {
     /**
      * Deploys a new VM from an existing template, with control over which ESXi host the clone
      * is placed on. See {@link #cloneOrDeployVm} for the meaning of {@code host}, {@code
-     * hostSelectionMode} and {@code candidateHosts}.
+     * hostSelectionMode} and {@code hostSelectionCandidates}.
      *
      * @throws VSphereException If an error occurred.
      */
-    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, String candidateHosts, PrintStream jLogger) throws VSphereException {
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, candidateHosts, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, hostSelectionCandidates, jLogger);
     }
 
     /**
@@ -250,15 +250,15 @@ public class VSphere {
     /**
      * Clones a new VM from an existing (named) VM, with control over which ESXi host the clone
      * is placed on. See {@link #cloneOrDeployVm} for the meaning of {@code host}, {@code
-     * hostSelectionMode} and {@code candidateHosts}.
+     * hostSelectionMode} and {@code hostSelectionCandidates}.
      *
      * @throws VSphereException If an error occurred.
      */
-    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, String candidateHosts, PrintStream jLogger) throws VSphereException {
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, candidateHosts, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, hostSelectionCandidates, jLogger);
     }
 
     /**
@@ -329,16 +329,17 @@ public class VSphere {
      *            recommendation restricted to the candidate hosts (requires DRS to be enabled
      *            and licensed on the cluster; falls back to {@code "LEAST_LOADED"} behaviour
      *            if DRS is unavailable or returns no recommendation).
-     * @param candidateHosts
-     *            (Optional) Comma-separated list of host names that {@code hostSelectionMode}
-     *            is allowed to consider; other hosts in the cluster are ignored even if they
-     *            would otherwise be a better pick. Use this when the vCenter account used for
-     *            cloning does not have provisioning permission on every host in the cluster.
-     *            Blank/null means every (usable) host in {@code cluster} is a candidate.
+     * @param hostSelectionCandidates
+     *            (Optional) Set of host names that {@code hostSelectionMode} is allowed to
+     *            consider; other hosts in the cluster are ignored even if they would otherwise
+     *            be a better pick. Use this when the vCenter account used for cloning does not
+     *            have provisioning permission on every host in the cluster. Empty/null means
+     *            every (usable) host in {@code cluster} is a candidate. Callers holding a
+     *            comma-separated string can use {@link VSphereHostSelection#parseAllowList}.
      * @throws VSphereException
      *             if anything goes wrong.
      */
-    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, String host, String hostSelectionMode, String candidateHosts, PrintStream jLogger) throws VSphereException {
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
         if (namedSnapshot == null && extraConfigParameters == null) {
             // NOTE: This "if" clause may be superfluous - just that previously
             // this message was only logged by cloneVm() or deployVm()... so for
@@ -412,7 +413,7 @@ public class VSphere {
                 folder = getFolder(folderName);
             }
 
-            final HostSystem selectedHost = selectHost(jLogger, getClusterByName(cluster), sourceVm, cloneName, cloneSpec, rel, host, hostSelectionMode, candidateHosts);
+            final HostSystem selectedHost = selectHost(jLogger, getClusterByName(cluster), sourceVm, cloneName, cloneSpec, rel, host, hostSelectionMode, hostSelectionCandidates);
             if (selectedHost != null) {
                 rel.setHost(selectedHost.getMOR());
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be placed on host \"" + selectedHost.getName() + "\".");
@@ -483,7 +484,7 @@ public class VSphere {
     /**
      * Checks whether a host with this name exists anywhere in the vCenter inventory. Used by
      * build-step/config live-validation ("Check Data"/"Check Template" buttons) for the
-     * {@code host}/{@code targetHost} and {@code candidateHosts} fields.
+     * {@code host}/{@code targetHost} and {@code hostSelectionCandidates} fields.
      *
      * @throws VSphereException If an error occurred while querying vCenter.
      */
@@ -509,12 +510,34 @@ public class VSphere {
     }
 
     /**
+     * If the vCenter inventory contains exactly one cluster, returns it - so that host
+     * selection can still work when the caller didn't (or couldn't be bothered to)
+     * specify a {@code cluster}. Returns null if there are zero or multiple clusters,
+     * since then there's no way to pick one automatically.
+     */
+    private ClusterComputeResource getSingleClusterIfUnambiguous(PrintStream jLogger) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        final ManagedEntity[] allClusters = new InventoryNavigator(
+                getServiceInstance().getRootFolder()).searchManagedEntities("ClusterComputeResource");
+        if (allClusters == null || allClusters.length == 0) {
+            logMessage(jLogger, "No cluster was specified, and no cluster exists in this vCenter's inventory; cannot auto-select a host.");
+            return null;
+        }
+        if (allClusters.length > 1) {
+            logMessage(jLogger, "No cluster was specified, and " + allClusters.length + " clusters exist in this vCenter's inventory; specify \"cluster\" explicitly to enable host selection.");
+            return null;
+        }
+        final ClusterComputeResource onlyCluster = (ClusterComputeResource) allClusters[0];
+        logMessage(jLogger, "No cluster was specified; auto-detected the only cluster in this vCenter's inventory: \"" + onlyCluster.getName() + "\".");
+        return onlyCluster;
+    }
+
+    /**
      * Decides which ESXi host (if any) a clone should be placed on. Returns null to mean
      * "no restriction, let vCenter/DRS decide with its own default logic" (today's behaviour).
      */
     private HostSystem selectHost(PrintStream jLogger, ClusterComputeResource clusterResource, VirtualMachine sourceVm,
             String cloneName, VirtualMachineCloneSpec cloneSpec, VirtualMachineRelocateSpec rel,
-            String host, String hostSelectionMode, String candidateHosts)
+            String host, String hostSelectionMode, Set<String> hostSelectionCandidates)
             throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException, VSphereException {
         if (host != null && !host.isEmpty()) {
             HostSystem explicitHost = getHostByName(host, clusterResource);
@@ -529,7 +552,10 @@ public class VSphere {
         }
 
         if (clusterResource == null) {
-            logMessage(jLogger, "Host selection mode \"" + hostSelectionMode + "\" requires a valid cluster to be specified; letting vSphere decide placement.");
+            clusterResource = getSingleClusterIfUnambiguous(jLogger);
+        }
+        if (clusterResource == null) {
+            logMessage(jLogger, "Host selection mode \"" + hostSelectionMode + "\" requires a valid cluster to be specified (or exactly one cluster to exist in the vCenter inventory); letting vSphere decide placement.");
             return null;
         }
 
@@ -543,8 +569,7 @@ public class VSphere {
             }
         }
 
-        final Set<String> allowList = VSphereHostSelection.parseAllowList(candidateHosts);
-        final List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(candidates, allowList);
+        final List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(candidates, hostSelectionCandidates);
         if (filtered.isEmpty()) {
             logMessage(jLogger, "No usable candidate hosts found in cluster \"" + clusterResource.getName() + "\" for host selection mode \"" + hostSelectionMode + "\"; letting vSphere decide placement.");
             return null;

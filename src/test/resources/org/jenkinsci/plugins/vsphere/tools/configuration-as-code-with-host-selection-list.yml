@@ -28,10 +28,12 @@ jenkins:
             saveFailure: false
             targetHost: "esx01.company.example"
             hostSelectionMode: "LEAST_LOADED"
-            hostSelectionCandidatesAsString: "esx01.company.example, esx02.company.example"
+            hostSelectionCandidates:
+              - "esx01.company.example"
+              - "esx02.company.example"
             templateInstanceCap: 5
             useSnapshot: true
             waitForVMTools: true
         vsConnectionConfig:
           vsHost: "https://company-vsphere"
-        vsDescription: "Host Selection Test vSphere"
+        vsDescription: "Host Selection List Test vSphere"

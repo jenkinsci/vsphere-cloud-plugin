@@ -4,6 +4,13 @@
   Any other host in the cluster is ignored by automatic selection, even if it would
   otherwise be a better pick.
   <p>
+  In a pipeline or Configuration-as-Code YAML, you can use this same comma-separated
+  string form under the name <tt>hostSelectionCandidatesAsString</tt>, or instead give a
+  native list of individual host names under <tt>hostSelectionCandidates</tt>, e.g.
+  <tt>hostSelectionCandidates: ['esx01.example.com', 'esx02.example.com']</tt> - whichever is
+  more convenient. Both end up stored the same way; use only one of the two per template/step.
+  </p>
+  <p>
   Not every host visible in a cluster is necessarily usable by the vCenter account
   running this connection - a vCenter admin may restrict provisioning permission to a
   subset of hosts. This field is the only mechanism this plugin offers to keep automatic

@@ -29,8 +29,11 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -77,8 +80,8 @@ public class Clone extends VSphereBuildStep {
     private String host;
     /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code host} is set. */
     private String hostSelectionMode;
-    /** Optional comma-separated allow-list restricting {@code hostSelectionMode}'s candidates. */
-    private String candidateHosts;
+    /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private Set<String> hostSelectionCandidates;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
@@ -198,13 +201,33 @@ public class Clone extends VSphereBuildStep {
         this.hostSelectionMode = hostSelectionMode;
     }
 
-    public String getCandidateHosts() {
-        return candidateHosts;
+    /** Canonical form, for pipeline/API/JCasC consumers. */
+    public Set<String> getHostSelectionCandidates() {
+        return hostSelectionCandidates;
+    }
+
+    /**
+     * Takes a flat list of individual host names - the natural shape for a pipeline or
+     * JCasC YAML caller that already has one. See {@link #setHostSelectionCandidatesAsString}
+     * for the comma-separated-string equivalent (used by the classic UI textbox). Both
+     * are kept as separate, concretely-typed properties rather than one that accepts
+     * either shape: Jenkins' JCasC introspection resolves exactly one configurator per
+     * property type, so a single {@code Object}-typed (or overloaded) setter is not
+     * reliably usable from YAML, even though pipeline's looser binding tolerates it.
+     */
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toCsv(hostSelectionCandidates);
     }
 
     @DataBoundSetter
-    public void setCandidateHosts(String candidateHosts) {
-        this.candidateHosts = candidateHosts;
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowList(hostSelectionCandidatesCsv);
     }
 
     @Override
@@ -253,7 +276,7 @@ public class Clone extends VSphereBuildStep {
         String expandedCustomizationSpec = customizationSpec;
         String expandedNamedSnapshot = namedSnapshot;
         String expandedHost = host;
-        String expandedCandidateHosts = candidateHosts;
+        Set<String> expandedHostSelectionCandidates = hostSelectionCandidates;
         Map<String, String> expandedExtraConfigParameters;
         EnvVars env;
         try {
@@ -277,8 +300,11 @@ public class Clone extends VSphereBuildStep {
             if (host != null) {
                 expandedHost = env.expand(host);
             }
-            if (candidateHosts != null) {
-                expandedCandidateHosts = env.expand(candidateHosts);
+            if (hostSelectionCandidates != null) {
+                expandedHostSelectionCandidates = new LinkedHashSet<>();
+                for (String candidateHost : hostSelectionCandidates) {
+                    expandedHostSelectionCandidates.add(env.expand(candidateHost));
+                }
             }
         }
 
@@ -299,7 +325,7 @@ public class Clone extends VSphereBuildStep {
         vsphere.cloneOrDeployVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, this.isUseCurrentSnapshot(), expandedNamedSnapshot,
                 powerOn, expandedExtraConfigParameters, expandedCustomizationSpec,
-                expandedHost, hostSelectionMode, expandedCandidateHosts, jLogger);
+                expandedHost, hostSelectionMode, expandedHostSelectionCandidates, jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
         if (powerOn && timeoutInSecondsForGetIp>0) {
@@ -401,7 +427,7 @@ public class Clone extends VSphereBuildStep {
                                          @QueryParameter Boolean useCurrentSnapshot,
                                          @QueryParameter String namedSnapshot,
                                          @QueryParameter String host,
-                                         @QueryParameter String candidateHosts) {
+                                         @QueryParameter String hostSelectionCandidatesAsString) {
             // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
@@ -449,8 +475,8 @@ public class Clone extends VSphereBuildStep {
                     return FormValidation.error(Messages.validation_notFound("host"));
                 }
 
-                if (candidateHosts != null && !candidateHosts.isEmpty()) {
-                    for (String candidateHost : VSphereHostSelection.parseAllowList(candidateHosts)) {
+                if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
+                    for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
                         if (!vsphere.hostExists(candidateHost)) {
                             return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
                         }

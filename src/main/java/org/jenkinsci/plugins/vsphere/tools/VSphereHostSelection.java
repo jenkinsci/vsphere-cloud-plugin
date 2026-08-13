@@ -2,6 +2,7 @@ package org.jenkinsci.plugins.vsphere.tools;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -99,18 +100,30 @@ public final class VSphereHostSelection {
      * and discarding empty entries. Returns an empty (not null) set when the
      * input is null/blank, meaning "no restriction".
      */
-    public static Set<String> parseAllowList(String candidateHostsCsv) {
+    public static Set<String> parseAllowList(String hostSelectionCandidatesCsv) {
         Set<String> result = new LinkedHashSet<>();
-        if (candidateHostsCsv == null || candidateHostsCsv.trim().isEmpty()) {
+        if (hostSelectionCandidatesCsv == null || hostSelectionCandidatesCsv.trim().isEmpty()) {
             return result;
         }
-        for (String name : candidateHostsCsv.split(",")) {
+        for (String name : hostSelectionCandidatesCsv.split(",")) {
             String trimmed = name.trim();
             if (!trimmed.isEmpty()) {
                 result.add(trimmed);
             }
         }
         return result;
+    }
+
+    /**
+     * Joins a collection of host names back into the comma-separated form used by the
+     * classic config UI textbox. Returns "" (not null) for a null/empty input, so this
+     * is safe to use directly as a form field's current value.
+     */
+    public static String toCsv(Collection<String> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return "";
+        }
+        return String.join(", ", hosts);
     }
 
     /**
@@ -124,7 +137,7 @@ public final class VSphereHostSelection {
             if (!candidate.isUsable()) {
                 continue;
             }
-            if (!allowList.isEmpty() && !allowList.contains(candidate.getName())) {
+            if (allowList != null && !allowList.isEmpty() && !allowList.contains(candidate.getName())) {
                 continue;
             }
             result.add(candidate);

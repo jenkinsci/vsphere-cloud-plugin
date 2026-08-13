@@ -24,7 +24,7 @@
             <f:entry title="${%Linked Clone}" field="linkedClone">
                 <f:checkbox/>
             </f:entry>
-            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,allowUntrustedCertificate,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName,targetHost,candidateHosts"/>
+            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,allowUntrustedCertificate,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName,targetHost,hostSelectionCandidatesAsString"/>
 
             <f:entry title="${%Cluster}" field="cluster">
                 <f:textbox/>
@@ -50,7 +50,7 @@
                 <f:select/>
             </f:entry>
 
-            <f:entry title="${%Candidate Hosts}" field="candidateHosts">
+            <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
                 <f:textbox/>
             </f:entry>
 
