@@ -1,0 +1,33 @@
+<div>
+  (Optional) Comma-separated list of host names that "Host Selection Mode" above is
+  allowed to consider, e.g. <tt>esx01.example.com, esx02.example.com, esx03.example.com</tt>.
+  Any other host in the cluster is ignored by automatic selection, even if it would
+  otherwise be a better pick.
+  <p>
+  In a pipeline or Configuration-as-Code YAML, you can use this same comma-separated
+  string form under the name <tt>hostSelectionCandidatesAsString</tt>, or instead give a
+  native list of individual host names under <tt>hostSelectionCandidates</tt>, e.g.
+  <tt>hostSelectionCandidates: ['esx01.example.com', 'esx02.example.com']</tt> - whichever is
+  more convenient. Both end up stored the same way; use only one of the two per template/step.
+  </p>
+  <p>
+  Not every host visible in a cluster is necessarily usable by the vCenter account
+  running this connection - a vCenter admin may restrict provisioning permission to a
+  subset of hosts. This field is the only mechanism this plugin offers to keep automatic
+  selection within permitted hosts.
+  </p>
+  <p>
+  This is <b>not verified live against actual vCenter permissions</b>: an incorrect entry,
+  or a host the account cannot actually write to, only surfaces as a vCenter-side error
+  when a clone is attempted, not as a validation error here.
+  </p>
+  <p>
+  Leaving this <b>blank</b> inherits the cloud's own default candidate list (configured
+  on the vSphere Cloud itself), if any; if the cloud has no default either, every
+  (usable) host in the configured cluster is a candidate. To explicitly override the
+  cloud's default to "no restriction" for this call site specifically - rather than
+  inheriting whatever the cloud has configured - enter a single comma (<tt>,</tt>): this
+  is not blank, so it is treated as a deliberate override, but it still parses to zero
+  host names.
+  </p>
+</div>

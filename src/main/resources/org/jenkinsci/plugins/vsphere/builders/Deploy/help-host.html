@@ -1,0 +1,16 @@
+<div>
+  (Optional) Pins the clone to this specific ESXi host, by name, within the configured
+  cluster.
+  <p>
+  When set, this always wins over "Host Selection Mode" below, which is then ignored.
+  Leave blank to use vCenter's own default placement (unchanged legacy behaviour), or
+  to let "Host Selection Mode" choose automatically.
+  </p>
+  <p>
+  Works on any vSphere edition/license, and with any permission setup - including a
+  service account that can only write to a single host. This is usually the right
+  choice for small/test labs, or whenever you want full manual control over where
+  clones land.
+  </p>
+  Example: <tt>esx-rack3-host07.example.com</tt>
+</div>

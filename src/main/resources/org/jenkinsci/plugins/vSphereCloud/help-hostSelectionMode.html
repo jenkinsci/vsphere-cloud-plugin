@@ -1,0 +1,25 @@
+<div>
+  (Optional) Default automatic host-selection mode for every template and build step that
+  uses this cloud and doesn't set its own <tt>hostSelectionMode</tt>.
+  <p>
+  Which hosts a service account can actually write to, and whether DRS is enabled and
+  licensed, are properties of this vCenter environment - not of any one template or
+  build step - so setting a default here avoids having to repeat the same choice on
+  every template/pipeline call using this cloud.
+  </p>
+  <ul>
+    <li><b>(none)</b> - no cloud-wide default; unless a template/build-step sets its own
+    mode, clones are placed wherever vCenter's own default logic decides (unchanged
+    legacy behaviour).</li>
+    <li><b>Least loaded host</b> - no DRS license required; see the same option's
+    description on the Clone/Deploy build steps or vSphere templates for details.</li>
+    <li><b>DRS recommendation</b> - requires DRS enabled and licensed on the cluster;
+    falls back to "Least loaded host" if unavailable. See the same option's description
+    on the Clone/Deploy build steps or vSphere templates for details.</li>
+  </ul>
+  <p>
+  A template or build step using this cloud can override this default with its own
+  <tt>hostSelectionMode</tt>, or set it to <tt>NONE</tt> to explicitly disable host
+  selection for just that call site regardless of this cloud-wide default.
+  </p>
+</div>

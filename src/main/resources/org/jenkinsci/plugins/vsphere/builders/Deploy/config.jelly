@@ -50,5 +50,19 @@ limitations under the License.
     </f:entry>
   </f:optionalBlock>
 
-  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster"/>
+  <f:advanced>
+    <f:entry title="${%Host}" field="host">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
+      <f:select/>
+    </f:entry>
+
+    <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
+      <f:textbox/>
+    </f:entry>
+  </f:advanced>
+
+  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>
 </j:jelly>

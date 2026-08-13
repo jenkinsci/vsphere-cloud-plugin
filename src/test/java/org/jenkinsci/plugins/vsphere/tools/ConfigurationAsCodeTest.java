@@ -11,6 +11,7 @@ import io.jenkins.plugins.casc.misc.JenkinsConfiguredWithCodeRule;
 import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
 import java.util.List;
+import java.util.Set;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
@@ -25,6 +26,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 
 @WithJenkinsConfiguredWithCode
@@ -75,6 +77,59 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getSessionMaxAgeSecs(), is(3600));
         assertThat(cloud.getSessionMaxUses(), is(500));
         assertThat(cloud.getPoolIdleTimeoutSecs(), is(300));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
+    void host_selection_fields_are_unset_by_default_when_not_specified_in_yaml(JenkinsConfiguredWithCodeRule r) {
+        // Backward compatibility: templates defined before this feature existed must
+        // keep behaving exactly as before (no host restriction of any kind).
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is(nullValue()));
+        assertThat(cloud.getHostSelectionCandidates(), is(nullValue()));
+        vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
+        assertThat(template.getTargetHost(), is(nullValue()));
+        assertThat(template.getHostSelectionMode(), is(nullValue()));
+        assertThat(template.getHostSelectionCandidates(), is(nullValue()));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-cloud-host-selection-defaults.yml")
+    void should_load_cloud_level_host_selection_defaults_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        // This fixture gives hostSelectionCandidates as a plain comma-separated scalar string,
+        // set directly on the cloud (not on any template).
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is("LEAST_LOADED"));
+        assertThat(cloud.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-cloud-host-selection-defaults-list.yml")
+    void should_load_cloud_level_host_selection_candidates_given_as_a_yaml_list(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        assertThat(cloud.getHostSelectionMode(), is("DRS_RECOMMENDED"));
+        assertThat(cloud.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-host-selection.yml")
+    void should_load_host_selection_configuration_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        // This fixture gives hostSelectionCandidates as a plain comma-separated scalar string.
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
+        assertThat(template.getTargetHost(), is("esx01.company.example"));
+        assertThat(template.getHostSelectionMode(), is("LEAST_LOADED"));
+        assertThat(template.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-host-selection-list.yml")
+    void should_load_candidate_hosts_given_as_a_yaml_list(JenkinsConfiguredWithCodeRule r) {
+        // Same as above, but hostSelectionCandidates is given as a native YAML list instead of a
+        // comma-separated scalar string - both forms must be accepted equivalently.
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
+        assertThat(template.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
     }
 
     @Test

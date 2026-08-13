@@ -37,13 +37,16 @@ import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,10 +67,12 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -114,6 +119,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final boolean saveFailure;
     private final String targetResourcePool;
     private final String targetHost;
+    /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code targetHost} is set. */
+    private String hostSelectionMode;
+    /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private Set<String> hostSelectionCandidates;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -284,6 +293,49 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.targetHost;
     }
 
+    public String getHostSelectionMode() {
+        return this.hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    /** Canonical form, for pipeline/API/JCasC consumers. */
+    public Set<String> getHostSelectionCandidates() {
+        return this.hostSelectionCandidates;
+    }
+
+    /**
+     * Takes a flat list of individual host names - the natural shape for a pipeline or
+     * JCasC YAML caller that already has one. See {@link #setHostSelectionCandidatesAsString}
+     * for the comma-separated-string equivalent (used by the classic UI textbox). Both
+     * are kept as separate, concretely-typed properties rather than one that accepts
+     * either shape: Jenkins' JCasC introspection resolves exactly one configurator per
+     * property type, so a single {@code Object}-typed (or overloaded) setter is not
+     * reliably usable from YAML, even though pipeline's looser binding tolerates it.
+     */
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /**
+     * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
+     * string. Blank means "inherit the cloud's default candidate list" (see {@link
+     * vSphereCloud#getHostSelectionCandidates()}); a single comma explicitly overrides
+     * to "no restriction at this call site" - see {@link VSphereHostSelection#toAllowListString}.
+     */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toAllowListString(this.hostSelectionCandidates);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
+    }
+
     /**
      * Gets the old (deprecated) credentialsId field.
      * 
@@ -424,8 +476,13 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             useCurrentSnapshot = false;
             snapshotToUse = null;
         }
+        final vSphereCloud sourceCloud = getParent();
+        final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
+        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, logger);
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
@@ -570,13 +627,23 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return FormValidation.validateNonNegativeInteger(launchDelay);
         }
 
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - inherit the cloud's default)", "");
+            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
+        }
+
         @RequirePOST
         public FormValidation doTestCloneParameters(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String vsHost,
                 @QueryParameter boolean allowUntrustedCertificate,
                 @QueryParameter String credentialsId, @QueryParameter String masterImageName,
                 @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot,
-                @QueryParameter String snapshotName) {
+                @QueryParameter String snapshotName,
+                @QueryParameter String targetHost, @QueryParameter String hostSelectionCandidatesAsString) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
                 final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
@@ -605,6 +672,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                             return FormValidation.warning("vSphere doesn't like creating linked clones without a snapshot");
                         }
                     }
+
+                    if (targetHost != null && !targetHost.isEmpty() && !vsphere.hostExists(targetHost)) {
+                        return FormValidation.error(Messages.validation_notFound("host \"" + targetHost + "\""));
+                    }
+
+                    if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
+                        for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
+                            if (!vsphere.hostExists(candidateHost)) {
+                                return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
+                            }
+                        }
+                    }
+
                     return FormValidation.ok(Messages.validation_success());
                 } finally {
                     vsphere.disconnect();

@@ -1,0 +1,48 @@
+<div>
+  (Optional) How to automatically pick a placement host when "Host" above is left blank.
+  Without this, clones land wherever vCenter's own default logic decides - in practice,
+  often the same host the source VM/template is registered on, which can unbalance load
+  across a cluster over time.
+  <p>
+  Which mode fits best depends on your VMware license/edition and local preference, not
+  just mechanics:
+  </p>
+  <ul>
+    <li>
+      <b>(none)</b> - inherits this cloud's own default <tt>hostSelectionMode</tt>
+      (configured on the vSphere Cloud itself), if any; if the cloud has no default
+      either, this is unchanged legacy behaviour. Safe default; existing jobs/pipelines
+      are unaffected unless something opts in.
+    </li>
+    <li>
+      <b>Explicitly none</b> - overrides the cloud's default (if any) to force
+      unchanged legacy behaviour for this call site specifically, even when the cloud
+      itself has a default mode configured.
+    </li>
+    <li>
+      <b>Least loaded host</b> - this plugin reads current CPU/memory usage for each
+      candidate host (see "Host Selection Candidates" below) and picks the least loaded
+      one itself. No DRS feature or license is needed, so it works on Essentials/Standard
+      editions, or on a cluster with DRS turned off. It does not know about VMware's own
+      affinity/anti-affinity rules, HA reservations, or storage placement policies. Good
+      default for quick/simple setups, or whenever DRS isn't available/licensed.
+    </li>
+    <li>
+      <b>DRS recommendation</b> - asks vCenter's own DRS engine for a placement
+      recommendation, restricted to the candidate hosts. This honours the cluster's real
+      DRS/HA/affinity/storage policies, but <b>requires DRS to be enabled and licensed on
+      the cluster</b> (vSphere Enterprise Plus, or an equivalent edition/license). On
+      editions or clusters without DRS, the request fails and this plugin automatically
+      falls back to "Least loaded host" behaviour (logged as a warning), rather than
+      failing the build. Recommended for enterprise environments that already rely on
+      DRS, so that Jenkins agent placement follows the same policy as everything else in
+      the cluster.
+    </li>
+  </ul>
+  <p>
+  Either automatic mode needs a cluster to search: if "Cluster" above is left blank, this
+  plugin will use the only cluster in the vCenter's inventory if there is exactly one:
+  otherwise (no clusters, or more than one) it logs a message and falls back to letting
+  vCenter decide, exactly as if this field had been left blank.
+  </p>
+</div>

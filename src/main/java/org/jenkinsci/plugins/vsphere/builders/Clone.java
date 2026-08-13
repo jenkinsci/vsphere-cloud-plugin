@@ -23,22 +23,29 @@ import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -69,6 +76,13 @@ public class Clone extends VSphereBuildStep {
      *  conflicts with {@code #useCurrentSnapshot}. Is {@code null} by default. */
     private final String namedSnapshot;
     private final Map<String, String> extraConfigParameters;
+
+    /** Optional; unset means unchanged legacy behaviour (vCenter's own default placement). */
+    private String host;
+    /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code host} is set. */
+    private String hostSelectionMode;
+    /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private Set<String> hostSelectionCandidates;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
@@ -170,6 +184,59 @@ public class Clone extends VSphereBuildStep {
         return extraConfigParameters;
     }
 
+    public String getHost() {
+        return host;
+    }
+
+    @DataBoundSetter
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public String getHostSelectionMode() {
+        return hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    /** Canonical form, for pipeline/API/JCasC consumers. */
+    public Set<String> getHostSelectionCandidates() {
+        return hostSelectionCandidates;
+    }
+
+    /**
+     * Takes a flat list of individual host names - the natural shape for a pipeline or
+     * JCasC YAML caller that already has one. See {@link #setHostSelectionCandidatesAsString}
+     * for the comma-separated-string equivalent (used by the classic UI textbox). Both
+     * are kept as separate, concretely-typed properties rather than one that accepts
+     * either shape: Jenkins' JCasC introspection resolves exactly one configurator per
+     * property type, so a single {@code Object}-typed (or overloaded) setter is not
+     * reliably usable from YAML, even though pipeline's looser binding tolerates it.
+     */
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /**
+     * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
+     * string. Blank means "inherit the cloud's default candidate list" (see {@link
+     * org.jenkinsci.plugins.vSphereCloud#getHostSelectionCandidates()}); a single comma
+     * explicitly overrides to "no restriction at this call site" - see {@link
+     * VSphereHostSelection#toAllowListString}.
+     */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
+    }
+
     @Override
     public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
@@ -215,6 +282,8 @@ public class Clone extends VSphereBuildStep {
         String expandedResourcePool = resourcePool;
         String expandedCustomizationSpec = customizationSpec;
         String expandedNamedSnapshot = namedSnapshot;
+        String expandedHost = host;
+        Set<String> expandedHostSelectionCandidates = hostSelectionCandidates;
         Map<String, String> expandedExtraConfigParameters;
         EnvVars env;
         try {
@@ -235,6 +304,15 @@ public class Clone extends VSphereBuildStep {
             if (namedSnapshot != null) {
                 expandedNamedSnapshot = env.expand(namedSnapshot);
             }
+            if (host != null) {
+                expandedHost = env.expand(host);
+            }
+            if (hostSelectionCandidates != null) {
+                expandedHostSelectionCandidates = new LinkedHashSet<>();
+                for (String candidateHost : hostSelectionCandidates) {
+                    expandedHostSelectionCandidates.add(env.expand(candidateHost));
+                }
+            }
         }
 
         if (extraConfigParameters != null && !(extraConfigParameters.isEmpty())) {
@@ -251,9 +329,16 @@ public class Clone extends VSphereBuildStep {
             expandedExtraConfigParameters = null;
         }
 
+        final vSphereCloud sourceCloud = getSourceCloud();
+        final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
+        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+
         vsphere.cloneOrDeployVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, this.isUseCurrentSnapshot(), expandedNamedSnapshot,
-                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec, jLogger);
+                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec,
+                expandedHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
         if (powerOn && timeoutInSecondsForGetIp>0) {
@@ -333,6 +418,15 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - inherit the cloud's default)", "");
+            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
+        }
+
         public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
         }
@@ -345,7 +439,9 @@ public class Clone extends VSphereBuildStep {
                                          @QueryParameter String customizationSpec,
                                          @QueryParameter Boolean linkedClone,
                                          @QueryParameter Boolean useCurrentSnapshot,
-                                         @QueryParameter String namedSnapshot) {
+                                         @QueryParameter String namedSnapshot,
+                                         @QueryParameter String host,
+                                         @QueryParameter String hostSelectionCandidatesAsString) {
             // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
@@ -387,6 +483,18 @@ public class Clone extends VSphereBuildStep {
                 if(customizationSpec != null && customizationSpec.length() > 0 &&
                         vsphere.getCustomizationSpecByName(customizationSpec) == null) {
                     return FormValidation.error(Messages.validation_notFound("customizationSpec"));
+                }
+
+                if (host != null && !host.isEmpty() && !vsphere.hostExists(host)) {
+                    return FormValidation.error(Messages.validation_notFound("host"));
+                }
+
+                if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
+                    for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
+                        if (!vsphere.hostExists(candidateHost)) {
+                            return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
+                        }
+                    }
                 }
 
                 return FormValidation.ok(Messages.validation_success());

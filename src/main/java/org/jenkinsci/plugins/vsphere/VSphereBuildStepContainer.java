@@ -96,9 +96,11 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             // reconfigured Cloud with a brand-new instance (e.g. the admin toggling
             // maintenance mode back off while we were blocked), so the instance we just
             // waited on may no longer be the live one by the time waiting is done.
-            vsphere = resolveCloud(expandedServerName, jobName).vSphereInstance();
+            final vSphereCloud resolvedCloud = resolveCloud(expandedServerName, jobName);
+            vsphere = resolvedCloud.vSphereInstance();
 
             buildStep.setVsphere(vsphere);
+            buildStep.setSourceCloud(resolvedCloud);
             if (run instanceof AbstractBuild) {
                 buildStep.perform(((AbstractBuild) run), launcher, (BuildListener) listener);
             } else {
