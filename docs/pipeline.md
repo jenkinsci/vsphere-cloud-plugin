@@ -98,11 +98,21 @@ buildStep: [$class: 'Clone',
             customizationSpec: '',         // guest OS customization spec name (optional)
             useCurrentSnapshot: null,      // true = clone from current snapshot; false = don't use snapshot
             namedSnapshot: '',             // clone from this specific named snapshot (optional)
-            extraConfigParameters: [:]     // extra VMX key-value pairs to set on the new VM (optional)
+            extraConfigParameters: [:],    // extra VMX key-value pairs to set on the new VM (optional)
+            host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
+            hostSelectionMode: '',         // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
+            candidateHosts: ''             // (optional) comma-separated allow-list restricting hostSelectionMode's candidates
            ]
 ```
 
 The `datastore` option can be useful if your templates live on different storage (slower/cheaper) than production VMs, so run-time instances should not appear "near" their origin.
+
+`host`, `hostSelectionMode` and `candidateHosts` are all optional and, left blank, behave
+exactly as before this feature was added (vCenter's own default placement). See
+["Controlling which ESXi host a clone lands on"](jenkins-configuration.md#controlling-which-esxi-host-a-clone-lands-on)
+for the full explanation of each mode and when to prefer one over another (it mostly
+comes down to whether your vSphere edition/license has DRS, and whether the account
+Jenkins connects with can write to every host in the cluster).
 
 The `useCurrentSnapshot` and `namedSnapshot` are mutually exclusive.
 
@@ -137,7 +147,10 @@ buildStep: [$class: 'Deploy',
             linkedClone: false,
             powerOn: false,
             timeoutInSeconds: 60,
-            customizationSpec: ''
+            customizationSpec: '',
+            host: '',                    // (optional) same meaning as on the Clone step
+            hostSelectionMode: '',        // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED'
+            candidateHosts: ''            // (optional) comma-separated allow-list
            ]
 ```
 
@@ -359,6 +372,70 @@ vSphere(
 )
 echo "VM IP: ${env.VSPHERE_IP}"
 ```
+
+### Spread clones across a cluster instead of piling onto one host
+
+Without any of the fields below, every clone lands wherever vCenter's own default
+placement decides - in practice, often the same host the template is registered on.
+The `hostSelectionMode` field lets the plugin (or vCenter's own DRS) spread clones out
+instead.
+
+```groovy
+// No DRS license needed: the plugin ranks candidate hosts by current CPU/memory
+// usage itself and picks the least loaded one.
+vSphere(
+    serverName: 'my-vcenter',
+    buildStep: [$class: 'Clone',
+                sourceName: 'linux-template',
+                clone: "build-${env.BUILD_NUMBER}",
+                cluster: 'my-cluster',
+                resourcePool: 'Resources',
+                hostSelectionMode: 'LEAST_LOADED',
+                // Only consider hosts this service account can actually provision on:
+                candidateHosts: 'esx01.example.com, esx02.example.com, esx03.example.com',
+                powerOn: true]
+)
+```
+
+```groovy
+// If your cluster has DRS enabled and licensed (vSphere Enterprise Plus or
+// equivalent), you can defer to vCenter's own placement recommendation instead,
+// which also takes affinity/anti-affinity/HA/storage policies into account:
+vSphere(
+    serverName: 'my-vcenter',
+    buildStep: [$class: 'Clone',
+                sourceName: 'linux-template',
+                clone: "build-${env.BUILD_NUMBER}",
+                cluster: 'my-cluster',
+                resourcePool: 'Resources',
+                hostSelectionMode: 'DRS_RECOMMENDED',
+                candidateHosts: 'esx01.example.com, esx02.example.com, esx03.example.com',
+                powerOn: true]
+)
+// If DRS is unavailable/unlicensed/disabled on the cluster, this automatically
+// falls back to the same least-loaded-host behaviour as above (a warning is
+// logged), rather than failing the build.
+```
+
+```groovy
+// Or just pin every clone to one specific host, e.g. for a small/test lab:
+vSphere(
+    serverName: 'my-vcenter',
+    buildStep: [$class: 'Clone',
+                sourceName: 'linux-template',
+                clone: "build-${env.BUILD_NUMBER}",
+                cluster: 'my-cluster',
+                resourcePool: 'Resources',
+                host: 'esx-lab-01.example.com',
+                powerOn: true]
+)
+```
+
+See
+["Controlling which ESXi host a clone lands on"](jenkins-configuration.md#controlling-which-esxi-host-a-clone-lands-on)
+for the full explanation of these three fields, including why one deployment might
+prefer a different mode than another (VMware edition/license, whether DRS is enabled,
+and whether the automation account can write to every host).
 
 ### Full VM lifecycle
 

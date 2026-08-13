@@ -23,6 +23,7 @@ import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -36,9 +37,11 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -69,6 +72,13 @@ public class Clone extends VSphereBuildStep {
      *  conflicts with {@code #useCurrentSnapshot}. Is {@code null} by default. */
     private final String namedSnapshot;
     private final Map<String, String> extraConfigParameters;
+
+    /** Optional; unset means unchanged legacy behaviour (vCenter's own default placement). */
+    private String host;
+    /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code host} is set. */
+    private String hostSelectionMode;
+    /** Optional comma-separated allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private String candidateHosts;
 
     @DataBoundConstructor
     public Clone(String sourceName, String clone, boolean linkedClone,
@@ -170,6 +180,33 @@ public class Clone extends VSphereBuildStep {
         return extraConfigParameters;
     }
 
+    public String getHost() {
+        return host;
+    }
+
+    @DataBoundSetter
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public String getHostSelectionMode() {
+        return hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    public String getCandidateHosts() {
+        return candidateHosts;
+    }
+
+    @DataBoundSetter
+    public void setCandidateHosts(String candidateHosts) {
+        this.candidateHosts = candidateHosts;
+    }
+
     @Override
     public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
@@ -215,6 +252,8 @@ public class Clone extends VSphereBuildStep {
         String expandedResourcePool = resourcePool;
         String expandedCustomizationSpec = customizationSpec;
         String expandedNamedSnapshot = namedSnapshot;
+        String expandedHost = host;
+        String expandedCandidateHosts = candidateHosts;
         Map<String, String> expandedExtraConfigParameters;
         EnvVars env;
         try {
@@ -235,6 +274,12 @@ public class Clone extends VSphereBuildStep {
             if (namedSnapshot != null) {
                 expandedNamedSnapshot = env.expand(namedSnapshot);
             }
+            if (host != null) {
+                expandedHost = env.expand(host);
+            }
+            if (candidateHosts != null) {
+                expandedCandidateHosts = env.expand(candidateHosts);
+            }
         }
 
         if (extraConfigParameters != null && !(extraConfigParameters.isEmpty())) {
@@ -253,7 +298,8 @@ public class Clone extends VSphereBuildStep {
 
         vsphere.cloneOrDeployVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
                 expandedDatastore, expandedFolder, this.isUseCurrentSnapshot(), expandedNamedSnapshot,
-                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec, jLogger);
+                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec,
+                expandedHost, hostSelectionMode, expandedCandidateHosts, jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
         if (powerOn && timeoutInSecondsForGetIp>0) {
@@ -333,6 +379,14 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - vCenter's own default placement)", "");
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
+        }
+
         public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
         }
@@ -345,7 +399,9 @@ public class Clone extends VSphereBuildStep {
                                          @QueryParameter String customizationSpec,
                                          @QueryParameter Boolean linkedClone,
                                          @QueryParameter Boolean useCurrentSnapshot,
-                                         @QueryParameter String namedSnapshot) {
+                                         @QueryParameter String namedSnapshot,
+                                         @QueryParameter String host,
+                                         @QueryParameter String candidateHosts) {
             // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
@@ -387,6 +443,18 @@ public class Clone extends VSphereBuildStep {
                 if(customizationSpec != null && customizationSpec.length() > 0 &&
                         vsphere.getCustomizationSpecByName(customizationSpec) == null) {
                     return FormValidation.error(Messages.validation_notFound("customizationSpec"));
+                }
+
+                if (host != null && !host.isEmpty() && !vsphere.hostExists(host)) {
+                    return FormValidation.error(Messages.validation_notFound("host"));
+                }
+
+                if (candidateHosts != null && !candidateHosts.isEmpty()) {
+                    for (String candidateHost : VSphereHostSelection.parseAllowList(candidateHosts)) {
+                        if (!vsphere.hostExists(candidateHost)) {
+                            return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
+                        }
+                    }
                 }
 
                 return FormValidation.ok(Messages.validation_success());

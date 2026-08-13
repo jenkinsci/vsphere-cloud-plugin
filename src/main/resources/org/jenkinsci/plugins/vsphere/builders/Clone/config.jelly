@@ -64,5 +64,19 @@ limitations under the License.
 
   <!-- TODO: How can we specify an optional Map<String,String> to set extraConfigParameters? -->
 
-  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster"/>
+  <f:advanced>
+    <f:entry title="${%Host}" field="host">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
+      <f:select/>
+    </f:entry>
+
+    <f:entry title="${%Candidate Hosts}" field="candidateHosts">
+      <f:textbox/>
+    </f:entry>
+  </f:advanced>
+
+  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster,host,candidateHosts"/>
 </j:jelly>

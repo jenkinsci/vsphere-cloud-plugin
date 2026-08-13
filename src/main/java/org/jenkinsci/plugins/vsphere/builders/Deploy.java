@@ -20,6 +20,7 @@ import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -33,9 +34,11 @@ import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -57,6 +60,13 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     /** null means use default, zero or negative means don't even try at all. */
     private final Integer timeoutInSeconds;
     private String IP;
+
+    /** Optional; unset means unchanged legacy behaviour (vCenter's own default placement). */
+    private String host;
+    /** Optional; one of "", "LEAST_LOADED", "DRS_RECOMMENDED". Ignored when {@code host} is set. */
+    private String hostSelectionMode;
+    /** Optional comma-separated allow-list restricting {@code hostSelectionMode}'s candidates. */
+    private String candidateHosts;
 
     @DataBoundConstructor
     public Deploy(String template, String clone, boolean linkedClone,
@@ -117,6 +127,33 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         return timeoutInSeconds.intValue();
     }
 
+    public String getHost() {
+        return host;
+    }
+
+    @DataBoundSetter
+    public void setHost(String host) {
+        this.host = host;
+    }
+
+    public String getHostSelectionMode() {
+        return hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    public String getCandidateHosts() {
+        return candidateHosts;
+    }
+
+    @DataBoundSetter
+    public void setCandidateHosts(String candidateHosts) {
+        this.candidateHosts = candidateHosts;
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -171,6 +208,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         String expandedDatastore = datastore;
                 String expandedFolder = folder;
                 String expandedCustomizationSpec = customizationSpec;
+        String expandedHost = host;
+        String expandedCandidateHosts = candidateHosts;
         EnvVars env;
         try {
             env = run.getEnvironment(listener);
@@ -186,6 +225,12 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             expandedDatastore = env.expand(datastore);
                         expandedFolder = env.expand(folder);
                         expandedCustomizationSpec = env.expand(customizationSpec);
+            if (host != null) {
+                expandedHost = env.expand(host);
+            }
+            if (candidateHosts != null) {
+                expandedCandidateHosts = env.expand(candidateHosts);
+            }
         }
 
         String resourcePoolName;
@@ -197,7 +242,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             resourcePoolName = env.expand(resourcePool);
         }
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, jLogger);
+        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, hostSelectionMode, expandedCandidateHosts, jLogger);
         VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
         if (!powerOn) {
             return true; // don't try to obtain IP if VM isn't being turned on.
@@ -267,11 +312,20 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             return FormValidation.validateNonNegativeInteger(value);
         }
 
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - vCenter's own default placement)", "");
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
+        }
+
         @RequirePOST
         public FormValidation doTestData(@AncestorInPath Item context,
                 @QueryParameter String serverName,
                 @QueryParameter String template, @QueryParameter String clone,
-                @QueryParameter String resourcePool, @QueryParameter String cluster) {
+                @QueryParameter String resourcePool, @QueryParameter String cluster,
+                @QueryParameter String host, @QueryParameter String candidateHosts) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
@@ -295,6 +349,18 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
                 if(!vm.getConfig().template)
                     return FormValidation.error(Messages.validation_notActually("template"));
+
+                if (host != null && !host.isEmpty() && !vsphere.hostExists(host)) {
+                    return FormValidation.error(Messages.validation_notFound("host"));
+                }
+
+                if (candidateHosts != null && !candidateHosts.isEmpty()) {
+                    for (String candidateHost : VSphereHostSelection.parseAllowList(candidateHosts)) {
+                        if (!vsphere.hostExists(candidateHost)) {
+                            return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
+                        }
+                    }
+                }
 
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {

@@ -25,6 +25,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 
 @WithJenkinsConfiguredWithCode
@@ -75,6 +76,28 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getSessionMaxAgeSecs(), is(3600));
         assertThat(cloud.getSessionMaxUses(), is(500));
         assertThat(cloud.getPoolIdleTimeoutSecs(), is(300));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code.yml")
+    void host_selection_fields_are_unset_by_default_when_not_specified_in_yaml(JenkinsConfiguredWithCodeRule r) {
+        // Backward compatibility: templates defined before this feature existed must
+        // keep behaving exactly as before (no host restriction of any kind).
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
+        assertThat(template.getTargetHost(), is(nullValue()));
+        assertThat(template.getHostSelectionMode(), is(nullValue()));
+        assertThat(template.getCandidateHosts(), is(nullValue()));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-with-host-selection.yml")
+    void should_load_host_selection_configuration_from_yaml(JenkinsConfiguredWithCodeRule r) {
+        vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
+        vSphereCloudSlaveTemplate template = cloud.getTemplates().get(0);
+        assertThat(template.getTargetHost(), is("esx01.company.example"));
+        assertThat(template.getHostSelectionMode(), is("LEAST_LOADED"));
+        assertThat(template.getCandidateHosts(), is("esx01.company.example, esx02.company.example"));
     }
 
     @Test

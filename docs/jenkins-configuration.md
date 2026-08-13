@@ -82,6 +82,10 @@ Ticking this enables the following:
   Recommended for short-lived VMs as otherwise it takes longer to clone the disks than it does for anything else.
 * Enter Cluster, Resource Pool, Datastore, Folder, Customization Specification as required, this are settings how the clone will be created in vSphere.
 Enter "Resources" as default for "Resource Pool" if you haven't explicitly defined resource pools in vCenter.
+* Target Host, Host Selection Mode, Candidate Hosts (all optional, under "Advanced..."):
+control which ESXi host within the Cluster new clones are placed on.
+See ["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on) below for details and examples.
+Leaving these blank preserves the historical behaviour (vCenter's own default placement, unaffected by this feature).
 * Labels:
 You can use these labels to configure a job where it should be built.
 Use the label in the box "Restrict where this project can be run" in the job configuration.
@@ -137,6 +141,10 @@ Note that any such functionality is dependent on there being support for it in t
 This build step will clone an existing Template or VM to a new VM.
 Linked clones are optional.
 Cluster, Resource Pool, and Datastore can be specified.
+Under "Advanced...", Host, Host Selection Mode and Candidate Hosts can be used to control
+which ESXi host the clone is placed on - see
+["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on)
+below.
 
 #### Deploy VM from Template
 
@@ -144,6 +152,60 @@ This build step will create a VM from the specified template.
 The template must have at least one snapshot before it can be cloned.
 A linked clone may optionally be chosen.
 The new VM will be placed in the same folder and storage device as the original template, and will use the specified ResourcePool and Cluster.
+Under "Advanced...", Host, Host Selection Mode and Candidate Hosts can be used to control
+which ESXi host the clone is placed on - see
+["Controlling which ESXi host a clone lands on"](#controlling-which-esxi-host-a-clone-lands-on)
+below.
+
+#### Controlling which ESXi host a clone lands on
+
+By default (all three fields left blank), clones are placed wherever vCenter's own
+default placement logic decides - in practice, often the same host the source
+VM/template is registered on, which can unbalance load across a cluster over time.
+**This is unchanged from previous plugin versions**: nothing about existing jobs,
+pipelines, or templates changes unless you explicitly set one of these fields.
+
+Three independent, optional mechanisms are available, in order of precedence:
+
+1. **Host** (`host` on the build steps, `targetHost` on cloud templates) - pin the clone
+   to one named ESXi host. Always wins if set. Works on any vSphere edition/license and
+   any permission setup, including a service account restricted to a single host. Best
+   for small/test labs, or whenever you want full manual control.
+
+   *Example (build step):* `Host: esx-rack3-host07.example.com`
+
+2. **Host Selection Mode** (`hostSelectionMode`) - used only when "Host" is blank, this
+   lets the plugin pick automatically:
+   * `LEAST_LOADED` - the plugin reads current CPU/memory usage for each candidate host
+     and picks the least loaded one itself. No DRS license/feature is required, so this
+     works on Essentials/Standard editions or on a cluster with DRS turned off. It does
+     not know about VMware's own affinity/anti-affinity rules, HA reservations, or
+     storage placement policies - it is a simple, dependency-free heuristic, well suited
+     to quick/test setups or environments without a DRS license.
+   * `DRS_RECOMMENDED` - asks vCenter's own DRS engine for a placement recommendation,
+     restricted to the candidate hosts. This honours the cluster's real DRS/HA/affinity/
+     storage policies, but **requires DRS to be enabled and licensed on the cluster**
+     (vSphere Enterprise Plus, or an equivalent edition/license). If DRS is unavailable,
+     disabled, or gives no recommendation, the plugin automatically falls back to
+     `LEAST_LOADED` behaviour (logged as a warning) rather than failing the build. This
+     is the recommended choice for enterprise environments that already rely on DRS, so
+     that Jenkins agent placement follows the same policy as everything else.
+
+3. **Candidate Hosts** (`candidateHosts`) - an optional comma-separated allow-list, e.g.
+   `esx01.example.com, esx02.example.com, esx03.example.com`, that restricts what "Host
+   Selection Mode" is allowed to consider. Not every host visible in a cluster is
+   necessarily usable by the vCenter account running the connection - a vCenter admin
+   may restrict provisioning permission to a subset of hosts - so this is the mechanism
+   to keep automatic selection within permitted hosts. It is **not verified live**
+   against actual vCenter permissions: an incorrect entry, or a host the account cannot
+   actually write to, only surfaces as a vCenter-side error when a clone is attempted.
+   Leave blank to consider every (connected, non-maintenance-mode) host in the cluster.
+
+In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
+spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise
+Plus (or similar) and want placement to follow the same DRS policy as the rest of the
+cluster; use "Candidate Hosts" whenever the automation account can't write to every
+host vCenter shows you.
 
 #### Convert VM to Template
 
