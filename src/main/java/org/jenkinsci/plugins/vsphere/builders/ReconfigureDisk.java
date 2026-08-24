@@ -238,8 +238,10 @@ public class ReconfigureDisk extends ReconfigureStep {
 		map.put(7, true); // Unit number 7 is reserved for the controller
 
 		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+			// getControllerKey() is optional in the API, so compare from the controller's own key to keep a
+			// device without one from unboxing null
 			if (vmDevice.getUnitNumber() != null &&
-					(vmDevice.getControllerKey() == controller.getKey() || vmDevice.getKey() == controller.getKey())) {
+					(Integer.valueOf(controller.getKey()).equals(vmDevice.getControllerKey()) || vmDevice.getKey() == controller.getKey())) {
 				map.put(vmDevice.getUnitNumber(), true);
 			}
 		}
