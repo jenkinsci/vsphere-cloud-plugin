@@ -833,8 +833,10 @@ public class VSphere {
         try {
             Task task;
             if (snap!=null) {
-                //Does not delete subtree; Implicitly consolidates disk
-                task = snap.removeSnapshot_Task(false);
+                //Does not delete subtree; consolidates the disk, which the API did implicitly while the flag was
+                //omitted - it has to be explicit now, as the single-argument overload delegates a null Boolean
+                //that the SDK unboxes
+                task = snap.removeSnapshot_Task(false, Boolean.TRUE);
                 if (!task.waitForTask().equals(Task.SUCCESS)) {
                     throw newVSphereException(task.getTaskInfo(), "Could not delete snapshot");
                 }
