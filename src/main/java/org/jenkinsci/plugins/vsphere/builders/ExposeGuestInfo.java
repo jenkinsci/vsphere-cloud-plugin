@@ -60,6 +60,12 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
         return envVariablePrefix;
     }
 
+    public boolean isWaitForIp4() {
+        // Null whenever the flag was never set: a pipeline step that omits it, or a job configured before
+        // the field existed. Waiting was not an option back then, so that is the compatible answer.
+        return Boolean.TRUE.equals(waitForIp4);
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -133,7 +139,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
         }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
 
-        if (waitForIp4){
+        if (isWaitForIp4()){
             String prefix = resolvedEnvVariablePrefix == null ? envVariablePrefix : resolvedEnvVariablePrefix;
             String machineIP = envAction.data.get(prefix + "_IpAddress");
             while (!ipv4Pattern.matcher(machineIP).find()) {

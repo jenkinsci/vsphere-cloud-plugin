@@ -216,7 +216,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             break;
                     }
 
-                    if (waitForVMTools) {
+                    // Null in agent configurations saved before the field existed, as with overrideLaunchSupported
+                    if (Boolean.TRUE.equals(waitForVMTools)) {
                         vSphereCloud.Log(slaveComputer, taskListener, "Waiting for VMTools");
 
                         Calendar target = Calendar.getInstance();
