@@ -24,6 +24,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import com.vmware.vim25.ResourceAllocationInfo;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
@@ -34,11 +35,16 @@ public class ReconfigureCpu extends ReconfigureStep {
 
     private final String cpuCores;
     private final String coresPerSocket;
+    private final String cpuLimitMHz;
+    private final ResourceAllocationInfo cpuReservation;
 
 	@DataBoundConstructor
-	public ReconfigureCpu(String cpuCores, String coresPerSocket) throws VSphereException {
+	public ReconfigureCpu(String cpuCores, String coresPerSocket, String cpuLimitMHz) throws VSphereException {
 		this.cpuCores = cpuCores;
         this.coresPerSocket = coresPerSocket;
+        this.cpuLimitMHz = cpuLimitMHz;
+        this.cpuReservation = new ResourceAllocationInfo();
+        this.cpuReservation.setReservation((long)Integer.valueOf(this.cpuLimitMHz));
 	}
 
 	public String getCpuCores() {
@@ -75,6 +81,8 @@ public class ReconfigureCpu extends ReconfigureStep {
         PrintStream jLogger = listener.getLogger();
         String expandedCPUCores = cpuCores;
         String expandedCoresPerSocket = coresPerSocket;
+        ResourceAllocationInfo resAllInfo = cpuReservation;
+
         EnvVars env;
         try {
             env = run.getEnvironment(listener);
@@ -91,6 +99,7 @@ public class ReconfigureCpu extends ReconfigureStep {
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: CPU");
         spec.setNumCPUs(Integer.valueOf(expandedCPUCores));
         spec.setNumCoresPerSocket(Integer.valueOf(expandedCoresPerSocket));
+        spec.setCpuAllocation(resAllInfo);
 
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
