@@ -35,7 +35,10 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
 
 public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
@@ -282,32 +285,27 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     /**
-     * Finds an existing network adapter by its PCI unit number (vSphere's own zero-based device
-     * addressing), rather than by its (freely renameable) device label. Ambiguous only if the VM
-     * has adapters sharing a unit number across more than one controller, which is rare; use
-     * deviceLabel instead in that case.
+     * Finds the Nth network adapter (zero-based), counting only network adapters rather than the
+     * VM's PCI unit numbers directly -- those are shared with unrelated PCI-bus devices (storage/USB/
+     * video controllers etc.), so raw PCI unit number doesn't correspond to "the Nth NIC". Adapters
+     * are ordered by their own (still vSphere-assigned, not user-invented) unit number, so the result
+     * is deterministic for a given VM hardware configuration without depending on device label text.
      */
-    private VirtualEthernetCard findNetworkDeviceByUnitNumber(VirtualDevice[] devices, int unitNumber) throws VSphereException {
-        VirtualEthernetCard match = null;
-
+    private VirtualEthernetCard findNetworkDeviceByUnitNumber(VirtualDevice[] devices, int index) throws VSphereException {
+        List<VirtualEthernetCard> nics = new ArrayList<VirtualEthernetCard>();
         for (VirtualDevice vd : devices) {
-            if (!(vd instanceof VirtualEthernetCard) || vd.getUnitNumber() == null) {
-                continue;
-            }
-            if (vd.getUnitNumber() == unitNumber) {
-                if (match != null) {
-                    throw new VSphereException(String.format(
-                            "Multiple network adapters found with unit number %d; use deviceLabel instead", unitNumber));
-                }
-                match = (VirtualEthernetCard) vd;
+            if (vd instanceof VirtualEthernetCard && vd.getUnitNumber() != null) {
+                nics.add((VirtualEthernetCard) vd);
             }
         }
+        nics.sort(Comparator.comparingInt(VirtualDevice::getUnitNumber));
 
-        if (match == null) {
-            throw new VSphereException("Could not find a network adapter with unit number " + unitNumber);
+        if (index < 0 || index >= nics.size()) {
+            throw new VSphereException(String.format(
+                    "VM has %d network adapters; no adapter with deviceNumber %d", nics.size(), index));
         }
 
-        return match;
+        return nics.get(index);
     }
 
     @Extension

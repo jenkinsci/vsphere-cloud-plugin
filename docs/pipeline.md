@@ -374,7 +374,8 @@ buildStep: [$class: 'Reconfigure',
                  deviceAction: 'EDIT',       // ADD, EDIT, or REMOVE
                  deviceLabel: 'Network adapter 1',
                  // deviceNumber: '0',       // alternative to deviceLabel (mutually exclusive); zero-based
-                                             // PCI unit number; only valid for EDIT/REMOVE, not ADD
+                                             // index among the VM's network adapters only (not a raw
+                                             // PCI slot number); only valid for EDIT/REMOVE, not ADD
                  macAddress: '',
                  standardSwitch: true,
                  portGroup: 'VM Network',
