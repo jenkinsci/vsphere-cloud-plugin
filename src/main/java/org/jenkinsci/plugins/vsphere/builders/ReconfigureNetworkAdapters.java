@@ -28,6 +28,7 @@ import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -40,6 +41,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
     private final DeviceAction deviceAction;
     private final String deviceLabel;
+    private String deviceNumber;
     private final String macAddress;
     private final boolean standardSwitch;
     private final String portGroup;
@@ -67,6 +69,15 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
     public String getDeviceLabel() {
         return deviceLabel;
+    }
+
+    public String getDeviceNumber() {
+        return deviceNumber;
+    }
+
+    @DataBoundSetter
+    public void setDeviceNumber(String deviceNumber) {
+        this.deviceNumber = deviceNumber;
     }
 
     public String getMacAddress() {
@@ -117,6 +128,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
         String expandedDeviceLabel = deviceLabel;
+        String expandedDeviceNumber = deviceNumber;
         String expandedMacAddress = macAddress;
         String expandedPortGroup = portGroup;
         String expandedDistributedPortGroup = distributedPortGroup;
@@ -130,14 +142,28 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         if (run instanceof AbstractBuild) {
             env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
             expandedDeviceLabel = env.expand(deviceLabel);
+            if (deviceNumber != null) {
+                expandedDeviceNumber = env.expand(deviceNumber);
+            }
             expandedMacAddress = env.expand(macAddress);
             expandedPortGroup = env.expand(portGroup);
             expandedDistributedPortGroup = env.expand(distributedPortGroup);
             expandedDistributedPortId = env.expand(distributedPortId);
         }
-        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter \"" + expandedDeviceLabel + "\"");
+
+        boolean hasLabel = expandedDeviceLabel != null && !expandedDeviceLabel.isEmpty();
+        boolean hasNumber = expandedDeviceNumber != null && !expandedDeviceNumber.isEmpty();
+        if (hasLabel && hasNumber) {
+            throw new VSphereException("Specify either deviceLabel or deviceNumber, not both");
+        }
+
+        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter " +
+                (hasNumber ? ("#" + expandedDeviceNumber) : ("\"" + expandedDeviceLabel + "\"")));
         VirtualEthernetCard vEth = null;
         if (deviceAction == DeviceAction.ADD) {
+            if (hasNumber) {
+                throw new VSphereException("deviceNumber is not supported for the Add action; use deviceLabel to name the new adapter");
+            }
             vEth = new VirtualE1000();
             vEth.setBacking(new VirtualEthernetCardNetworkBackingInfo());
             Description description = vEth.getDeviceInfo();
@@ -146,6 +172,8 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             }
             description.setLabel(expandedDeviceLabel);
             vEth.setDeviceInfo(description);
+        } else if (hasNumber) {
+            vEth = findNetworkDeviceByUnitNumber(vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
         } else {
             vEth = findNetworkDeviceByLabel(vm.getConfig().getHardware().getDevice(), expandedDeviceLabel);
         }
@@ -253,6 +281,35 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         return null;
     }
 
+    /**
+     * Finds an existing network adapter by its PCI unit number (vSphere's own zero-based device
+     * addressing), rather than by its (freely renameable) device label. Ambiguous only if the VM
+     * has adapters sharing a unit number across more than one controller, which is rare; use
+     * deviceLabel instead in that case.
+     */
+    private VirtualEthernetCard findNetworkDeviceByUnitNumber(VirtualDevice[] devices, int unitNumber) throws VSphereException {
+        VirtualEthernetCard match = null;
+
+        for (VirtualDevice vd : devices) {
+            if (!(vd instanceof VirtualEthernetCard) || vd.getUnitNumber() == null) {
+                continue;
+            }
+            if (vd.getUnitNumber() == unitNumber) {
+                if (match != null) {
+                    throw new VSphereException(String.format(
+                            "Multiple network adapters found with unit number %d; use deviceLabel instead", unitNumber));
+                }
+                match = (VirtualEthernetCard) vd;
+            }
+        }
+
+        if (match == null) {
+            throw new VSphereException("Could not find a network adapter with unit number " + unitNumber);
+        }
+
+        return match;
+    }
+
     @Extension
     public static final class ReconfigureNetworkAdaptersDescriptor extends ReconfigureStepDescriptor {
 
@@ -266,19 +323,37 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
         }
-    
+
+        public FormValidation doCheckDeviceNumber(@QueryParameter String value)
+                throws IOException, ServletException {
+            if (value == null || value.isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                if (Integer.parseInt(value) < 0) {
+                    return FormValidation.error(Messages.validation_positiveInteger(value));
+                }
+            } catch (NumberFormatException e) {
+                return FormValidation.error(Messages.validation_positiveInteger(value));
+            }
+            return FormValidation.ok();
+        }
+
         @Override
         public String getDisplayName() {
             return Messages.vm_title_ReconfigureNetworkAdapter();
         }
-    
+
         public FormValidation doTestData(@QueryParameter DeviceAction deviceAction, @QueryParameter String deviceLabel,
-                @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
+                @QueryParameter String deviceNumber, @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
                 @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
                 @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
             try {
                 if (standardSwitch && distributedSwitch) {
                     return FormValidation.error(Messages.validation_wrongSwitchSelection());
+                }
+                if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
+                    return FormValidation.error("Specify either Device Label or Device Number, not both");
                 }
                 return doCheckMacAddress(macAddress);
             } catch (Exception e) {
