@@ -346,8 +346,15 @@ buildStep: [$class: 'Reconfigure',
                 [$class: 'ReconfigureMemory',
                  memorySize: '8192'],        // megabytes
                 [$class: 'ReconfigureDisk',
-                 diskSize: '51200',          // megabytes
+                 diskSize: '50',             // gigabytes; adds a new disk by default
                  datastore: 'my-datastore'],
+                [$class: 'ReconfigureDisk',
+                 deviceAction: 'EDIT',       // resize an existing disk instead of adding one
+                 deviceLabel: 'kube15_0',    // vSphere device label ("Hard disk 1") or disk file base name;
+                                             // may be omitted if the VM has only one disk
+                                             // NOTE: you should subsequently follow your OS procedures
+                                             // to take advantage of the added disk space
+                 diskSize: '200'],           // gigabytes; must be >= the disk's current size
                 [$class: 'ReconfigureNetworkAdapters',
                  deviceAction: 'EDIT',       // ADD, EDIT, or REMOVE
                  deviceLabel: 'Network adapter 1',

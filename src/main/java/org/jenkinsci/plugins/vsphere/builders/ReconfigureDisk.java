@@ -31,6 +31,7 @@ import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -48,6 +49,8 @@ public class ReconfigureDisk extends ReconfigureStep {
 
 	private final String diskSize;
 	private final String datastore;
+	private DeviceAction deviceAction = DeviceAction.ADD;
+	private String deviceLabel;
 	private final static Pattern filenamePattern = Pattern.compile("^\\[[^]]*\\] (.*)$");
 
 	@DataBoundConstructor
@@ -62,6 +65,24 @@ public class ReconfigureDisk extends ReconfigureStep {
 
 	public String getDataStore() {
 		return datastore;
+	}
+
+	public DeviceAction getDeviceAction() {
+		return deviceAction;
+	}
+
+	@DataBoundSetter
+	public void setDeviceAction(DeviceAction deviceAction) {
+		this.deviceAction = deviceAction == null ? DeviceAction.ADD : deviceAction;
+	}
+
+	public String getDeviceLabel() {
+		return deviceLabel;
+	}
+
+	@DataBoundSetter
+	public void setDeviceLabel(String deviceLabel) {
+		this.deviceLabel = deviceLabel;
 	}
 
 	@Override
@@ -89,6 +110,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 
 		PrintStream jLogger = listener.getLogger();
 		int diskSize = Integer.parseInt(this.diskSize);
+		String expandedDeviceLabel = deviceLabel;
 		EnvVars env;
 
 		try {
@@ -96,8 +118,13 @@ public class ReconfigureDisk extends ReconfigureStep {
 			if (run instanceof AbstractBuild) {
 				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
 				diskSize = Integer.parseInt(env.expand(this.diskSize));
+				if (deviceLabel != null) {
+					expandedDeviceLabel = env.expand(deviceLabel);
+				}
 			}
-			VirtualDeviceConfigSpec vdiskSpec = createAddDiskConfigSpec(vm, diskSize, jLogger);
+			VirtualDeviceConfigSpec vdiskSpec = (deviceAction == DeviceAction.EDIT)
+					? createEditDiskConfigSpec(vm, diskSize, expandedDeviceLabel, jLogger)
+					: createAddDiskConfigSpec(vm, diskSize, jLogger);
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
 
 			spec.setDeviceChange(vdiskSpecArray);
@@ -194,6 +221,92 @@ public class ReconfigureDisk extends ReconfigureStep {
 		diskSpec.setDevice(disk);
 
 		return diskSpec;
+	}
+
+	private VirtualDeviceConfigSpec createEditDiskConfigSpec(
+			VirtualMachine vm, int diskSize, String label, PrintStream jLogger) throws VSphereException
+	{
+		VirtualDisk disk = findDiskByLabel(vm, label);
+
+		long diskSizeInKB = (long) diskSize * 1024 * 1024;
+		long currentSizeInKB = disk.getCapacityInKB();
+
+		if (diskSizeInKB < currentSizeInKB) {
+			throw new VSphereException(String.format(
+					"Cannot shrink disk %s from %dGB to %dGB", diskBaseName(disk), currentSizeInKB / 1024 / 1024, diskSize));
+		}
+
+		VSphereLogger.vsLogger(jLogger, String.format(
+				"Resizing disk %s from %dGB to %dGB", diskBaseName(disk), currentSizeInKB / 1024 / 1024, diskSize));
+
+		disk.setCapacityInKB(diskSizeInKB);
+
+		VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
+		diskSpec.setOperation(VirtualDeviceConfigSpecOperation.edit);
+		diskSpec.setDevice(disk);
+
+		return diskSpec;
+	}
+
+	/**
+	 * Finds the disk to resize. Disks are matched either by their vSphere device label (e.g. "Hard disk 1")
+	 * or by their backing file's base name (e.g. "kube15_1", derived from "[datastore1] kube15/kube15_1.vmdk").
+	 * If no label is given and the VM has exactly one disk, that disk is used.
+	 */
+	private VirtualDisk findDiskByLabel(VirtualMachine vm, String label) throws VSphereException {
+		VirtualDisk match = null;
+		VirtualDisk onlyDisk = null;
+		int diskCount = 0;
+
+		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+			if (!(vmDevice instanceof VirtualDisk)) {
+				continue;
+			}
+			VirtualDisk disk = (VirtualDisk) vmDevice;
+			diskCount++;
+			onlyDisk = disk;
+
+			if (label == null || label.isEmpty()) {
+				continue;
+			}
+
+			String baseName = diskBaseName(disk);
+			Description info = disk.getDeviceInfo();
+			if (label.equals(baseName) || (info != null && label.equals(info.getLabel()))) {
+				match = disk;
+			}
+		}
+
+		if (label == null || label.isEmpty()) {
+			if (diskCount == 1) {
+				return onlyDisk;
+			}
+			throw new VSphereException(String.format(
+					"VM %s has %d disks attached; deviceLabel is required to select which one to resize", vm.getName(), diskCount));
+		}
+
+		if (match == null) {
+			throw new VSphereException("Could not find disk named " + label);
+		}
+
+		return match;
+	}
+
+	private String diskBaseName(VirtualDisk disk) {
+		if (!(disk.getBacking() instanceof VirtualDeviceFileBackingInfo)) {
+			return null;
+		}
+		VirtualDeviceFileBackingInfo info = (VirtualDeviceFileBackingInfo) disk.getBacking();
+		Matcher m = filenamePattern.matcher(info.getFileName());
+		if (!m.matches()) {
+			return null;
+		}
+		String relativePath = m.group(1);
+		String baseName = relativePath.substring(relativePath.lastIndexOf('/') + 1);
+		if (baseName.endsWith(".vmdk")) {
+			baseName = baseName.substring(0, baseName.length() - ".vmdk".length());
+		}
+		return baseName;
 	}
 
 	private VirtualLsiLogicController addSCSIController(VirtualMachine vm) throws Exception {
