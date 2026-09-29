@@ -362,6 +362,12 @@ buildStep: [$class: 'Reconfigure',
                                              // to take advantage of the added disk space
                  diskSize: '200'],           // gigabytes; must be >= the disk's current size
                 [$class: 'ReconfigureDisk',
+                 deviceAction: 'EDIT',
+                 deviceNumber: '0',          // alternative to deviceLabel (mutually exclusive); zero-based.
+                                             // Selects the disk by its actual SCSI unit number (vSphere's
+                                             // own numbering, e.g. "SCSI(0:0)") instead of its file name.
+                 diskSize: '200'],
+                [$class: 'ReconfigureDisk',
                  deviceAction: 'REMOVE',     // detaches the disk AND deletes its backing file (DESTRUCTIVE)
                  deviceLabel: 'kube15_data'],
                 [$class: 'ReconfigureNetworkAdapters',

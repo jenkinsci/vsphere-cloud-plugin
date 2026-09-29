@@ -51,6 +51,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 	private final String datastore;
 	private DeviceAction deviceAction = DeviceAction.ADD;
 	private String deviceLabel;
+	private String deviceNumber;
 	private final static Pattern filenamePattern = Pattern.compile("^\\[[^]]*\\] (.*)$");
 
 	@DataBoundConstructor
@@ -85,6 +86,15 @@ public class ReconfigureDisk extends ReconfigureStep {
 		this.deviceLabel = deviceLabel;
 	}
 
+	public String getDeviceNumber() {
+		return deviceNumber;
+	}
+
+	@DataBoundSetter
+	public void setDeviceNumber(String deviceNumber) {
+		this.deviceNumber = deviceNumber;
+	}
+
 	@Override
 	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
@@ -111,6 +121,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 		PrintStream jLogger = listener.getLogger();
 		String expandedDiskSize = this.diskSize;
 		String expandedDeviceLabel = deviceLabel;
+		String expandedDeviceNumber = deviceNumber;
 		EnvVars env;
 
 		try {
@@ -123,19 +134,29 @@ public class ReconfigureDisk extends ReconfigureStep {
 				if (deviceLabel != null) {
 					expandedDeviceLabel = env.expand(deviceLabel);
 				}
+				if (deviceNumber != null) {
+					expandedDeviceNumber = env.expand(deviceNumber);
+				}
 			}
+
+			boolean hasLabel = expandedDeviceLabel != null && !expandedDeviceLabel.isEmpty();
+			boolean hasNumber = expandedDeviceNumber != null && !expandedDeviceNumber.isEmpty();
+			if (hasLabel && hasNumber) {
+				throw new VSphereException("Specify either deviceLabel or deviceNumber, not both");
+			}
+			Integer diskNumber = hasNumber ? Integer.valueOf(expandedDeviceNumber) : null;
 
 			VirtualDeviceConfigSpec vdiskSpec;
 			switch (deviceAction) {
 				case EDIT:
-					vdiskSpec = createEditDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, jLogger);
+					vdiskSpec = createEditDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, diskNumber, jLogger);
 					break;
 				case REMOVE:
-					vdiskSpec = createRemoveDiskConfigSpec(vm, expandedDeviceLabel, jLogger);
+					vdiskSpec = createRemoveDiskConfigSpec(vm, expandedDeviceLabel, diskNumber, jLogger);
 					break;
 				case ADD:
 				default:
-					vdiskSpec = createAddDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, jLogger);
+					vdiskSpec = createAddDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, diskNumber, jLogger);
 					break;
 			}
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
@@ -150,13 +171,13 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	private VirtualDeviceConfigSpec createAddDiskConfigSpec(
-			VirtualMachine vm, int diskSize, String label, PrintStream jLogger) throws Exception
+			VirtualMachine vm, int diskSize, String label, Integer deviceNumber, PrintStream jLogger) throws Exception
 	{
-		return createAddDiskConfigSpec(vm, diskSize, label, jLogger, 0);
+		return createAddDiskConfigSpec(vm, diskSize, label, deviceNumber, jLogger, 0);
 	}
 
 	private VirtualDeviceConfigSpec createAddDiskConfigSpec(
-			VirtualMachine vm, int diskSize, String label, PrintStream jLogger, Integer retry) throws Exception
+			VirtualMachine vm, int diskSize, String label, Integer deviceNumber, PrintStream jLogger, Integer retry) throws Exception
 	{
 		VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
 		VirtualDisk disk =  new VirtualDisk();
@@ -190,7 +211,12 @@ public class ReconfigureDisk extends ReconfigureStep {
 		}
 
 		String diskName;
-		if (label != null && !label.isEmpty()) {
+		if (deviceNumber != null) {
+			diskName = String.format("%s_%d", vm.getName(), deviceNumber);
+			if (diskNames.containsKey(String.format("%s/%s.vmdk", vm.getName(), diskName))) {
+				throw new VSphereException("A disk named " + diskName + " already exists");
+			}
+		} else if (label != null && !label.isEmpty()) {
 			if (diskNames.containsKey(String.format("%s/%s.vmdk", vm.getName(), label))) {
 				throw new VSphereException("A disk named " + label + " already exists");
 			}
@@ -213,7 +239,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			}
 			VSphereLogger.vsLogger(jLogger, String.format("Adding a SCSI Controller"));
 			addSCSIController(vm);
-			return createAddDiskConfigSpec(vm, diskSize, label, jLogger, retry + 1);
+			return createAddDiskConfigSpec(vm, diskSize, label, deviceNumber, jLogger, retry + 1);
 		}
 
 		unitNumber = selectUnitNumber(vm, scsiController);
@@ -245,9 +271,11 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	private VirtualDeviceConfigSpec createEditDiskConfigSpec(
-			VirtualMachine vm, int diskSize, String label, PrintStream jLogger) throws VSphereException
+			VirtualMachine vm, int diskSize, String label, Integer deviceNumber, PrintStream jLogger) throws VSphereException
 	{
-		VirtualDisk disk = findDiskByLabel(vm, label, true);
+		VirtualDisk disk = (deviceNumber != null)
+				? findDiskByUnitNumber(vm, deviceNumber)
+				: findDiskByLabel(vm, label, true);
 
 		long diskSizeInKB = (long) diskSize * 1024 * 1024;
 		long currentSizeInKB = disk.getCapacityInKB();
@@ -270,11 +298,13 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	private VirtualDeviceConfigSpec createRemoveDiskConfigSpec(
-			VirtualMachine vm, String label, PrintStream jLogger) throws VSphereException
+			VirtualMachine vm, String label, Integer deviceNumber, PrintStream jLogger) throws VSphereException
 	{
 		// Unlike EDIT, a lone disk is never auto-selected here: removing the wrong disk is destructive
-		// and unrecoverable, so an explicit deviceLabel is always required.
-		VirtualDisk disk = findDiskByLabel(vm, label, false);
+		// and unrecoverable, so an explicit deviceLabel or deviceNumber is always required.
+		VirtualDisk disk = (deviceNumber != null)
+				? findDiskByUnitNumber(vm, deviceNumber)
+				: findDiskByLabel(vm, label, false);
 
 		VSphereLogger.vsLogger(jLogger, String.format(
 				"Removing disk %s (%dGB) and deleting its backing file", diskBaseName(disk), disk.getCapacityInKB() / 1024 / 1024));
@@ -327,6 +357,35 @@ public class ReconfigureDisk extends ReconfigureStep {
 
 		if (match == null) {
 			throw new VSphereException("Could not find disk named " + label);
+		}
+
+		return match;
+	}
+
+	/**
+	 * Finds an existing disk by its SCSI unit number (vSphere's own zero-based device addressing,
+	 * e.g. "SCSI(0:2)"), rather than by parsing an opinionated file naming convention. Ambiguous only
+	 * if the VM has disks sharing a unit number across more than one SCSI controller, which is rare;
+	 * use deviceLabel instead in that case.
+	 */
+	private VirtualDisk findDiskByUnitNumber(VirtualMachine vm, int unitNumber) throws VSphereException {
+		VirtualDisk match = null;
+
+		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+			if (!(vmDevice instanceof VirtualDisk) || vmDevice.getUnitNumber() == null) {
+				continue;
+			}
+			if (vmDevice.getUnitNumber() == unitNumber) {
+				if (match != null) {
+					throw new VSphereException(String.format(
+							"Multiple disks found with unit number %d (VM has more than one SCSI controller); use deviceLabel instead", unitNumber));
+				}
+				match = (VirtualDisk) vmDevice;
+			}
+		}
+
+		if (match == null) {
+			throw new VSphereException("Could not find a disk with unit number " + unitNumber);
 		}
 
 		return match;
@@ -450,14 +509,34 @@ public class ReconfigureDisk extends ReconfigureStep {
 				throws IOException, ServletException {
 			return FormValidation.ok();
 		}
+
+		public FormValidation doCheckDeviceNumber(@QueryParameter String value)
+				throws IOException, ServletException {
+			if (value == null || value.isEmpty()) {
+				return FormValidation.ok();
+			}
+			try {
+				if (Integer.parseInt(value) < 0) {
+					return FormValidation.error(Messages.validation_positiveInteger(value));
+				}
+			} catch (NumberFormatException e) {
+				return FormValidation.error(Messages.validation_positiveInteger(value));
+			}
+			return FormValidation.ok();
+		}
+
 		@Override
 		public String getDisplayName() {
 			return Messages.vm_title_ReconfigureDisk();
 		}
 
-		public FormValidation doTestData(@QueryParameter String diskSize, @QueryParameter String datastore) {
+		public FormValidation doTestData(@QueryParameter String diskSize, @QueryParameter String datastore,
+				@QueryParameter String deviceLabel, @QueryParameter String deviceNumber) {
 			try {
-				if (Integer.valueOf(diskSize) < 0) {
+				if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
+					return FormValidation.error("Specify either Device Label or Device Number, not both");
+				}
+				if (diskSize != null && !diskSize.isEmpty() && Integer.valueOf(diskSize) < 0) {
 					return FormValidation.error(Messages.validation_positiveInteger(diskSize));
 				}
 				return FormValidation.ok();

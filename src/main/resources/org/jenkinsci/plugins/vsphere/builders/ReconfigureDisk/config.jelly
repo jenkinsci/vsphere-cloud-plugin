@@ -24,6 +24,9 @@ limitations under the License.
     <f:entry title="${%Device Label}" field="deviceLabel">
         <f:textbox />
     </f:entry>
+    <f:entry title="${%Device Number}" field="deviceNumber">
+        <f:textbox />
+    </f:entry>
     <f:entry title="${%Datastore}" field="datastore">
         <f:textbox />
     </f:entry>

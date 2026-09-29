@@ -1,0 +1,11 @@
+<div>
+  Alternative to Device Label; cannot be combined with it. Zero-based.
+  <ul>
+    <li><b>Add</b>: names the new disk's file "&lt;vm&gt;_&lt;N&gt;", the same convention used
+      when no name is given (fails if a disk with that name already exists).</li>
+    <li><b>Edit</b>/<b>Remove</b>: selects the disk by its SCSI unit number, i.e. its position on
+      the controller (as shown e.g. "SCSI(0:2)" in the vSphere Client) rather than by its file
+      name. This is vSphere's own numbering and does not depend on how the disk's file happens
+      to be named.</li>
+  </ul>
+</div>
