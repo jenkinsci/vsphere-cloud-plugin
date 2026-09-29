@@ -109,7 +109,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 	public boolean reconfigureDisk(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
 
 		PrintStream jLogger = listener.getLogger();
-		int diskSize = Integer.parseInt(this.diskSize);
+		String expandedDiskSize = this.diskSize;
 		String expandedDeviceLabel = deviceLabel;
 		EnvVars env;
 
@@ -117,14 +117,27 @@ public class ReconfigureDisk extends ReconfigureStep {
 			env = run.getEnvironment(listener);
 			if (run instanceof AbstractBuild) {
 				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-				diskSize = Integer.parseInt(env.expand(this.diskSize));
+				if (this.diskSize != null) {
+					expandedDiskSize = env.expand(this.diskSize);
+				}
 				if (deviceLabel != null) {
 					expandedDeviceLabel = env.expand(deviceLabel);
 				}
 			}
-			VirtualDeviceConfigSpec vdiskSpec = (deviceAction == DeviceAction.EDIT)
-					? createEditDiskConfigSpec(vm, diskSize, expandedDeviceLabel, jLogger)
-					: createAddDiskConfigSpec(vm, diskSize, jLogger);
+
+			VirtualDeviceConfigSpec vdiskSpec;
+			switch (deviceAction) {
+				case EDIT:
+					vdiskSpec = createEditDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, jLogger);
+					break;
+				case REMOVE:
+					vdiskSpec = createRemoveDiskConfigSpec(vm, expandedDeviceLabel, jLogger);
+					break;
+				case ADD:
+				default:
+					vdiskSpec = createAddDiskConfigSpec(vm, Integer.parseInt(expandedDiskSize), expandedDeviceLabel, jLogger);
+					break;
+			}
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
 
 			spec.setDeviceChange(vdiskSpecArray);
@@ -137,13 +150,13 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	private VirtualDeviceConfigSpec createAddDiskConfigSpec(
-			VirtualMachine vm, int diskSize, PrintStream jLogger) throws Exception
+			VirtualMachine vm, int diskSize, String label, PrintStream jLogger) throws Exception
 	{
-		return createAddDiskConfigSpec(vm, diskSize, jLogger, 0);
+		return createAddDiskConfigSpec(vm, diskSize, label, jLogger, 0);
 	}
 
 	private VirtualDeviceConfigSpec createAddDiskConfigSpec(
-			VirtualMachine vm, int diskSize, PrintStream jLogger, Integer retry) throws Exception
+			VirtualMachine vm, int diskSize, String label, PrintStream jLogger, Integer retry) throws Exception
 	{
 		VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
 		VirtualDisk disk =  new VirtualDisk();
@@ -176,11 +189,19 @@ public class ReconfigureDisk extends ReconfigureStep {
 			}
 		}
 
-		String diskName = null;
-		for (int i = 1; ; ++i) {
-			if (!diskNames.containsKey(String.format("%s/%s_%d.vmdk", vm.getName(), vm.getName(), i))) {
-				diskName = String.format("%s_%d", vm.getName(), i);
-				break;
+		String diskName;
+		if (label != null && !label.isEmpty()) {
+			if (diskNames.containsKey(String.format("%s/%s.vmdk", vm.getName(), label))) {
+				throw new VSphereException("A disk named " + label + " already exists");
+			}
+			diskName = label;
+		} else {
+			diskName = null;
+			for (int i = 1; ; ++i) {
+				if (!diskNames.containsKey(String.format("%s/%s_%d.vmdk", vm.getName(), vm.getName(), i))) {
+					diskName = String.format("%s_%d", vm.getName(), i);
+					break;
+				}
 			}
 		}
 
@@ -192,7 +213,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			}
 			VSphereLogger.vsLogger(jLogger, String.format("Adding a SCSI Controller"));
 			addSCSIController(vm);
-			return createAddDiskConfigSpec(vm, diskSize, jLogger, retry + 1);
+			return createAddDiskConfigSpec(vm, diskSize, label, jLogger, retry + 1);
 		}
 
 		unitNumber = selectUnitNumber(vm, scsiController);
@@ -226,7 +247,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 	private VirtualDeviceConfigSpec createEditDiskConfigSpec(
 			VirtualMachine vm, int diskSize, String label, PrintStream jLogger) throws VSphereException
 	{
-		VirtualDisk disk = findDiskByLabel(vm, label);
+		VirtualDisk disk = findDiskByLabel(vm, label, true);
 
 		long diskSizeInKB = (long) diskSize * 1024 * 1024;
 		long currentSizeInKB = disk.getCapacityInKB();
@@ -248,12 +269,31 @@ public class ReconfigureDisk extends ReconfigureStep {
 		return diskSpec;
 	}
 
+	private VirtualDeviceConfigSpec createRemoveDiskConfigSpec(
+			VirtualMachine vm, String label, PrintStream jLogger) throws VSphereException
+	{
+		// Unlike EDIT, a lone disk is never auto-selected here: removing the wrong disk is destructive
+		// and unrecoverable, so an explicit deviceLabel is always required.
+		VirtualDisk disk = findDiskByLabel(vm, label, false);
+
+		VSphereLogger.vsLogger(jLogger, String.format(
+				"Removing disk %s (%dGB) and deleting its backing file", diskBaseName(disk), disk.getCapacityInKB() / 1024 / 1024));
+
+		VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
+		diskSpec.setOperation(VirtualDeviceConfigSpecOperation.remove);
+		diskSpec.setFileOperation(VirtualDeviceConfigSpecFileOperation.destroy);
+		diskSpec.setDevice(disk);
+
+		return diskSpec;
+	}
+
 	/**
-	 * Finds the disk to resize. Disks are matched either by their vSphere device label (e.g. "Hard disk 1")
+	 * Finds an existing disk. Disks are matched either by their vSphere device label (e.g. "Hard disk 1")
 	 * or by their backing file's base name (e.g. "kube15_1", derived from "[datastore1] kube15/kube15_1.vmdk").
-	 * If no label is given and the VM has exactly one disk, that disk is used.
+	 * If no label is given, {@code allowAutoSelectSingleDisk} controls whether a VM with exactly one disk
+	 * may use it without a label.
 	 */
-	private VirtualDisk findDiskByLabel(VirtualMachine vm, String label) throws VSphereException {
+	private VirtualDisk findDiskByLabel(VirtualMachine vm, String label, boolean allowAutoSelectSingleDisk) throws VSphereException {
 		VirtualDisk match = null;
 		VirtualDisk onlyDisk = null;
 		int diskCount = 0;
@@ -278,11 +318,11 @@ public class ReconfigureDisk extends ReconfigureStep {
 		}
 
 		if (label == null || label.isEmpty()) {
-			if (diskCount == 1) {
+			if (allowAutoSelectSingleDisk && diskCount == 1) {
 				return onlyDisk;
 			}
 			throw new VSphereException(String.format(
-					"VM %s has %d disks attached; deviceLabel is required to select which one to resize", vm.getName(), diskCount));
+					"VM %s has %d disks attached; deviceLabel is required to select which one to use", vm.getName(), diskCount));
 		}
 
 		if (match == null) {

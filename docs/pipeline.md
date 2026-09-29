@@ -346,15 +346,24 @@ buildStep: [$class: 'Reconfigure',
                 [$class: 'ReconfigureMemory',
                  memorySize: '8192'],        // megabytes
                 [$class: 'ReconfigureDisk',
-                 diskSize: '50',             // gigabytes; adds a new disk by default
+                 diskSize: '50',             // gigabytes; adds a new disk named "my-vm_1" by default
                  datastore: 'my-datastore'],
                 [$class: 'ReconfigureDisk',
-                 deviceAction: 'EDIT',       // resize an existing disk instead of adding one
+                 deviceLabel: 'kube15_data', // optional; names the new disk's file instead of the default
+                                             // "<vm>_<N>" scheme (fails if that name is already taken)
+                 diskSize: '50',
+                 datastore: 'my-datastore'],
+                [$class: 'ReconfigureDisk',
+                 deviceAction: 'EDIT',       // ADD (default), EDIT, or REMOVE
                  deviceLabel: 'kube15_0',    // vSphere device label ("Hard disk 1") or disk file base name;
-                                             // may be omitted if the VM has only one disk
+                                             // may be omitted for EDIT if the VM has only one disk,
+                                             // but is always required for REMOVE
                                              // NOTE: you should subsequently follow your OS procedures
                                              // to take advantage of the added disk space
                  diskSize: '200'],           // gigabytes; must be >= the disk's current size
+                [$class: 'ReconfigureDisk',
+                 deviceAction: 'REMOVE',     // detaches the disk AND deletes its backing file (DESTRUCTIVE)
+                 deviceLabel: 'kube15_data'],
                 [$class: 'ReconfigureNetworkAdapters',
                  deviceAction: 'EDIT',       // ADD, EDIT, or REMOVE
                  deviceLabel: 'Network adapter 1',
