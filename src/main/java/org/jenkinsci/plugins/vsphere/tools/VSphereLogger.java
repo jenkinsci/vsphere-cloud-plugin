@@ -21,13 +21,13 @@ public class VSphereLogger {
     /**
      * This is simply a wrapper method to clean up this class.  This method
      * checks the verboseOutput flag and writes to the logger as appropriate.
-     * 
+     *
      * @param logger - logger that should receive the information
      * @param str - The text to be logged.
      */
     public static void vsLogger(PrintStream logger, String str) {
-        if (logger!=null) {
-            logger.println("["+Messages.VSphereLogger_title()+"] "+str);
+        if (logger != null) {
+            logger.println("[" + Messages.VSphereLogger_title() + "] " + str);
         }
     }
 
@@ -37,9 +37,9 @@ public class VSphereLogger {
         }
 
         if (e.getMessage() != null && (!(e instanceof RuntimeException) && e.getCause() == null)) {
-            logger.println("["+Messages.VSphereLogger_title()+"] " + e.getMessage());
+            logger.println("[" + Messages.VSphereLogger_title() + "] " + e.getMessage());
         } else {
-            logger.println("["+Messages.VSphereLogger_title()+"] Exception");
+            logger.println("[" + Messages.VSphereLogger_title() + "] Exception");
             e.printStackTrace(logger);
         }
     }

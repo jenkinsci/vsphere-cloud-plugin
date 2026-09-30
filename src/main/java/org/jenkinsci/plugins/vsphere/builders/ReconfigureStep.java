@@ -17,15 +17,14 @@ package org.jenkinsci.plugins.vsphere.builders;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
+import java.io.IOException;
+import java.util.List;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-import java.io.IOException;
-import java.util.List;
 
 /**
  * Define a base class for all Reconfigure Acion steps.  All Reconfigure Action steps should extend
@@ -35,15 +34,15 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
 
     protected VirtualMachineConfigSpec spec;
     protected VirtualMachine vm;
-	protected VSphere vsphere;
+    protected VSphere vsphere;
 
-	public VSphere getVsphere() {
-		return vsphere;
-	}
+    public VSphere getVsphere() {
+        return vsphere;
+    }
 
-	public void setVsphere(VSphere vsphere) {
-		this.vsphere = vsphere;
-	}
+    public void setVsphere(VSphere vsphere) {
+        this.vsphere = vsphere;
+    }
 
     public VirtualMachine getVM() {
         return this.vm;
@@ -61,26 +60,30 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
         this.spec = spec;
     }
 
-	public static List<ReconfigureStepDescriptor> all() {
+    public static List<ReconfigureStepDescriptor> all() {
         return Jenkins.getInstance().getDescriptorList(ReconfigureStep.class);
-	}
+    }
 
-	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws VSphereException;
+    public abstract boolean perform(
+            final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)
+            throws VSphereException;
 
-    public abstract void perform(@NonNull Run<?, ?> run, FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException;
+    public abstract void perform(
+            @NonNull Run<?, ?> run, FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener)
+            throws InterruptedException, IOException;
 
     public abstract void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException;
 
     protected VirtualDevice findDeviceByLabel(VirtualDevice[] devices, String label) {
-        for(VirtualDevice d : devices) {
-            if(d.getDeviceInfo().getLabel().contentEquals(label)) {
+        for (VirtualDevice d : devices) {
+            if (d.getDeviceInfo().getLabel().contentEquals(label)) {
                 return d;
             }
         }
         return null;
     }
 
-    protected EnvVars extractEnvironment(final Run<?, ?> run, final TaskListener listener) throws VSphereException  {
+    protected EnvVars extractEnvironment(final Run<?, ?> run, final TaskListener listener) throws VSphereException {
         try {
             EnvVars env = run.getEnvironment(listener);
 
@@ -94,28 +97,23 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
         }
     }
 
-	public static abstract class ReconfigureStepDescriptor extends Descriptor<ReconfigureStep> {
+    public abstract static class ReconfigureStepDescriptor extends Descriptor<ReconfigureStep> {
 
-		protected ReconfigureStepDescriptor() { }
+        protected ReconfigureStepDescriptor() {}
 
-		protected ReconfigureStepDescriptor(Class<? extends ReconfigureStep> clazz) {
-			super(clazz);
-		}
-	}
+        protected ReconfigureStepDescriptor(Class<? extends ReconfigureStep> clazz) {
+            super(clazz);
+        }
+    }
 
     public static enum DeviceAction {
+        ADD(Messages.vm_reconfigure_Add()) {},
 
-        ADD(Messages.vm_reconfigure_Add()) {
+        EDIT(Messages.vm_reconfigure_Edit()) {},
 
-        },
-        EDIT(Messages.vm_reconfigure_Edit()) {
+        REMOVE(Messages.vm_reconfigure_Remove()) {};
 
-        },
-        REMOVE(Messages.vm_reconfigure_Remove()) {
-
-        };
-
-        final private String label;
+        private final String label;
 
         private DeviceAction(String label) {
             this.label = label;

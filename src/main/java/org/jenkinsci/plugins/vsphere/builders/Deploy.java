@@ -16,12 +16,13 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
@@ -29,9 +30,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -44,8 +42,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import com.vmware.vim25.mo.VirtualMachine;
 
 public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
@@ -62,6 +58,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private final boolean powerOn;
     /** null means use default, zero or negative means don't even try at all. */
     private final Integer timeoutInSeconds;
+
     private String IP;
 
     /** Optional; unset means unchanged legacy behaviour (vCenter's own default placement). */
@@ -72,18 +69,27 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Set<String> hostSelectionCandidates;
 
     @DataBoundConstructor
-    public Deploy(String template, String clone, boolean linkedClone,
-            String resourcePool, String cluster, String datastore, String folder,
-            String customizationSpec, Integer timeoutInSeconds, boolean powerOn) throws VSphereException {
+    public Deploy(
+            String template,
+            String clone,
+            boolean linkedClone,
+            String resourcePool,
+            String cluster,
+            String datastore,
+            String folder,
+            String customizationSpec,
+            Integer timeoutInSeconds,
+            boolean powerOn)
+            throws VSphereException {
         this.template = template;
         this.clone = clone;
         this.linkedClone = linkedClone;
-        this.resourcePool= (resourcePool != null) ? resourcePool : "";
-        this.cluster=cluster;
-        this.datastore=datastore;
-        this.folder=folder;
-        this.customizationSpec=customizationSpec;
-        this.powerOn=powerOn;
+        this.resourcePool = (resourcePool != null) ? resourcePool : "";
+        this.cluster = cluster;
+        this.datastore = datastore;
+        this.folder = folder;
+        this.customizationSpec = customizationSpec;
+        this.powerOn = powerOn;
         this.timeoutInSeconds = timeoutInSeconds;
     }
 
@@ -124,7 +130,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     public int getTimeoutInSeconds() {
-        if (timeoutInSeconds==null) {
+        if (timeoutInSeconds == null) {
             return TIMEOUT_DEFAULT;
         }
         return timeoutInSeconds.intValue();
@@ -164,7 +170,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
      */
     @DataBoundSetter
     public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
-        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+        this.hostSelectionCandidates =
+                hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
     /**
@@ -189,7 +196,12 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         try {
             deployFromTemplate(run, launcher, listener);
         } catch (Exception e) {
@@ -203,7 +215,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
         boolean retVal = false;
         try {
             retVal = deployFromTemplate(build, launcher, listener);
@@ -211,7 +223,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             e.printStackTrace();
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
+        // TODO throw AbortException instead of returning value
     }
 
     @Override
@@ -229,14 +241,15 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         return null;
     }
 
-    private boolean deployFromTemplate(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+    private boolean deployFromTemplate(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         PrintStream jLogger = listener.getLogger();
         String expandedClone = clone;
         String expandedTemplate = template;
         String expandedCluster = cluster;
         String expandedDatastore = datastore;
-                String expandedFolder = folder;
-                String expandedCustomizationSpec = customizationSpec;
+        String expandedFolder = folder;
+        String expandedCustomizationSpec = customizationSpec;
         String expandedHost = host;
         Set<String> expandedHostSelectionCandidates = hostSelectionCandidates;
         EnvVars env;
@@ -252,8 +265,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             expandedTemplate = env.expand(template);
             expandedCluster = env.expand(cluster);
             expandedDatastore = env.expand(datastore);
-                        expandedFolder = env.expand(folder);
-                        expandedCustomizationSpec = env.expand(customizationSpec);
+            expandedFolder = env.expand(folder);
+            expandedCustomizationSpec = env.expand(customizationSpec);
             if (host != null) {
                 expandedHost = env.expand(host);
             }
@@ -276,23 +289,42 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
         final vSphereCloud sourceCloud = getSourceCloud();
         final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
-        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
-        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
-        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final Set<String> cloudDefaultHostSelectionCandidates =
+                sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode =
+                VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
+                cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
 
-        vsphere.deployVm(expandedClone, expandedTemplate, linkedClone, resourcePoolName, expandedCluster, expandedDatastore, expandedFolder, powerOn, expandedCustomizationSpec, expandedHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, jLogger);
-        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully deployed!");
+        vsphere.deployVm(
+                expandedClone,
+                expandedTemplate,
+                linkedClone,
+                resourcePoolName,
+                expandedCluster,
+                expandedDatastore,
+                expandedFolder,
+                powerOn,
+                expandedCustomizationSpec,
+                expandedHost,
+                resolvedHostSelectionMode,
+                resolvedHostSelectionCandidates,
+                jLogger);
+        VSphereLogger.vsLogger(jLogger, "\"" + expandedClone + "\" successfully deployed!");
         if (!powerOn) {
             return true; // don't try to obtain IP if VM isn't being turned on.
         }
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
-        if (timeoutInSecondsForGetIp<=0) {
+        if (timeoutInSecondsForGetIp <= 0) {
             return true; // don't try to obtain IP if disabled
         }
-        VSphereLogger.vsLogger(jLogger, "Trying to get the IP address of \""+expandedClone+"\" for the next "+timeoutInSecondsForGetIp+" seconds.");
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Trying to get the IP address of \"" + expandedClone + "\" for the next " + timeoutInSecondsForGetIp
+                        + " seconds.");
         IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
 
-        if (IP!=null) {
+        if (IP != null) {
             VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedClone + "\" : " + IP);
             VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
 
@@ -303,7 +335,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             }
             return true;
         } else {
-            VSphereLogger.vsLogger(jLogger, "Error: Timed out after waiting "+timeoutInSecondsForGetIp+" seconds to get IP for \""+expandedClone+"\" ");
+            VSphereLogger.vsLogger(
+                    jLogger,
+                    "Error: Timed out after waiting " + timeoutInSecondsForGetIp + " seconds to get IP for \""
+                            + expandedClone + "\" ");
             return false;
         }
     }
@@ -325,14 +360,12 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         public FormValidation doCheckTemplate(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error("Please enter the template name");
+            if (value.length() == 0) return FormValidation.error("Please enter the template name");
             return FormValidation.ok();
         }
 
         public FormValidation doCheckClone(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the clone name"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the clone name"));
             return FormValidation.ok();
         }
 
@@ -341,8 +374,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         public FormValidation doCheckCluster(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the cluster"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
         }
 
@@ -360,34 +392,34 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         @RequirePOST
-        public FormValidation doTestData(@AncestorInPath Item context,
+        public FormValidation doTestData(
+                @AncestorInPath Item context,
                 @QueryParameter String serverName,
-                @QueryParameter String template, @QueryParameter String clone,
-                @QueryParameter String resourcePool, @QueryParameter String cluster,
-                @QueryParameter String host, @QueryParameter String hostSelectionCandidatesAsString) {
+                @QueryParameter String template,
+                @QueryParameter String clone,
+                @QueryParameter String resourcePool,
+                @QueryParameter String cluster,
+                @QueryParameter String host,
+                @QueryParameter String hostSelectionCandidatesAsString) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
-                if (template.length() == 0 || clone.length()==0 || serverName.length()==0
-                        || cluster.length()==0 )
+                if (template.length() == 0 || clone.length() == 0 || serverName.length() == 0 || cluster.length() == 0)
                     return FormValidation.error(Messages.validation_requiredValues());
 
                 vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
-                //TODO what if clone name is variable?
+                // TODO what if clone name is variable?
                 VirtualMachine cloneVM = vsphere.getVmByName(clone);
-                if (cloneVM != null)
-                    return FormValidation.error(Messages.validation_exists("clone"));
+                if (cloneVM != null) return FormValidation.error(Messages.validation_exists("clone"));
 
                 if (template.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("template"));
 
                 VirtualMachine vm = vsphere.getVmByName(template);
-                if (vm == null)
-                    return FormValidation.error(Messages.validation_notFound("template"));
+                if (vm == null) return FormValidation.error(Messages.validation_notFound("template"));
 
-                if(!vm.getConfig().template)
-                    return FormValidation.error(Messages.validation_notActually("template"));
+                if (!vm.getConfig().template) return FormValidation.error(Messages.validation_notActually("template"));
 
                 if (host != null && !host.isEmpty() && !vsphere.hostExists(host)) {
                     return FormValidation.error(Messages.validation_notFound("host"));
@@ -420,23 +452,31 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
      */
     private static class VSphereEnvAction implements EnvironmentContributingAction {
         // Decided not to record this data in build.xml, so marked transient:
-        private final transient Map<String,String> data = new HashMap<String,String>();
+        private final transient Map<String, String> data = new HashMap<String, String>();
 
         private void add(String key, String val) {
-            if (data==null) return;
+            if (data == null) return;
             data.put(key, val);
         }
 
         @Override
-        public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
-            if (data!=null) env.putAll(data);
+        public void buildEnvVars(AbstractBuild<?, ?> build, EnvVars env) {
+            if (data != null) env.putAll(data);
         }
 
         @Override
-        public String getIconFileName() { return null; }
+        public String getIconFileName() {
+            return null;
+        }
+
         @Override
-        public String getDisplayName() { return null; }
+        public String getDisplayName() {
+            return null;
+        }
+
         @Override
-        public String getUrlName() { return null; }
+        public String getUrlName() {
+            return null;
+        }
     }
 }

@@ -2,46 +2,39 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Util;
-import hudson.model.Queue.BuildableItem;
-import hudson.model.Result;
-import hudson.model.TaskListener;
 import hudson.model.Computer;
 import hudson.model.Descriptor.FormException;
-import hudson.model.Run;
-import hudson.model.queue.CauseOfBlockage;
-import hudson.slaves.*;
-import hudson.util.FormValidation;
-
-import java.io.IOException;
-
-import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
-import org.jenkinsci.plugins.vsphere.tools.VSphereException;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
-import org.kohsuke.stapler.AncestorInPath;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
 import hudson.model.Executor;
 import hudson.model.ItemGroup;
 import hudson.model.Queue;
-
+import hudson.model.Queue.BuildableItem;
+import hudson.model.Result;
+import hudson.model.Run;
+import hudson.model.TaskListener;
+import hudson.model.queue.CauseOfBlockage;
+import hudson.slaves.*;
+import hudson.util.FormValidation;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
-
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
+import org.kohsuke.stapler.AncestorInPath;
+import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 /**
  *
@@ -59,6 +52,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private Integer LimitedTestRunCount = 0;
     /** A count of the number of build-jobs this agent has done. */
     private transient Integer NumberOfLimitedTestRuns = 0;
+
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
     // The list of agents that MIGHT be launched.
@@ -69,21 +63,44 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public transient Boolean slaveIsDisconnecting = Boolean.FALSE;
 
     @DataBoundConstructor
-    public vSphereCloudSlave(String name, String nodeDescription,
-            String remoteFS, String numExecutors, Mode mode,
-            String labelString, ComputerLauncher delegateLauncher,
+    public vSphereCloudSlave(
+            String name,
+            String nodeDescription,
+            String remoteFS,
+            String numExecutors,
+            Mode mode,
+            String labelString,
+            ComputerLauncher delegateLauncher,
             RetentionStrategy retentionStrategy,
             List<? extends NodeProperty<?>> nodeProperties,
-            String vsDescription, String vmName,
-            boolean launchSupportForced, boolean waitForVMTools,
-            String snapName, String launchDelay, String idleOption,
+            String vsDescription,
+            String vmName,
+            boolean launchSupportForced,
+            boolean waitForVMTools,
+            String snapName,
+            String launchDelay,
+            String idleOption,
             String LimitedTestRunCount)
             throws FormException, IOException {
-        super(name, nodeDescription, remoteFS, numExecutors, mode, labelString,
-              new vSphereCloudLauncher(delegateLauncher, vsDescription, vmName,
-                  launchSupportForced, waitForVMTools, snapName, launchDelay,
-                  idleOption, LimitedTestRunCount),
-              retentionStrategy, nodeProperties);
+        super(
+                name,
+                nodeDescription,
+                remoteFS,
+                numExecutors,
+                mode,
+                labelString,
+                new vSphereCloudLauncher(
+                        delegateLauncher,
+                        vsDescription,
+                        vmName,
+                        launchSupportForced,
+                        waitForVMTools,
+                        snapName,
+                        launchDelay,
+                        idleOption,
+                        LimitedTestRunCount),
+                retentionStrategy,
+                nodeProperties);
         this.vsDescription = vsDescription;
         this.vmName = vmName;
         this.snapName = snapName;
@@ -143,14 +160,19 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     protected void _terminate(final TaskListener listener) throws IOException, InterruptedException {
         try {
             Computer computer = toComputer();
-            if(computer != null) {
-                final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._vSphereCloudSlave_OfflineReason_ShuttingDown());
+            if (computer != null) {
+                final VSphereOfflineCause cause =
+                        new VSphereOfflineCause(Messages._vSphereCloudSlave_OfflineReason_ShuttingDown());
                 computer.disconnect(cause);
                 vSphereCloud.Log(this, listener, "Disconnected computer %s", vmName);
             } else {
-                vSphereCloud.Log(this, listener, "Can't disconnect computer for %s as there was no Computer node for it.", vmName);
+                vSphereCloud.Log(
+                        this,
+                        listener,
+                        "Can't disconnect computer for %s as there was no Computer node for it.",
+                        vmName);
             }
-        } catch(Exception e) {
+        } catch (Exception e) {
             vSphereCloud.Log(this, listener, e, "Can't disconnect %s", vmName);
         }
     }
@@ -183,7 +205,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     private static void InitProbableLaunch() {
-        synchronized(ProbableLaunchLock) {
+        synchronized (ProbableLaunchLock) {
             if (ProbableLaunch == null) {
                 ProbableLaunch = new ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData>();
             }
@@ -210,7 +232,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             InitProbableLaunch();
             // Clean out any probable launches that have elapsed.
             Date now = new Date();
-            Iterator<Entry<vSphereCloudSlave, ProbableLaunchData>> it = ProbableLaunch.entrySet().iterator();
+            Iterator<Entry<vSphereCloudSlave, ProbableLaunchData>> it =
+                    ProbableLaunch.entrySet().iterator();
             while (it.hasNext()) {
                 Entry<vSphereCloudSlave, ProbableLaunchData> entry = it.next();
                 if (entry.getValue().expiration.before(now)) {
@@ -232,7 +255,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public static vSphereCloudSlave ProbablyLaunchCanHandle(BuildableItem item) {
         synchronized (ProbableLaunchLock) {
             InitProbableLaunch();
-            Iterator<Entry<vSphereCloudSlave, ProbableLaunchData>> it = ProbableLaunch.entrySet().iterator();
+            Iterator<Entry<vSphereCloudSlave, ProbableLaunchData>> it =
+                    ProbableLaunch.entrySet().iterator();
             while (it.hasNext()) {
                 ProbableLaunchData data = it.next().getValue();
                 if (data.slave.canTake(item) == null) {
@@ -251,11 +275,11 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     @Override
     public CauseOfBlockage canTake(BuildableItem buildItem) {
         // https://issues.jenkins-ci.org/browse/JENKINS-30203
-        if(buildItem.task instanceof Queue.FlyweightTask) {
+        if (buildItem.task instanceof Queue.FlyweightTask) {
             return CauseOfBlockage.fromMessage(Messages._vSphereCloudSlave_BlockageReason_NoFlyweightTasks());
         }
 
-        if(slaveIsStarting == Boolean.TRUE) {
+        if (slaveIsStarting == Boolean.TRUE) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
 
@@ -266,7 +290,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         return super.canTake(buildItem);
     }
 
-    static final private ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
+    private static final ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
 
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         boolean ret = false;
@@ -285,11 +309,21 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         if (executor != null && DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
-                vSphereCloud.Log(this, listener, "Starting limited count build: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
+                vSphereCloud.Log(
+                        this,
+                        listener,
+                        "Starting limited count build: %d of %d",
+                        NumberOfLimitedTestRuns,
+                        LimitedTestRunCount);
                 Computer slave = executor.getOwner();
                 RunToSlaveMapper.put(r, slave);
             } else {
-                vSphereCloud.Log(this, listener, "Terminating build due to limited build count: %d of %d", NumberOfLimitedTestRuns, LimitedTestRunCount);
+                vSphereCloud.Log(
+                        this,
+                        listener,
+                        "Terminating build due to limited build count: %d of %d",
+                        NumberOfLimitedTestRuns,
+                        LimitedTestRunCount);
                 executor.interrupt(Result.ABORTED);
             }
         }
@@ -312,23 +346,31 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 NumberOfLimitedTestRuns = 0;
                 try {
                     if (slave != null) {
-                        vSphereCloud.Log(this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+                        vSphereCloud.Log(
+                                this,
+                                "Disconnecting the slave agent on %s due to limited build threshold",
+                                slave.getName());
 
-                        final VSphereOfflineCause tempOffline = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                        final VSphereOfflineCause tempOffline =
+                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
                         slave.setTemporarilyOffline(true, tempOffline);
                         slave.waitUntilOffline();
-                        final VSphereOfflineCause disconnect = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
+                        final VSphereOfflineCause disconnect =
+                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
                         slave.disconnect(disconnect);
-                        final VSphereOfflineCause tempOnline = new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                        final VSphereOfflineCause tempOnline =
+                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
                         slave.setTemporarilyOffline(false, tempOnline);
-                    }
-                    else {
-                        vSphereCloud.Log(this, "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
+                    } else {
+                        vSphereCloud.Log(
+                                this,
+                                "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
                     }
                 } catch (NullPointerException ex) {
                     vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
                 } catch (InterruptedException ex) {
-                    vSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
+                    vSphereCloud.Log(
+                            this, ex, "InterruptedException thrown while marking the slave as online or offline");
                 }
             }
         } else {
@@ -386,8 +428,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return result;
         }
 
-        public vSphereCloud getSpecificvSphereCloud(String vsDescription)
-                throws Exception {
+        public vSphereCloud getSpecificvSphereCloud(String vsDescription) throws Exception {
             for (vSphereCloud vs : getvSphereClouds()) {
                 if (vs.getVsDescription().equals(vsDescription)) {
                     return vs;
@@ -414,7 +455,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         }
 
         @RequirePOST
-        public FormValidation doTestConnection(@AncestorInPath ItemGroup<?> context,
+        public FormValidation doTestConnection(
+                @AncestorInPath ItemGroup<?> context,
                 @QueryParameter String vsDescription,
                 @QueryParameter String vmName,
                 @QueryParameter String snapName) {

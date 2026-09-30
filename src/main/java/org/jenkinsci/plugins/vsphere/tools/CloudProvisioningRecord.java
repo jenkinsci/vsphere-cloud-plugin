@@ -5,7 +5,6 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 
 /**
@@ -36,7 +35,8 @@ public final class CloudProvisioningRecord {
 
     @Override
     public String toString() {
-        return String.format("Template[prefix=%s, provisioned=%s, planned=%s, unwanted=%s, max=%d, fullness=%.3f%%]",
+        return String.format(
+                "Template[prefix=%s, provisioned=%s, planned=%s, unwanted=%s, max=%d, fullness=%.3f%%]",
                 getTemplate().getCloneNamePrefix(),
                 getCurrentlyProvisioned(),
                 getCurrentlyPlanned(),
@@ -97,7 +97,8 @@ public final class CloudProvisioningRecord {
     }
 
     boolean contains(String nodeName) {
-        return currentlyProvisioned.contains(nodeName) || currentlyPlanned.contains(nodeName)
+        return currentlyProvisioned.contains(nodeName)
+                || currentlyPlanned.contains(nodeName)
                 || currentlyUnwanted.containsKey(nodeName);
     }
 

@@ -22,8 +22,7 @@ public final class VSphereHostSelection {
      */
     public static final String HOST_SELECTION_MODE_NONE = "NONE";
 
-    private VSphereHostSelection() {
-    }
+    private VSphereHostSelection() {}
 
     /**
      * Describes one candidate host's name, availability and current load,
@@ -39,8 +38,14 @@ public final class VSphereHostSelection {
         private final Integer memUsageMB;
         private final long memCapacityMB;
 
-        public HostCandidate(String name, boolean connected, boolean inMaintenanceMode,
-                Integer cpuUsageMhz, int cpuCapacityMhz, Integer memUsageMB, long memCapacityMB) {
+        public HostCandidate(
+                String name,
+                boolean connected,
+                boolean inMaintenanceMode,
+                Integer cpuUsageMhz,
+                int cpuCapacityMhz,
+                Integer memUsageMB,
+                long memCapacityMB) {
             this.name = name;
             this.connected = connected;
             this.inMaintenanceMode = inMaintenanceMode;
@@ -109,7 +114,8 @@ public final class VSphereHostSelection {
      */
     public static Set<String> parseAllowList(String hostSelectionCandidatesCsv) {
         Set<String> result = new LinkedHashSet<>();
-        if (hostSelectionCandidatesCsv == null || hostSelectionCandidatesCsv.trim().isEmpty()) {
+        if (hostSelectionCandidatesCsv == null
+                || hostSelectionCandidatesCsv.trim().isEmpty()) {
             return result;
         }
         for (String name : hostSelectionCandidatesCsv.split(",")) {
@@ -143,7 +149,8 @@ public final class VSphereHostSelection {
      * anything else is parsed normally, which may still yield an empty (non-null) set.
      */
     public static Set<String> parseAllowListOrNull(String hostSelectionCandidatesCsv) {
-        if (hostSelectionCandidatesCsv == null || hostSelectionCandidatesCsv.trim().isEmpty()) {
+        if (hostSelectionCandidatesCsv == null
+                || hostSelectionCandidatesCsv.trim().isEmpty()) {
             return null;
         }
         return parseAllowList(hostSelectionCandidatesCsv);

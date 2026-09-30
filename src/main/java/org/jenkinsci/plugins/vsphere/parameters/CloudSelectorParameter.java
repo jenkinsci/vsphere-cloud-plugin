@@ -8,14 +8,13 @@ import hudson.model.ParameterValue;
 import hudson.model.SimpleParameterDefinition;
 import hudson.model.StringParameterValue;
 import hudson.util.ListBoxModel;
+import java.util.List;
 import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.export.Exported;
-
-import java.util.List;
 
 /**
  * Parameter used for selecting a vSphere cloud from a dropdown box.

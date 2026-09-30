@@ -19,6 +19,7 @@ import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUse
 import com.cloudbees.hudson.plugins.folder.AbstractFolderProperty;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
 import com.cloudbees.hudson.plugins.folder.Folder;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.init.InitMilestone;
 import hudson.init.Initializer;
@@ -28,10 +29,15 @@ import hudson.tasks.BuildStepDescriptor;
 import hudson.tasks.Builder;
 import hudson.util.DescribableList;
 import hudson.util.ListBoxModel;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Collection;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep.VSphereBuildStepDescriptor;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -40,13 +46,6 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.Stapler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.Collection;
 
 public class VSphereBuildStepContainer extends Builder implements SimpleBuildStep {
 
@@ -57,11 +56,13 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
     private final Integer serverHash;
 
     @DataBoundConstructor
-    public VSphereBuildStepContainer(final VSphereBuildStep buildStep, final String serverName) throws VSphereException {
+    public VSphereBuildStepContainer(final VSphereBuildStep buildStep, final String serverName)
+            throws VSphereException {
         this.buildStep = buildStep;
         this.serverName = serverName;
         if (!(SELECTABLE_SERVER_NAME.equals(serverName))) {
-            this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName, null).getHash();
+            this.serverHash = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(serverName, null)
+                    .getHash();
         } else {
             this.serverHash = null;
         }
@@ -76,7 +77,12 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         VSphere vsphere = null;
         try {
             String expandedServerName = serverName;
@@ -86,8 +92,8 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 expandedServerName = env.expand(serverName);
             }
             startLogs(listener.getLogger(), expandedServerName);
-            //Need to ensure this server is same as one that was previously saved.
-            //TODO - also need to improve logging here.
+            // Need to ensure this server is same as one that was previously saved.
+            // TODO - also need to improve logging here.
 
             // select by hash if we have one
             final String jobName = run.getEnvironment(listener).get("JOB_NAME");
@@ -125,10 +131,10 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
 
     private void startLogs(PrintStream logger, String serverName) {
         VSphereLogger.vsLogger(logger, "");
-        VSphereLogger.vsLogger(logger,
+        VSphereLogger.vsLogger(
+                logger,
                 Messages.console_buildStepStart(buildStep.getDescriptor().getDisplayName()));
-        VSphereLogger.vsLogger(logger,
-                Messages.console_usingServerConfig(serverName));
+        VSphereLogger.vsLogger(logger, Messages.console_usingServerConfig(serverName));
     }
 
     @Extension
@@ -139,8 +145,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
         public static void addAliases() {
             Items.XSTREAM2.addCompatibilityAlias(
                     "org.jenkinsci.plugins.vsphere.builders.VSphereBuildStepContainer",
-                    VSphereBuildStepContainer.class
-            );
+                    VSphereBuildStepContainer.class);
         }
 
         @Override
@@ -169,8 +174,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
                 for (String item : path) {
 
-                    if (item.equals("job") || item.equals("jenkins"))
-                        continue;
+                    if (item.equals("job") || item.equals("jenkins")) continue;
 
                     TopLevelItem topLevelItem = null;
                     if (prevFolder == null) {
@@ -178,19 +182,19 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                     } else {
                         Collection<TopLevelItem> items = prevFolder.getItems();
                         for (TopLevelItem levelItem : items) {
-                            if (levelItem.getName().endsWith(item)){
+                            if (levelItem.getName().endsWith(item)) {
                                 topLevelItem = levelItem;
                             }
                         }
                     }
 
                     if (topLevelItem != null && topLevelItem instanceof Folder) {
-                        prevFolder = (Folder)topLevelItem;
+                        prevFolder = (Folder) topLevelItem;
                         hasVsphereClouds = extractCloudNames(hasVsphereClouds, select, prevFolder);
                     }
                 }
 
-                //adding try block to prevent page from not loading
+                // adding try block to prevent page from not loading
 
                 for (Cloud cloud : Jenkins.getInstance().clouds) {
                     if (cloud instanceof vSphereCloud) {
@@ -210,7 +214,8 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
         }
 
         private boolean extractCloudNames(boolean hasVsphereClouds, ListBoxModel select, Folder folder) {
-            DescribableList<AbstractFolderProperty<?>, AbstractFolderPropertyDescriptor> properties = folder.getProperties();
+            DescribableList<AbstractFolderProperty<?>, AbstractFolderPropertyDescriptor> properties =
+                    folder.getProperties();
             for (AbstractFolderProperty<?> property : properties) {
                 if (property instanceof FolderVSphereCloudProperty) {
 

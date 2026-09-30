@@ -16,17 +16,15 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -37,158 +35,162 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
 public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 
-	private final String vm;    
-	private final String snapshotName;
-	private final boolean consolidate;
-	private final boolean failOnNoExist;
+    private final String vm;
+    private final String snapshotName;
+    private final boolean consolidate;
+    private final boolean failOnNoExist;
 
-	@DataBoundConstructor
-	public DeleteSnapshot(final String vm, final String snapshotName, final boolean consolidate, final boolean failOnNoExist) throws VSphereException {
-		this.vm = vm;
-		this.snapshotName = snapshotName;
-		this.consolidate = consolidate;
-		this.failOnNoExist = failOnNoExist;
-	}
+    @DataBoundConstructor
+    public DeleteSnapshot(
+            final String vm, final String snapshotName, final boolean consolidate, final boolean failOnNoExist)
+            throws VSphereException {
+        this.vm = vm;
+        this.snapshotName = snapshotName;
+        this.consolidate = consolidate;
+        this.failOnNoExist = failOnNoExist;
+    }
 
-	public String getVm() {
-		return vm;
-	}
+    public String getVm() {
+        return vm;
+    }
 
-	public String getSnapshotName() {
-		return snapshotName;
-	}
+    public String getSnapshotName() {
+        return snapshotName;
+    }
 
-	public boolean isConsolidate() {
-		return consolidate;
-	}
+    public boolean isConsolidate() {
+        return consolidate;
+    }
 
-	public boolean isFailOnNoExist() {
-		return failOnNoExist;
-	}
+    public boolean isFailOnNoExist() {
+        return failOnNoExist;
+    }
 
-	@Override
-	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
-		try {
-			deleteSnapshot(run, launcher, listener);
-		} catch (Exception e) {
-			throw new AbortException(e.getMessage());
-		}
-	}
+    @Override
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
+        try {
+            deleteSnapshot(run, launcher, listener);
+        } catch (Exception e) {
+            throw new AbortException(e.getMessage());
+        }
+    }
 
-	@Override
-	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
-		return false;
-	}
+    @Override
+    public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+        return false;
+    }
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-		boolean retVal = false;
-		try {
-			retVal = deleteSnapshot(build, launcher, listener);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return retVal;
-		//TODO throw AbortException instead of returning value
-	}
+    @Override
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
+        boolean retVal = false;
+        try {
+            retVal = deleteSnapshot(build, launcher, listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return retVal;
+        // TODO throw AbortException instead of returning value
+    }
 
-	@Override
-	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
-		return null;
-	}
+    @Override
+    public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
 
-	@Override
-	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-		return null;
-	}
+    @Override
+    public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
 
-	@Override
-	public BuildStepMonitor getRequiredMonitorService() {
-		return null;
-	}
+    @Override
+    public BuildStepMonitor getRequiredMonitorService() {
+        return null;
+    }
 
-	private boolean deleteSnapshot(final Run<?, ?> run, Launcher launcher, final TaskListener listener) throws VSphereException{
-		PrintStream jLogger = listener.getLogger();
-		String expandedSnap = snapshotName;
-		String expandedVm = vm;
-		EnvVars env;
-		try {
-			env = run.getEnvironment(listener);
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
+    private boolean deleteSnapshot(final Run<?, ?> run, Launcher launcher, final TaskListener listener)
+            throws VSphereException {
+        PrintStream jLogger = listener.getLogger();
+        String expandedSnap = snapshotName;
+        String expandedVm = vm;
+        EnvVars env;
+        try {
+            env = run.getEnvironment(listener);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
 
-		if (run instanceof  AbstractBuild) {
-			env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-			expandedSnap = env.expand(snapshotName);
-			expandedVm = env.expand(vm);
-		}
+        if (run instanceof AbstractBuild) {
+            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+            expandedSnap = env.expand(snapshotName);
+            expandedVm = env.expand(vm);
+        }
 
-		VSphereLogger.vsLogger(jLogger, "Deleting snapshot \""+expandedSnap+"\" of VM "+expandedVm+"...");
-		vsphere.deleteSnapshot(expandedVm, expandedSnap, consolidate, failOnNoExist);
-		VSphereLogger.vsLogger(jLogger, "Complete.");
+        VSphereLogger.vsLogger(jLogger, "Deleting snapshot \"" + expandedSnap + "\" of VM " + expandedVm + "...");
+        vsphere.deleteSnapshot(expandedVm, expandedSnap, consolidate, failOnNoExist);
+        VSphereLogger.vsLogger(jLogger, "Complete.");
 
-		return true;
-	}
+        return true;
+    }
 
-	@Extension
-	public static class DeleteSnapshotDescriptor extends VSphereBuildStepDescriptor {
+    @Extension
+    public static class DeleteSnapshotDescriptor extends VSphereBuildStepDescriptor {
 
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_DeleteSnapshot();
-		}
+        @Override
+        public String getDisplayName() {
+            return Messages.vm_title_DeleteSnapshot();
+        }
 
-		public FormValidation doCheckVm(@QueryParameter String value) {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the VM name"));
-			return FormValidation.ok();
-		}
+        public FormValidation doCheckVm(@QueryParameter String value) {
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
+            return FormValidation.ok();
+        }
 
-		public FormValidation doCheckSnapshotName(@QueryParameter String value) {
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the snapshot name"));
-			return FormValidation.ok();
-		}
+        public FormValidation doCheckSnapshotName(@QueryParameter String value) {
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the snapshot name"));
+            return FormValidation.ok();
+        }
 
         @RequirePOST
-		public FormValidation doTestData(@AncestorInPath Item context,
+        public FormValidation doTestData(
+                @AncestorInPath Item context,
                 @QueryParameter String serverName,
-				@QueryParameter String vm, @QueryParameter String snapshotName) {
+                @QueryParameter String vm,
+                @QueryParameter String snapshotName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
-			VSphere vsphere = null;
-			try {
-				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
-					return FormValidation.error(Messages.validation_requiredValues());
+            VSphere vsphere = null;
+            try {
+                if (vm.length() == 0 || serverName.length() == 0 || snapshotName.length() == 0)
+                    return FormValidation.error(Messages.validation_requiredValues());
 
-				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
-				if (vm.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("VM"));
+                if (vm.indexOf('$') >= 0) return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				if (vsphere.getVmByName(vm) == null)
-					return FormValidation.error(Messages.validation_notFound("VM"));
+                if (vsphere.getVmByName(vm) == null) return FormValidation.error(Messages.validation_notFound("VM"));
 
-				if (snapshotName.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("Snapshot"));
+                if (snapshotName.indexOf('$') >= 0)
+                    return FormValidation.warning(Messages.validation_buildParameter("Snapshot"));
 
-				VirtualMachineSnapshot snap = vsphere.getSnapshotInTree(vsphere.getVmByName(vm), snapshotName);
-				if (snap==null){
-					return FormValidation.error(Messages.validation_notFound("Snapshot"));
-				}
+                VirtualMachineSnapshot snap = vsphere.getSnapshotInTree(vsphere.getVmByName(vm), snapshotName);
+                if (snap == null) {
+                    return FormValidation.error(Messages.validation_notFound("Snapshot"));
+                }
 
-				return FormValidation.ok(Messages.validation_success());
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			} finally {
-				if (vsphere != null) {
-					vsphere.disconnect();
-				}
-			}
-		}
-	}
+                return FormValidation.ok(Messages.validation_success());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
+            }
+        }
+    }
 }

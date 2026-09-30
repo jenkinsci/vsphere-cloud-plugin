@@ -1,15 +1,15 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
-import com.vmware.vim25.VirtualMachineConfigSpec;
-import hudson.EnvVars;
-import hudson.model.TaskListener;
-import org.junit.jupiter.api.Test;
-
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import com.vmware.vim25.VirtualMachineConfigSpec;
+import hudson.EnvVars;
+import hudson.model.TaskListener;
+import org.junit.jupiter.api.Test;
 
 /**
  * Unit tests for the optional {@code cpuLimitMHz} CPU reservation setting on {@link ReconfigureCpu}.

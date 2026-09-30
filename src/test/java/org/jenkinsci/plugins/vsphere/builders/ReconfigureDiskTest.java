@@ -1,5 +1,11 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import com.vmware.vim25.Description;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDeviceFileBackingInfo;
@@ -7,17 +13,10 @@ import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualIDEController;
 import com.vmware.vim25.VirtualPCIController;
 import com.vmware.vim25.VirtualSCSIController;
-import org.jenkinsci.plugins.vsphere.tools.VSphereException;
-import org.junit.jupiter.api.Test;
-
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.sameInstance;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.junit.jupiter.api.Test;
 
 class ReconfigureDiskTest {
 
@@ -212,8 +211,7 @@ class ReconfigureDiskTest {
     void findDiskByLabelRequiresLabelWhenMultipleDisksEvenIfAutoSelectAllowed() throws Exception {
         ReconfigureDisk step = newStep();
         VirtualDevice[] devices = {
-                disk(1, null, null, "[ds] vm/vm_1.vmdk", null),
-                disk(2, null, null, "[ds] vm/vm_2.vmdk", null)
+            disk(1, null, null, "[ds] vm/vm_1.vmdk", null), disk(2, null, null, "[ds] vm/vm_2.vmdk", null)
         };
 
         assertThrows(VSphereException.class, () -> step.findDiskByLabel(devices, "vm", "", true));

@@ -3,9 +3,6 @@ package org.jenkinsci.plugins.vsphere.tools;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.slaves.Cloud;
-import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
-
 import java.lang.ref.WeakReference;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -13,6 +10,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
 /**
  * Maintains a single long-lived vSphere session for one {@code vSphereCloud} instance,
@@ -109,9 +108,9 @@ public class VSphereConnectionPool {
         this.config = config;
         this.owner = owner == null ? null : new WeakReference<>(owner);
         this.healthCheckIntervalSecs = Math.max(0, healthCheckIntervalSecs);
-        this.sessionMaxAgeSecs       = Math.max(0, sessionMaxAgeSecs);
-        this.sessionMaxUses          = Math.max(0, sessionMaxUses);
-        this.idleTimeoutSecs         = Math.max(0, idleTimeoutSecs);
+        this.sessionMaxAgeSecs = Math.max(0, sessionMaxAgeSecs);
+        this.sessionMaxUses = Math.max(0, sessionMaxUses);
+        this.idleTimeoutSecs = Math.max(0, idleTimeoutSecs);
         startScheduler();
         VSphereConnectionPoolRegistry.register(this);
     }
@@ -177,8 +176,8 @@ public class VSphereConnectionPool {
         stopScheduler();
         if (borrowCount > 0) {
             pendingShutdown = true;
-            LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: shutdown requested while "
-                    + borrowCount + " caller(s) still hold the connection; deferring disconnect until released");
+            LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: shutdown requested while " + borrowCount
+                    + " caller(s) still hold the connection; deferring disconnect until released");
             return;
         }
         VSphereConnectionPoolRegistry.unregister(this);
@@ -236,8 +235,8 @@ public class VSphereConnectionPool {
         connection = VSphere.connect(config);
         connection.markAsPooled(this);
         connectionCreatedAtMs = System.currentTimeMillis();
-        lastAcquiredAtMs      = connectionCreatedAtMs;
-        useCount              = 0;
+        lastAcquiredAtMs = connectionCreatedAtMs;
+        useCount = 0;
         LOGGER.info("vSphere connection pool [" + config.getVsHost() + "]: session established");
         scheduleAgeExpiry();
         scheduleIdleExpiry();
@@ -297,9 +296,10 @@ public class VSphereConnectionPool {
             try {
                 connect();
             } catch (VSphereException e) {
-                LOGGER.log(Level.SEVERE,
-                        "vSphere connection pool [" + config.getVsHost()
-                                + "]: proactive reconnect failed", e);
+                LOGGER.log(
+                        Level.SEVERE,
+                        "vSphere connection pool [" + config.getVsHost() + "]: proactive reconnect failed",
+                        e);
                 // connection remains null; next acquire() will retry
             }
         }
@@ -336,24 +336,23 @@ public class VSphereConnectionPool {
                 LOGGER.fine("vSphere connection pool [" + config.getVsHost() + "]: health check OK");
                 return;
             }
-            LOGGER.warning("vSphere connection pool [" + config.getVsHost()
-                    + "]: health check failed - reconnecting");
+            LOGGER.warning("vSphere connection pool [" + config.getVsHost() + "]: health check failed - reconnecting");
             disconnectQuietly();
             try {
                 connect();
             } catch (VSphereException e) {
-                LOGGER.log(Level.SEVERE,
+                LOGGER.log(
+                        Level.SEVERE,
                         "vSphere connection pool [" + config.getVsHost()
-                                + "]: reconnect after health-check failure failed", e);
+                                + "]: reconnect after health-check failure failed",
+                        e);
                 // connection remains null; next acquire() will retry
             }
         }
     }
 
     private void startScheduler() {
-        boolean needsScheduler = healthCheckIntervalSecs > 0
-                || idleTimeoutSecs > 0
-                || sessionMaxAgeSecs > 0;
+        boolean needsScheduler = healthCheckIntervalSecs > 0 || idleTimeoutSecs > 0 || sessionMaxAgeSecs > 0;
         if (!needsScheduler) return;
 
         final String host = config.getVsHost();
@@ -365,8 +364,7 @@ public class VSphereConnectionPool {
 
         if (healthCheckIntervalSecs > 0) {
             scheduler.scheduleAtFixedRate(
-                    this::scheduledHealthCheck,
-                    healthCheckIntervalSecs, healthCheckIntervalSecs, TimeUnit.SECONDS);
+                    this::scheduledHealthCheck, healthCheckIntervalSecs, healthCheckIntervalSecs, TimeUnit.SECONDS);
         }
 
         // Age-expiry and idle-expiry are armed as exact one-shot alarms from connect()

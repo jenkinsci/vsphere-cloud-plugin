@@ -3,6 +3,8 @@ package org.jenkinsci.plugins;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 
+import hudson.slaves.JNLPLauncher;
+import hudson.slaves.RetentionStrategy;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -10,16 +12,12 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import hudson.slaves.JNLPLauncher;
-import hudson.slaves.RetentionStrategy;
 
 /**
  * Covers {@link vSphereCloud#preProvisionNodes}'s decision of how many more nodes are needed to
@@ -56,12 +54,10 @@ class NodePreProvisionTest {
             }
 
             @Override
-            public void flush() {
-            }
+            public void flush() {}
 
             @Override
-            public void close() {
-            }
+            public void close() {}
         };
         vsphereCloudLogger.addHandler(logCapture);
     }
@@ -129,11 +125,13 @@ class NodePreProvisionTest {
                 return record.getMessage();
             }
         }
-        throw new AssertionError("preProvisionNodes() never logged a \"should pre-provision\" decision; logged: " + loggedMessages);
+        throw new AssertionError(
+                "preProvisionNodes() never logged a \"should pre-provision\" decision; logged: " + loggedMessages);
     }
 
     private static vSphereCloud stubCloud(int instanceCap, vSphereCloudSlaveTemplate... templates) {
-        final VSphereConnectionConfig vsConnectionConfig = new VSphereConnectionConfig("vsHost", false, "credentialsId");
+        final VSphereConnectionConfig vsConnectionConfig =
+                new VSphereConnectionConfig("vsHost", false, "credentialsId");
         return new vSphereCloud(vsConnectionConfig, "vsDescription", 100, instanceCap, false, Arrays.asList(templates));
     }
 
@@ -141,8 +139,36 @@ class NodePreProvisionTest {
         // labelString is deliberately left null: vSphereCloudSlaveTemplate's readResolve() calls
         // Label.parse(labelString), which needs a live Jenkins instance to resolve a non-null/
         // non-blank label expression, but short-circuits safely when it's null.
-        return new vSphereCloudSlaveTemplate(prefix, "", null, null, false, null, null, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, instancesMin, null, new JNLPLauncher(),
-                RetentionStrategy.NOOP, null, null, null);
+        return new vSphereCloudSlaveTemplate(
+                prefix,
+                "",
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                templateInstanceCap,
+                1,
+                null,
+                null,
+                null,
+                false,
+                false,
+                0,
+                0,
+                false,
+                null,
+                null,
+                instancesMin,
+                null,
+                new JNLPLauncher(),
+                RetentionStrategy.NOOP,
+                null,
+                null,
+                null);
     }
 }

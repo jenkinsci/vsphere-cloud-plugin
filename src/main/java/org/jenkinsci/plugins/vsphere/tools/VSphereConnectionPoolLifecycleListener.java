@@ -24,8 +24,7 @@ import hudson.model.listeners.SaveableListener;
  */
 public final class VSphereConnectionPoolLifecycleListener {
 
-    private VSphereConnectionPoolLifecycleListener() {
-    }
+    private VSphereConnectionPoolLifecycleListener() {}
 
     @Extension
     public static final class ReapOnSave extends SaveableListener {

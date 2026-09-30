@@ -8,7 +8,6 @@ import static org.hamcrest.Matchers.nullValue;
 
 import java.util.List;
 import java.util.Set;
-
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
 import org.junit.jupiter.api.Test;
 
@@ -52,9 +51,14 @@ class VSphereHostSelectionTest {
 
     @Test
     void toAllowListStringRoundTripsThroughParseAllowListOrNull() {
-        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(null)), nullValue());
-        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(Set.of())), is(Set.of()));
-        assertThat(VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(Set.of("esx1", "esx2"))),
+        assertThat(
+                VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(null)), nullValue());
+        assertThat(
+                VSphereHostSelection.parseAllowListOrNull(VSphereHostSelection.toAllowListString(Set.of())),
+                is(Set.of()));
+        assertThat(
+                VSphereHostSelection.parseAllowListOrNull(
+                        VSphereHostSelection.toAllowListString(Set.of("esx1", "esx2"))),
                 is(Set.of("esx1", "esx2")));
     }
 
@@ -114,8 +118,8 @@ class VSphereHostSelectionTest {
         HostCandidate disconnected = candidate("esx2", false, false, 1000, 2000, 1000, 2000);
         HostCandidate inMaintenance = candidate("esx3", true, true, 1000, 2000, 1000, 2000);
 
-        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(
-                List.of(connected, disconnected, inMaintenance), Set.of());
+        List<HostCandidate> filtered =
+                VSphereHostSelection.filterCandidates(List.of(connected, disconnected, inMaintenance), Set.of());
 
         assertThat(filtered, contains(connected));
     }
@@ -134,8 +138,7 @@ class VSphereHostSelectionTest {
         HostCandidate esx1 = candidate("esx1", true, false, 1000, 2000, 1000, 2000);
         HostCandidate esx2 = candidate("esx2", true, false, 1000, 2000, 1000, 2000);
 
-        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(
-                List.of(esx1, esx2), Set.of("esx2"));
+        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(List.of(esx1, esx2), Set.of("esx2"));
 
         assertThat(filtered, contains(esx2));
     }
@@ -145,8 +148,7 @@ class VSphereHostSelectionTest {
         HostCandidate esx1 = candidate("esx1", true, false, 1000, 2000, 1000, 2000);
         HostCandidate esx2 = candidate("esx2", true, false, 1000, 2000, 1000, 2000);
 
-        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(
-                List.of(esx1, esx2), Set.of());
+        List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(List.of(esx1, esx2), Set.of());
 
         assertThat(filtered, contains(esx1, esx2));
     }
@@ -198,8 +200,15 @@ class VSphereHostSelectionTest {
         assertThat(VSphereHostSelection.pickLeastLoaded(List.of()), nullValue());
     }
 
-    private static HostCandidate candidate(String name, boolean connected, boolean inMaintenanceMode,
-            Integer cpuUsageMhz, int cpuCapacityMhz, Integer memUsageMB, long memCapacityMB) {
-        return new HostCandidate(name, connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB);
+    private static HostCandidate candidate(
+            String name,
+            boolean connected,
+            boolean inMaintenanceMode,
+            Integer cpuUsageMhz,
+            int cpuCapacityMhz,
+            Integer memUsageMB,
+            long memCapacityMB) {
+        return new HostCandidate(
+                name, connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB);
     }
 }
