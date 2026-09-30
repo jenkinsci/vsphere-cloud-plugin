@@ -80,7 +80,8 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     }
 
     private static Class<?> httpClientNameToClass(String httpClientClassName) {
-        if (httpClientClassName.equals(HttpClientClassName.ApacheHttpClientClass.name)) {
+        // May be null for configs deserialized from XML saved before this field existed
+        if (HttpClientClassName.ApacheHttpClientClass.name.equals(httpClientClassName)) {
             return ApacheHttpClient.class;
         }
         return WSClient.class;
