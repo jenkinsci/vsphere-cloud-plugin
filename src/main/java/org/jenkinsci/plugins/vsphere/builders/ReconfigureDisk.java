@@ -537,6 +537,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			load();
 		}
 
+		@RequirePOST
 		public FormValidation doCheckDiskSize(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
 			throwUnlessUserHasPermissionToConfigureJob(context);
@@ -546,6 +547,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			return FormValidation.ok();
 		}
 
+		@RequirePOST
 		public FormValidation doCheckDatastore(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
 			throwUnlessUserHasPermissionToConfigureJob(context);

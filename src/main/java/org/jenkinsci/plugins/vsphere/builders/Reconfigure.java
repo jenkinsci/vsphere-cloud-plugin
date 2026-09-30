@@ -148,6 +148,7 @@ public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep{
             return ReconfigureStep.all();
         }
 
+		@RequirePOST
 		public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
 			throwUnlessUserHasPermissionToConfigureJob(context);
 			if (value.length() == 0)

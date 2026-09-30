@@ -316,6 +316,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             load();
         }
     
+        @RequirePOST
         public FormValidation doCheckMacAddress(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);

@@ -97,6 +97,7 @@ public class ReconfigureMemory extends ReconfigureStep {
 			load();
 		}
 
+        @RequirePOST
         public FormValidation doCheckMemorySize(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);

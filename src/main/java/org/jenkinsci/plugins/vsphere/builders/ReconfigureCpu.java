@@ -109,6 +109,7 @@ public class ReconfigureCpu extends ReconfigureStep {
 			load();
 		}
 
+        @RequirePOST
         public FormValidation doCheckCpuCores(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
@@ -118,6 +119,7 @@ public class ReconfigureCpu extends ReconfigureStep {
             return FormValidation.ok();
         }
 
+        @RequirePOST
         public FormValidation doCheckCoresPerSocket(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
