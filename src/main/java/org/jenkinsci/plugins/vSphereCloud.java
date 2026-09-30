@@ -17,6 +17,7 @@ import hudson.slaves.SlaveComputer;
 import hudson.util.DescribableList;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import hudson.util.Scrambler;
 import hudson.util.StreamTaskListener;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,14 +51,20 @@ import org.kohsuke.stapler.StaplerRequest2;
  */
 public class vSphereCloud extends Cloud {
 
+    /** Legacy pre-credentials-plugin field, migrated by {@link #readResolve} into {@link #vsConnectionConfig}. */
     @Deprecated
     private transient String vsHost;
 
     private final String vsDescription;
 
+    /** Legacy pre-credentials-plugin field, migrated by {@link #readResolve} into {@link #vsConnectionConfig}. */
     @Deprecated
     private transient String username;
 
+    /**
+     * Legacy pre-credentials-plugin field, {@link hudson.util.Scrambler}-obfuscated (not a real secret),
+     * migrated by {@link #readResolve} into {@link #vsConnectionConfig}.
+     */
     @Deprecated
     private transient String password;
 
@@ -220,7 +227,9 @@ public class vSphereCloud extends Cloud {
 
     public Object readResolve() throws IOException {
         if (vsConnectionConfig == null) {
-            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null, null);
+            String migratedCredentialsId = VSphereConnectionConfig.migrateLegacyCredentials(
+                    vsHost, username, password == null ? null : Scrambler.descramble(password));
+            vsConnectionConfig = new VSphereConnectionConfig(vsHost, migratedCredentialsId, null);
         }
         if (this.templates != null) {
             for (vSphereCloudSlaveTemplate template : templates) {
