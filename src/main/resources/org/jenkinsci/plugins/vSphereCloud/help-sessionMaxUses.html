@@ -1,0 +1,13 @@
+<div>
+  Maximum number of times the pooled session may be handed out before the pool restarts
+  it on the next request.<br/>
+  This counts <b>Jenkins-level operations</b> (each acquisition of the shared session by
+  a clone/power-on/snapshot/delete/etc. step) - not the number of individual vCenter SOAP
+  calls those operations make internally, and not background health checks.<br/>
+  The limit is enforced atomically: an operation that has already acquired the session
+  always finishes on it, and only the <em>next</em> request triggers the restart, so a
+  single logical operation is never interrupted mid-way.<br/>
+  This provides a use-count-based rotation independent of how long the session has been
+  alive.<br/>
+  Set to <b>0</b> to never restart based on use count.
+</div>

@@ -172,12 +172,13 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 				@QueryParameter String oldName,
                 @QueryParameter String newName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 
 				if (serverName.length() == 0 || oldName.length()==0 || newName.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if (vmObj == null)
@@ -186,6 +187,10 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}
