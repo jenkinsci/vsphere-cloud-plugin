@@ -30,11 +30,11 @@ import hudson.model.Label;
 import hudson.model.Node.Mode;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
-import hudson.slaves.NodeProperty;
-import hudson.slaves.NodePropertyDescriptor;
 import hudson.slaves.CommandLauncher;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
+import hudson.slaves.NodeProperty;
+import hudson.slaves.NodePropertyDescriptor;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
@@ -580,6 +580,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final VSphereCloudRetentionStrategy templateStrategy = (VSphereCloudRetentionStrategy) retentionStrategy;
             final VSphereCloudRetentionStrategy cloneStrategy = new VSphereCloudRetentionStrategy(
                     templateStrategy.getIdleMinutes());
+            cloneStrategy.setLifespanMinutes(templateStrategy.getLifespanMinutes());
             return cloneStrategy;
         }
         throw new IllegalStateException(
