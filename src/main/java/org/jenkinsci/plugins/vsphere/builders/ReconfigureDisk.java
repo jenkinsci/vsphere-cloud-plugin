@@ -552,6 +552,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			return FormValidation.ok();
 		}
 
+		@RequirePOST
 		public FormValidation doCheckDeviceNumber(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
 			throwUnlessUserHasPermissionToConfigureJob(context);
