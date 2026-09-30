@@ -131,6 +131,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
                                          @QueryParameter String serverName,
                                          @QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (serverName == null){
                     return FormValidation.error(Messages.validation_required("serverName"));
@@ -142,13 +143,17 @@ public class ConvertToTemplate extends VSphereBuildStep {
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
                 if (vsphere.getVmByName(vm) == null)
                     return FormValidation.error(Messages.validation_notFound("VM"));
 
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }

@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.jenkins-ci.plugins</groupId>
         <artifactId>plugin</artifactId>
-        <version>6.2138.v03274d462c13</version>
+        <version>6.2236.v12dd4c483242</version>
         <relativePath />
     </parent>
 
@@ -69,14 +69,15 @@
         <!-- Releases up to 2.28 were manually issued; 3.x are automated with CD
              following https://www.jenkins.io/doc/developer/publishing/releasing-cd/
           -->
-        <revision>3</revision>
+        <revision>4</revision>
         <changelist>999999-SNAPSHOT</changelist>
         <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
-        <jenkins.baseline>2.479</jenkins.baseline>
-        <jenkins.version>${jenkins.baseline}.1</jenkins.version>
+        <jenkins.baseline>2.555</jenkins.baseline>
+        <jenkins.version>${jenkins.baseline}.3</jenkins.version>
         <gitHubRepo>jenkinsci/${project.artifactId}-plugin</gitHubRepo>
         <spotbugs.skip>true</spotbugs.skip>
         <ban-junit4-imports.skip>false</ban-junit4-imports.skip>
+        <ban-commons-lang-2.skip>false</ban-commons-lang-2.skip>
     </properties>
 
     <dependencyManagement>
@@ -84,7 +85,7 @@
             <dependency>
                 <groupId>io.jenkins.tools.bom</groupId>
                 <artifactId>bom-${jenkins.baseline}.x</artifactId>
-                <version>3944.v1a_e4f8b_452db_</version>
+                <version>7093.v37de7b_4a_8a_4f</version>
                 <scope>import</scope>
                 <type>pom</type>
             </dependency>
@@ -92,6 +93,10 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>io.jenkins.plugins</groupId>
+            <artifactId>commons-lang3-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.jenkins-ci.plugins</groupId>
             <artifactId>credentials</artifactId>
@@ -107,7 +112,7 @@
         <dependency>
             <groupId>com.toastcoders</groupId>
             <artifactId>yavijava</artifactId>
-            <version>6.0.05</version>
+            <version>9.0.2</version>
             <exclusions>
                 <!-- Provided by Jenkins core -->
                 <exclusion>

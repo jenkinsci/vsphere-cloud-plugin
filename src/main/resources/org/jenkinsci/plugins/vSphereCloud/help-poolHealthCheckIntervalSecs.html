@@ -1,0 +1,13 @@
+<div>
+  How often (in seconds) a background thread proactively checks that the pooled vSphere
+  session is still alive by issuing a lightweight <code>currentTime()</code> call to
+  the vCenter.<br/>
+  If the call fails the pool reconnects immediately, so the next operation can proceed
+  without waiting for a timeout.<br/>
+  Each health check is itself one vCenter API invocation, so it will show up in the
+  vCenter Events log / API invocation counters even though it is not counted against
+  <b>Pool session max uses</b> below (that setting only counts sessions handed out to
+  Jenkins operations, e.g. clone/power-on/snapshot/delete).<br/>
+  Set to <b>0</b> to disable health checks entirely — the pool will still reconnect
+  reactively if an operation fails due to an expired session.
+</div>
