@@ -338,8 +338,8 @@ Multiple reconfiguration sub-steps can be combined in a single call.
 
 Some operations which act on physical instances of a resource (network adapters, disks) accept a `deviceLabel` or `deviceNumber` option to disambiguate the request, and a `deviceAction` (`ADD`, `REMOVE`, `EDIT`) option. Operations which just change the amount of identical resource units (memory, processors) or metadata (annotations) just accept named options with corresponding new values to be set.
 
-* For Network Adapters, the `deviceLabel` can be also seen in vCenter UI, e.g. "Network adapter 1" for the first attached NIC. It is not known at this time whether these labels can be assigned by the sysadmin in any manner. The `deviceNumber` allows to pass the (best-effort) number of that NIC in the list of Virtual Ethernet devices provided by vCenter REST API. For any operations dealing with a specific NIC, inside or outside the VM, it is recommended to use the MAC address rather than device number or name.
-* For Disks, the `deviceLabel` is typically derived from the disk image file name, e.g. `[LUN1] kube15/kube15_1.vmdk` can use the label `kube15_1`. This may be in fact clumsy, as file name suffixes may depend on amount of disks and their snapshot history, or assigned by the sysadmin (`boot-disk.vmdk` via vCenter UI or other means). The `deviceLabel` can also match by a vCenter-assigned UI label like "Hard disk 1". The `deviceNumber` alternative allows to more rigidly refer to SCSI bus device number (zero-based, with `7` typically reserved for the SCSI controller itself -- so disks would be in `0..6` and `8..15` ranges).
+* For Network Adapters, the `deviceLabel` can be also seen in vCenter UI, e.g. "Network adapter 1" for the first attached NIC. It is not known at this time whether these labels can be assigned by the sysadmin in any manner. The `deviceNumber` allows to pass the (best-effort, zero-based) position of that NIC in the list of network adapters vCenter itself returns for the VM -- not a raw PCI slot number, which is shared with unrelated devices (storage/USB/video controllers etc.) and so would not correspond to "the Nth NIC". For any operations dealing with a specific NIC, inside or outside the VM, it is recommended to use the MAC address rather than device number or name.
+* For Disks, the `deviceLabel` is typically derived from the disk image file name, e.g. `[LUN1] kube15/kube15_1.vmdk` can use the label `kube15_1`. This may be in fact clumsy, as file name suffixes may depend on amount of disks and their snapshot history, or assigned by the sysadmin (`boot-disk.vmdk` via vCenter UI or other means). The `deviceLabel` can also match a vCenter-assigned UI label like "Hard disk 1", or a controller moniker exactly as vSphere itself displays it, e.g. `SCSI(0:2)` or `IDE(1:0)` (controller bus number : unit number) -- useful to target a disk on IDE, or on a specific one of several SCSI controllers, without depending on file naming at all. The `deviceNumber` alternative is simpler still: it is the zero-based position of the disk in the list of disks vCenter itself returns for the VM (not an address on any particular controller), so `deviceNumber: '0'` always means "the first disk", `'1'` the second, and so on, regardless of which controller(s) they are attached to.
 
 ```groovy
 buildStep: [$class: 'Reconfigure',
@@ -368,9 +368,15 @@ buildStep: [$class: 'Reconfigure',
                  diskSize: '200'],           // gigabytes; must be >= the disk's current size
                 [$class: 'ReconfigureDisk',
                  deviceAction: 'EDIT',
-                 deviceNumber: '0',          // alternative to deviceLabel (mutually exclusive); zero-based.
-                                             // Selects the disk by its actual SCSI unit number (vSphere's
-                                             // own numbering, e.g. "SCSI(0:0)") instead of its file name.
+                 deviceNumber: '0',          // alternative to deviceLabel (mutually exclusive); zero-based
+                                             // position in vCenter's own list of the VM's disks (not an
+                                             // address on any particular controller)
+                 diskSize: '200'],
+                [$class: 'ReconfigureDisk',
+                 deviceAction: 'EDIT',
+                 deviceLabel: 'SCSI(1:2)',  // controller moniker: pins an exact SCSI/IDE bus:unit address,
+                                             // exactly as vSphere itself displays it, e.g. for a VM with
+                                             // several SCSI controllers or an IDE-attached disk
                  diskSize: '200'],
                 [$class: 'ReconfigureDisk',
                  deviceAction: 'REMOVE',     // detaches the disk AND deletes its backing file (DESTRUCTIVE)

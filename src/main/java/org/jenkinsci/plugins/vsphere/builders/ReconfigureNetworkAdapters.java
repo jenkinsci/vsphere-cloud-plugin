@@ -35,10 +35,7 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.List;
 
 public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
@@ -176,7 +173,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             description.setLabel(expandedDeviceLabel);
             vEth.setDeviceInfo(description);
         } else if (hasNumber) {
-            vEth = findNetworkDeviceByUnitNumber(vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
+            vEth = findNetworkDeviceByIndex(vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
         } else {
             vEth = findNetworkDeviceByLabel(vm.getConfig().getHardware().getDevice(), expandedDeviceLabel);
         }
@@ -285,27 +282,24 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     /**
-     * Finds the Nth network adapter (zero-based), counting only network adapters rather than the
-     * VM's PCI unit numbers directly -- those are shared with unrelated PCI-bus devices (storage/USB/
-     * video controllers etc.), so raw PCI unit number doesn't correspond to "the Nth NIC". Adapters
-     * are ordered by their own (still vSphere-assigned, not user-invented) unit number, so the result
-     * is deterministic for a given VM hardware configuration without depending on device label text.
+     * Finds the Nth network adapter (zero-based), counting only VirtualEthernetCard entries in the
+     * same order vCenter itself returns them via VirtualHardware.device -- no re-sorting or address
+     * scheme of our own (raw PCI unit number is shared with unrelated PCI-bus devices like storage/USB/
+     * video controllers, so it doesn't correspond to "the Nth NIC"), just vCenter's own list order.
      */
-    private VirtualEthernetCard findNetworkDeviceByUnitNumber(VirtualDevice[] devices, int index) throws VSphereException {
-        List<VirtualEthernetCard> nics = new ArrayList<VirtualEthernetCard>();
+    private VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int index) throws VSphereException {
+        int count = 0;
         for (VirtualDevice vd : devices) {
-            if (vd instanceof VirtualEthernetCard && vd.getUnitNumber() != null) {
-                nics.add((VirtualEthernetCard) vd);
+            if (!(vd instanceof VirtualEthernetCard)) {
+                continue;
             }
+            if (count == index) {
+                return (VirtualEthernetCard) vd;
+            }
+            count++;
         }
-        nics.sort(Comparator.comparingInt(VirtualDevice::getUnitNumber));
-
-        if (index < 0 || index >= nics.size()) {
-            throw new VSphereException(String.format(
-                    "VM has %d network adapters; no adapter with deviceNumber %d", nics.size(), index));
-        }
-
-        return nics.get(index);
+        throw new VSphereException(String.format(
+                "VM has %d network adapters; no adapter with deviceNumber %d", count, index));
     }
 
     @Extension

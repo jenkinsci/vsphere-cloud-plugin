@@ -1,7 +1,7 @@
 <div>
   Alternative to Device Label for the Edit and Remove actions; cannot be combined with it, and is
-  not supported for Add. Zero-based: selects the Nth network adapter attached to the VM (counting
-  only network adapters, ordered by their vSphere-assigned position), not a raw PCI slot number
-  shared with other device types, and not the (freely renameable) device label such as
+  not supported for Add. Zero-based: selects the Nth network adapter in the device list vCenter
+  itself returns for the VM (counting only network adapters, in that same order) -- not a raw PCI
+  slot number shared with other device types, and not the (freely renameable) device label such as
   "Network adapter 1".
 </div>

@@ -53,6 +53,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 	private String deviceLabel;
 	private String deviceNumber;
 	private final static Pattern filenamePattern = Pattern.compile("^\\[[^]]*\\] (.*)$");
+	private final static Pattern controllerMonikerPattern = Pattern.compile("^(SCSI|IDE)\\((\\d+):(\\d+)\\)$");
 
 	@DataBoundConstructor
 	public ReconfigureDisk(String diskSize, String datastore) throws VSphereException {
@@ -274,7 +275,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			VirtualMachine vm, int diskSize, String label, Integer deviceNumber, PrintStream jLogger) throws VSphereException
 	{
 		VirtualDisk disk = (deviceNumber != null)
-				? findDiskByUnitNumber(vm, deviceNumber)
+				? findDiskByIndex(vm, deviceNumber)
 				: findDiskByLabel(vm, label, true);
 
 		long diskSizeInKB = (long) diskSize * 1024 * 1024;
@@ -303,7 +304,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 		// Unlike EDIT, a lone disk is never auto-selected here: removing the wrong disk is destructive
 		// and unrecoverable, so an explicit deviceLabel or deviceNumber is always required.
 		VirtualDisk disk = (deviceNumber != null)
-				? findDiskByUnitNumber(vm, deviceNumber)
+				? findDiskByIndex(vm, deviceNumber)
 				: findDiskByLabel(vm, label, false);
 
 		VSphereLogger.vsLogger(jLogger, String.format(
@@ -318,15 +319,19 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	/**
-	 * Finds an existing disk. Disks are matched either by their vSphere device label (e.g. "Hard disk 1")
-	 * or by their backing file's base name (e.g. "kube15_1", derived from "[datastore1] kube15/kube15_1.vmdk").
-	 * If no label is given, {@code allowAutoSelectSingleDisk} controls whether a VM with exactly one disk
-	 * may use it without a label.
+	 * Finds an existing disk. Disks are matched by any of: their vSphere device label (e.g. "Hard disk 1"),
+	 * their backing file's base name (e.g. "kube15_1", derived from "[datastore1] kube15/kube15_1.vmdk"),
+	 * or a controller moniker matching how vSphere itself displays the disk's address, e.g. "SCSI(0:2)"
+	 * or "IDE(1:0)" (controller bus number : unit number). If no label is given, {@code allowAutoSelectSingleDisk}
+	 * controls whether a VM with exactly one disk may use it without a label.
 	 */
 	private VirtualDisk findDiskByLabel(VirtualMachine vm, String label, boolean allowAutoSelectSingleDisk) throws VSphereException {
 		VirtualDisk match = null;
 		VirtualDisk onlyDisk = null;
 		int diskCount = 0;
+
+		Matcher monikerMatcher = (label != null) ? controllerMonikerPattern.matcher(label) : null;
+		boolean isMoniker = monikerMatcher != null && monikerMatcher.matches();
 
 		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
 			if (!(vmDevice instanceof VirtualDisk)) {
@@ -337,6 +342,14 @@ public class ReconfigureDisk extends ReconfigureStep {
 			onlyDisk = disk;
 
 			if (label == null || label.isEmpty()) {
+				continue;
+			}
+
+			if (isMoniker) {
+				if (matchesControllerMoniker(vm, disk, monikerMatcher.group(1),
+						Integer.parseInt(monikerMatcher.group(2)), Integer.parseInt(monikerMatcher.group(3)))) {
+					match = disk;
+				}
 				continue;
 			}
 
@@ -362,33 +375,43 @@ public class ReconfigureDisk extends ReconfigureStep {
 		return match;
 	}
 
-	/**
-	 * Finds an existing disk by its SCSI unit number (vSphere's own zero-based device addressing,
-	 * e.g. "SCSI(0:2)"), rather than by parsing an opinionated file naming convention. Ambiguous only
-	 * if the VM has disks sharing a unit number across more than one SCSI controller, which is rare;
-	 * use deviceLabel instead in that case.
-	 */
-	private VirtualDisk findDiskByUnitNumber(VirtualMachine vm, int unitNumber) throws VSphereException {
-		VirtualDisk match = null;
-
+	private boolean matchesControllerMoniker(VirtualMachine vm, VirtualDisk disk, String controllerType, int busNumber, int unitNumber) {
+		if (disk.getUnitNumber() == null || disk.getUnitNumber() != unitNumber || disk.getControllerKey() == null) {
+			return false;
+		}
 		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
-			if (!(vmDevice instanceof VirtualDisk) || vmDevice.getUnitNumber() == null) {
+			if (!(vmDevice instanceof VirtualController) || vmDevice.getKey() != disk.getControllerKey()) {
 				continue;
 			}
-			if (vmDevice.getUnitNumber() == unitNumber) {
-				if (match != null) {
-					throw new VSphereException(String.format(
-							"Multiple disks found with unit number %d (VM has more than one SCSI controller); use deviceLabel instead", unitNumber));
-				}
-				match = (VirtualDisk) vmDevice;
+			if ("SCSI".equals(controllerType) && vmDevice instanceof VirtualSCSIController) {
+				return ((VirtualController) vmDevice).getBusNumber() == busNumber;
 			}
+			if ("IDE".equals(controllerType) && vmDevice instanceof VirtualIDEController) {
+				return ((VirtualController) vmDevice).getBusNumber() == busNumber;
+			}
+			return false;
 		}
+		return false;
+	}
 
-		if (match == null) {
-			throw new VSphereException("Could not find a disk with unit number " + unitNumber);
+	/**
+	 * Finds the Nth disk (zero-based), counting only VirtualDisk entries in the same order vCenter
+	 * itself returns them via VirtualHardware.device -- no re-sorting or address scheme of our own,
+	 * just vCenter's own list order.
+	 */
+	private VirtualDisk findDiskByIndex(VirtualMachine vm, int index) throws VSphereException {
+		int count = 0;
+		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+			if (!(vmDevice instanceof VirtualDisk)) {
+				continue;
+			}
+			if (count == index) {
+				return (VirtualDisk) vmDevice;
+			}
+			count++;
 		}
-
-		return match;
+		throw new VSphereException(String.format(
+				"VM has %d disks attached; no disk with deviceNumber %d", count, index));
 	}
 
 	private String diskBaseName(VirtualDisk disk) {
