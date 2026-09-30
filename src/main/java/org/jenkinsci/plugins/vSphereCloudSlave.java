@@ -42,6 +42,8 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
  */
 public class vSphereCloudSlave extends AbstractCloudSlave {
 
+    private static final long serialVersionUID = 1L;
+
     private final String vsDescription;
     private final String vmName;
     private final String snapName;
@@ -57,7 +59,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
     // The list of agents that MIGHT be launched.
     private static ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
-    private static final Boolean ProbableLaunchLock = true;
+    private static final Object ProbableLaunchLock = new Object();
 
     public transient Boolean slaveIsStarting = Boolean.FALSE;
     public transient Boolean slaveIsDisconnecting = Boolean.FALSE;
@@ -107,7 +109,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         this.waitForVMTools = waitForVMTools;
         this.launchDelay = launchDelay;
         this.idleOption = idleOption;
-        this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
+        final Number parsedLimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0);
+        this.LimitedTestRunCount = parsedLimitedTestRunCount != null ? parsedLimitedTestRunCount.intValue() : 0;
         this.NumberOfLimitedTestRuns = 0;
         readResolve();
     }
@@ -153,7 +156,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     public boolean isLaunchSupportForced() {
-        return ((vSphereCloudLauncher) getLauncher()).getOverrideLaunchSupported() == Boolean.TRUE;
+        return Boolean.TRUE.equals(((vSphereCloudLauncher) getLauncher()).getOverrideLaunchSupported());
     }
 
     @Override
@@ -279,11 +282,11 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return CauseOfBlockage.fromMessage(Messages._vSphereCloudSlave_BlockageReason_NoFlyweightTasks());
         }
 
-        if (slaveIsStarting == Boolean.TRUE) {
+        if (Boolean.TRUE.equals(slaveIsStarting)) {
             return new CauseOfBlockage.BecauseNodeIsBusy(this);
         }
 
-        if (slaveIsDisconnecting == Boolean.TRUE) {
+        if (Boolean.TRUE.equals(slaveIsDisconnecting)) {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
 

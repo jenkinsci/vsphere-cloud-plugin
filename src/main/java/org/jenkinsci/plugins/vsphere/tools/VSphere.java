@@ -114,6 +114,9 @@ public class VSphere {
         final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
         final String pw = connectionDetails.getPassword();
+        if (user == null) {
+            throw new VSphereException("Username is not specified for " + connectionDetails.getVsHost());
+        }
         return new VSphere(server, ignoreCert, user, pw);
     }
 
@@ -1616,8 +1619,7 @@ public class VSphere {
         try {
             Datacenter datacenter = getDataCenter(virtualMachine);
             for (Network network : datacenter.getNetwork()) {
-                if (network instanceof Network
-                        && (name.isEmpty() || network.getName().contentEquals(name))) {
+                if (name.isEmpty() || network.getName().contentEquals(name)) {
                     return network;
                 }
             }

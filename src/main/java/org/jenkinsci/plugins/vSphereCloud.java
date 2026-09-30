@@ -33,7 +33,6 @@ import java.util.concurrent.Future;
 import java.util.logging.Level;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
-import net.sf.json.JSONObject;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -44,7 +43,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
-import org.kohsuke.stapler.StaplerRequest2;
 
 /**
  * @author Admin
@@ -563,8 +561,9 @@ public class vSphereCloud extends Cloud {
                 if (n instanceof vSphereCloudProvisionedSlave) {
                     continue; // ignore cloud slaves
                 }
-                if (n.getComputer().isOffline() && label.matches(n.getAssignedLabels())) {
-                    n.getComputer().tryReconnect();
+                final SlaveComputer computer = n.getComputer();
+                if (computer != null && computer.isOffline() && label.matches(n.getAssignedLabels())) {
+                    computer.tryReconnect();
                     numberOfvSphereCloudSlaves++;
                     numberOfvSphereCloudSlaveExecutors += n.getNumExecutors();
                 }
@@ -688,7 +687,7 @@ public class vSphereCloud extends Cloud {
         synchronized (templateState) {
             for (final String nodeName : nodeNamesToRetryDeletion) {
                 final Boolean isOkToDelete = templateState.isOkToDeleteUnwantedVM(nodeName);
-                if (isOkToDelete == Boolean.TRUE) {
+                if (Boolean.TRUE.equals(isOkToDelete)) {
                     final Runnable task = new Runnable() {
                         @Override
                         public void run() {
@@ -902,6 +901,7 @@ public class vSphereCloud extends Cloud {
             }
             if (topLevelItem != null && topLevelItem instanceof Folder) {
                 extractClouds(vSphereClouds, (Folder) topLevelItem);
+                prevFolder = (Folder) topLevelItem;
             }
         }
 
@@ -941,26 +941,17 @@ public class vSphereCloud extends Cloud {
     @Extension
     public static final class DescriptorImpl extends Descriptor<Cloud> {
 
+        /**
+         * Legacy global config from before this plugin supported multiple, per-instance clouds;
+         * nothing reads it any more, kept only because it's still the historical map key type
+         * referenced by ancient config.xml files.
+         */
         public final @Deprecated ConcurrentMap<String, vSphereCloud> hypervisors =
                 new ConcurrentHashMap<String, vSphereCloud>();
-        private @Deprecated String vsHost;
-        private @Deprecated String username;
-        private @Deprecated String password;
-        private @Deprecated int maxOnlineSlaves;
 
         @Override
         public String getDisplayName() {
             return "vSphere Cloud";
-        }
-
-        @Override
-        public boolean configure(StaplerRequest2 req, JSONObject o) throws FormException {
-            vsHost = o.getString("vsHost");
-            username = o.getString("username");
-            password = o.getString("password");
-            maxOnlineSlaves = o.getInt("maxOnlineSlaves");
-            save();
-            return super.configure(req, o);
         }
 
         public FormValidation doCheckVsDescription(@QueryParameter String value) {

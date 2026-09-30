@@ -26,6 +26,7 @@ import hudson.util.ListBoxModel;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -233,7 +234,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
 
     @Override
     public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

@@ -431,8 +431,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 final String oldCredentialsIdOrNull = getCredentialsId();
                 final String oldCredentialsId = oldCredentialsIdOrNull == null ? "" : oldCredentialsIdOrNull;
                 // these were the old hard-coded settings
-                this.launcher = new SSHLauncher(
-                        null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60, null);
+                this.launcher =
+                        new SSHLauncher("", 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60, null);
                 LOGGER.log(Level.CONFIG, " - now configured to use {0}(..., {1}, ...)", new Object[] {
                     this.launcher.getClass().getSimpleName(), oldCredentialsId
                 });
@@ -713,7 +713,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     public static final class DescriptorImpl extends Descriptor<vSphereCloudSlaveTemplate> {
         @Override
         public String getDisplayName() {
-            return null;
+            return "";
         }
 
         public FormValidation doCheckCloneNamePrefix(@QueryParameter String cloneNamePrefix) {

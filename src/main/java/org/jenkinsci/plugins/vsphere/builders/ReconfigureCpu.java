@@ -180,8 +180,8 @@ public class ReconfigureCpu extends ReconfigureStep {
                 @AncestorInPath Item context, @QueryParameter String cpuCores, @QueryParameter String coresPerSocket) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             try {
-                if (Integer.valueOf(coresPerSocket) > Integer.valueOf(cpuCores)) {
-                    return FormValidation.error(Messages.validation_maxValue(Integer.valueOf(cpuCores) + 1));
+                if (Integer.parseInt(coresPerSocket) > Integer.parseInt(cpuCores)) {
+                    return FormValidation.error(Messages.validation_maxValue(Integer.parseInt(cpuCores) + 1));
                 }
 
                 return FormValidation.ok();

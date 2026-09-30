@@ -30,7 +30,7 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
 
     @Override
     public boolean isConnecting() {
-        return (vSlave.slaveIsStarting == Boolean.TRUE) || super.isConnecting();
+        return Boolean.TRUE.equals(vSlave.slaveIsStarting) || super.isConnecting();
     }
 
     public String getCloudDescription() {

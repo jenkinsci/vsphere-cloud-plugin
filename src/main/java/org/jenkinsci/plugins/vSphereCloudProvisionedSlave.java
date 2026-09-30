@@ -65,16 +65,17 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
         try {
             final ComputerLauncher l = getLauncher();
             final vSphereCloud cloud = findOurVsInstance(l);
-            if (cloud != null) {
-                final String cloneName = this.getComputer().getName();
-                cloud.provisionedSlaveHasTerminated(cloneName);
+            final Computer computer = this.getComputer();
+            if (cloud != null && computer != null) {
+                cloud.provisionedSlaveHasTerminated(computer.getName());
             } else {
                 vSphereCloud.Log(
                         listener,
-                        "%1s._terminate for vmName %2s failed as getLauncher() returned %3s",
+                        "%1s._terminate for vmName %2s failed as getLauncher() returned %3s and getComputer() returned %4s",
                         getClass().getSimpleName(),
                         getVmName(),
-                        l);
+                        l,
+                        computer);
             }
         } catch (RuntimeException ex) {
             vSphereCloud.Log(

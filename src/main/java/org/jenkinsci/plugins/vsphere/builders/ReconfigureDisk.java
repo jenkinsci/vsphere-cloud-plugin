@@ -605,7 +605,7 @@ public class ReconfigureDisk extends ReconfigureStep {
                 if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
                     return FormValidation.error("Specify either Device Label or Device Number, not both");
                 }
-                if (diskSize != null && !diskSize.isEmpty() && Integer.valueOf(diskSize) < 0) {
+                if (diskSize != null && !diskSize.isEmpty() && Integer.parseInt(diskSize) < 0) {
                     return FormValidation.error(Messages.validation_positiveInteger(diskSize));
                 }
                 return FormValidation.ok();
