@@ -18,6 +18,7 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 
+import com.vmware.vim25.VirtualMachineConfigSpec;
 import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
 import hudson.Extension;
@@ -50,9 +51,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.stream.Collectors;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -64,6 +65,7 @@ import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -96,6 +98,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     private int configVersion;
     private static final int CURRENT_CONFIG_VERSION = 1;
+    private static final int DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS = 120;
     private String cloneNamePrefix; // almost final
     private final String masterImageName;
     private Boolean useSnapshot; // almost final
@@ -133,6 +136,16 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
     private ComputerLauncher launcher;
     private RetentionStrategy<?> retentionStrategy;
+    private final List<ReconfigureStep> reconfigureSteps;
+    /**
+     * How long (in seconds) to wait for vCenter's own power-on task to report completion when
+     * starting a clone back up after applying {@link #reconfigureSteps} to it. This is a wait for
+     * the vSphere-level power-on operation itself, e.g. for DRS to decide where in the cluster
+     * to place the newly created VM instance, not for the guest OS/agent to become reachable
+     * (that's {@link #launchDelay}/waitForVMTools, handled separately once the agent's launcher
+     * runs). Defaults to the same value this was hard-coded to before it became configurable.
+     */
+    private int reconfigureStartTimeoutSeconds = DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
@@ -165,7 +178,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                      final ComputerLauncher launcher,
                                      final RetentionStrategy<?> retentionStrategy,
                                      final List<? extends NodeProperty<?>> nodeProperties,
-                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties) {
+                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties,
+                                     final List<ReconfigureStep> reconfigureSteps) {
         this.configVersion = CURRENT_CONFIG_VERSION;
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
@@ -195,6 +209,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.guestInfoProperties = Util.fixNull(guestInfoProperties);
         this.launcher = launcher;
         this.retentionStrategy = retentionStrategy;
+        this.reconfigureSteps = Util.fixNull(reconfigureSteps);
         readResolve();
     }
 
@@ -302,6 +317,16 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.hostSelectionMode = hostSelectionMode;
     }
 
+    /** @see #reconfigureStartTimeoutSeconds */
+    public int getReconfigureStartTimeoutSeconds() {
+        return this.reconfigureStartTimeoutSeconds;
+    }
+
+    @DataBoundSetter
+    public void setReconfigureStartTimeoutSeconds(int reconfigureStartTimeoutSeconds) {
+        this.reconfigureStartTimeoutSeconds = reconfigureStartTimeoutSeconds;
+    }
+
     /** Canonical form, for pipeline/API/JCasC consumers. */
     public Set<String> getHostSelectionCandidates() {
         return this.hostSelectionCandidates;
@@ -371,10 +396,20 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return this.retentionStrategy;
     }
 
+    public List<ReconfigureStep> getReconfigureSteps() {
+        return this.reconfigureSteps;
+    }
+
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
         if(this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
+        }
+        if (this.reconfigureStartTimeoutSeconds <= 0) {
+            // Either loaded from before this field existed (XStream doesn't run field
+            // initializers), or someone set 0/negative, which would make startVm() return
+            // instantly without ever confirming power-on succeeded -- not a useful value either way.
+            this.reconfigureStartTimeoutSeconds = DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS;
         }
         if ( this.useSnapshot == null ) {
             this.useSnapshot = Boolean.valueOf(this.snapshotName!=null);
@@ -447,20 +482,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
-        final PrintStream logger = listener.getLogger();
         final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
         final vSphereCloudProvisionedSlave slave;
         try {
-            slave = provision(cloneName, logger, resolvedExtraConfigParameters, vSphere);
+            slave = provision(cloneName, listener, resolvedExtraConfigParameters, vSphere);
         } finally {
             vSphere.disconnect();
         }
         return slave;
     }
 
-    private vSphereCloudProvisionedSlave provision(final String cloneName, final PrintStream logger, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
-        final boolean POWER_ON = true;
+    private vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
+        final PrintStream logger = listener.getLogger();
         final boolean useCurrentSnapshot;
         final String snapshotToUse;
         if (getUseSnapshot()) {
@@ -482,8 +516,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
         try {
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, POWER_ON, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, logger);
+            final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
+            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, !willReconfigure, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
+            if(willReconfigure) {
+                final VirtualMachine vm = vSphere.getVmByName(cloneName);
+                final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+                final EnvVars env = new EnvVars();
+                for (ReconfigureStep globalStep : reconfigureSteps) {
+                    // Do not mutate global steps to perform reconfiguration - use a clone
+                    ReconfigureStep actionStep = (ReconfigureStep)Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep));
+                    actionStep.setVsphere(vSphere);
+                    actionStep.setVM(vm);
+                    actionStep.setVirtualMachineConfigSpec(spec);
+                    actionStep.perform(env, listener);
+                }
+                vSphere.reconfigureVm(cloneName, spec);
+                vSphere.startVm(cloneName, reconfigureStartTimeoutSeconds);
+            }
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
             if ( vmJenkinsUrl==null ) {
