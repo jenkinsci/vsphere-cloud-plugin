@@ -24,15 +24,20 @@ import hudson.*;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
+
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
@@ -534,8 +539,9 @@ public class ReconfigureDisk extends ReconfigureStep {
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckDeviceNumber(@QueryParameter String value)
+		public FormValidation doCheckDeviceNumber(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			if (value == null || value.isEmpty()) {
 				return FormValidation.ok();
 			}
@@ -554,8 +560,10 @@ public class ReconfigureDisk extends ReconfigureStep {
 			return Messages.vm_title_ReconfigureDisk();
 		}
 
-		public FormValidation doTestData(@QueryParameter String diskSize, @QueryParameter String datastore,
-				@QueryParameter String deviceLabel, @QueryParameter String deviceNumber) {
+		@RequirePOST
+		public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter String diskSize,
+				@QueryParameter String datastore, @QueryParameter String deviceLabel, @QueryParameter String deviceNumber) {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			try {
 				if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
 					return FormValidation.error("Specify either Device Label or Device Number, not both");

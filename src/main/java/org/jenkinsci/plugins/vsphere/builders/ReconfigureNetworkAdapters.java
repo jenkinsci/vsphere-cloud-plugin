@@ -22,20 +22,25 @@ import hudson.*;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
+
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
@@ -318,8 +323,9 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckDeviceNumber(@QueryParameter String value)
+        public FormValidation doCheckDeviceNumber(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value == null || value.isEmpty()) {
                 return FormValidation.ok();
             }
@@ -338,10 +344,12 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             return Messages.vm_title_ReconfigureNetworkAdapter();
         }
 
-        public FormValidation doTestData(@QueryParameter DeviceAction deviceAction, @QueryParameter String deviceLabel,
-                @QueryParameter String deviceNumber, @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
-                @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter DeviceAction deviceAction,
+                @QueryParameter String deviceLabel, @QueryParameter String deviceNumber, @QueryParameter String macAddress,
+                @QueryParameter boolean standardSwitch, @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
                 @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (standardSwitch && distributedSwitch) {
                     return FormValidation.error(Messages.validation_wrongSwitchSelection());
