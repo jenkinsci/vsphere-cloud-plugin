@@ -526,16 +526,18 @@ public class ReconfigureDisk extends ReconfigureStep {
 			load();
 		}
 
-		public FormValidation doCheckDiskSize(@QueryParameter String value)
+		public FormValidation doCheckDiskSize(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("Disk size"));
 			return FormValidation.ok();
 		}
 
-		public FormValidation doCheckDatastore(@QueryParameter String value)
+		public FormValidation doCheckDatastore(@AncestorInPath Item context, @QueryParameter String value)
 				throws IOException, ServletException {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			return FormValidation.ok();
 		}
 

@@ -17,18 +17,23 @@ package org.jenkinsci.plugins.vsphere.builders;
 import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
+
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 public class ReconfigureCpu extends ReconfigureStep {
 
@@ -104,16 +109,18 @@ public class ReconfigureCpu extends ReconfigureStep {
 			load();
 		}
 
-        public FormValidation doCheckCpuCores(@QueryParameter String value)
+        public FormValidation doCheckCpuCores(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
 
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("CPU Cores"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckCoresPerSocket(@QueryParameter String value)
+        public FormValidation doCheckCoresPerSocket(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
 
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("Cores per socket"));
@@ -125,7 +132,10 @@ public class ReconfigureCpu extends ReconfigureStep {
 			return Messages.vm_title_ReconfigureCpu();
 		}
 
-		public FormValidation doTestData(@QueryParameter String cpuCores, @QueryParameter String coresPerSocket) {
+		@RequirePOST
+		public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter String cpuCores,
+				@QueryParameter String coresPerSocket) {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			try {
                 if (Integer.valueOf(coresPerSocket) > Integer.valueOf(cpuCores)) {
                     return FormValidation.error(Messages.validation_maxValue(Integer.valueOf(cpuCores)+1));

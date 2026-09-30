@@ -316,8 +316,9 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             load();
         }
     
-        public FormValidation doCheckMacAddress(@QueryParameter String value)
+        public FormValidation doCheckMacAddress(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
@@ -357,7 +358,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
                     return FormValidation.error("Specify either Device Label or Device Number, not both");
                 }
-                return doCheckMacAddress(macAddress);
+                return doCheckMacAddress(context, macAddress);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

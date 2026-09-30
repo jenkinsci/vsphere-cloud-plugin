@@ -17,18 +17,23 @@ package org.jenkinsci.plugins.vsphere.builders;
 import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
+
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 public class ReconfigureMemory extends ReconfigureStep {
 
@@ -92,8 +97,9 @@ public class ReconfigureMemory extends ReconfigureStep {
 			load();
 		}
 
-        public FormValidation doCheckMemorySize(@QueryParameter String value)
+        public FormValidation doCheckMemorySize(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
 
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("Memory Size"));
@@ -105,9 +111,11 @@ public class ReconfigureMemory extends ReconfigureStep {
 			return Messages.vm_title_ReconfigureMemory();
 		}
 
-		public FormValidation doTestData(@QueryParameter String memorySize) {
+		@RequirePOST
+		public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter String memorySize) {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			try {
-				return doCheckMemorySize(memorySize);
+				return doCheckMemorySize(context, memorySize);
 			} catch (Exception e) {
 				throw new RuntimeException(e);
 			}
