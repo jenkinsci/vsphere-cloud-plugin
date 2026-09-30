@@ -24,7 +24,17 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
     private static final Logger LOGGER = Logger.getLogger(CloudRetentionStrategy.class.getName());
 
     private final int lifespanMinutes;
-    private transient boolean atEndOfLife;
+
+    // check() is documented @GuardedBy("hudson.model.Queue.lock") on RetentionStrategy itself, so all
+    // calls to it (for every computer, not just this one) are already serialized by the caller -- the
+    // two reads of isAtEndOfLife() within a single check() call can't race with a concurrent write from
+    // another check() call, and synchronizing here would add nothing beyond what Queue.lock already
+    // gives us. isAcceptingTasks(), however, is reached via Computer#isAcceptingTasks(), which is NOT
+    // documented as lock-guarded and so may run on a different thread while check() (holding Queue.lock)
+    // concurrently flips this flag. volatile is the right tool for that: it guarantees the other thread
+    // promptly sees the update, without implying (as `synchronized` would) that mutual exclusion is
+    // needed here too.
+    private transient volatile boolean atEndOfLife;
 
     @DataBoundConstructor
     public FixedLifespanCloudRetentionStrategy(int lifespanMinutes) {
@@ -92,11 +102,11 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
         return !isAtEndOfLife();
     }
 
-    private synchronized boolean isAtEndOfLife() {
+    private boolean isAtEndOfLife() {
         return atEndOfLife;
     }
 
-    private synchronized void setAtEndOfLife() {
+    private void setAtEndOfLife() {
         atEndOfLife = true;
     }
 
