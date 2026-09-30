@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -34,6 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -41,8 +42,9 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildStep {
 
-	private final String vm;    
+	private final String vm;
 	private final String snapshotName;
+    private boolean suppressPowerOn;
 
 	@DataBoundConstructor
 	public RevertToSnapshot(final String vm, final String snapshotName) throws VSphereException {
@@ -58,8 +60,17 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 		return snapshotName;
 	}
 
+	public boolean isSuppressPowerOn() {
+		return suppressPowerOn;
+	}
+
+	@DataBoundSetter
+	public void setSuppressPowerOn(boolean suppressPowerOn) {
+		this.suppressPowerOn = suppressPowerOn;
+	}
+
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			revertToSnapshot (run, launcher, listener);
 		} catch (Exception e) {
@@ -117,7 +128,7 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Reverting to snapshot \""+expandedSnap+"\" for VM "+expandedVm+"...");
-		vsphere.revertToSnapshot(expandedVm, expandedSnap);
+		vsphere.revertToSnapshot(expandedVm, expandedSnap, suppressPowerOn);
 		VSphereLogger.vsLogger(jLogger, "Complete.");
 
 		return true;
@@ -148,12 +159,13 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
                 @QueryParameter String serverName,
 				@QueryParameter String vm, @QueryParameter String snapshotName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 
 				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
@@ -172,6 +184,10 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}

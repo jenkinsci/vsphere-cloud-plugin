@@ -3,4 +3,7 @@
     <f:entry title="${%Idle Timeout}" field="idleMinutes">
         <f:number default="5"/>
     </f:entry>
+    <f:entry title="${%Maximum Lifespan}" field="lifespanMinutes">
+        <f:number default="0"/>
+    </f:entry>
 </j:jelly>

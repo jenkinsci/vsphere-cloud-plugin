@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -71,7 +71,7 @@ public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 	}
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			deleteSnapshot(run, launcher, listener);
 		} catch (Exception e) {
@@ -160,11 +160,12 @@ public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep 
                 @QueryParameter String serverName,
 				@QueryParameter String vm, @QueryParameter String snapshotName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 				if (vm.length() == 0 || serverName.length()==0 || snapshotName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
@@ -183,6 +184,10 @@ public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}

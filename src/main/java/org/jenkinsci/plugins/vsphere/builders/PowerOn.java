@@ -16,7 +16,6 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
-import com.google.common.base.Stopwatch;
 import com.vmware.vim25.mo.VirtualMachine;
 import hudson.*;
 import hudson.model.*;
@@ -30,7 +29,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -64,7 +63,7 @@ public class PowerOn extends VSphereBuildStep {
 	}
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			powerOn(run, launcher, listener);
 		} catch (Exception e) {
@@ -96,9 +95,9 @@ public class PowerOn extends VSphereBuildStep {
 			expandedVm = env.expand(vm);
 		}
 
-        Stopwatch stopwatch = new Stopwatch().start();
+        long startTimeNanos = System.nanoTime();
         vsphere.startVm(expandedVm, timeoutInSeconds);
-        long elapsedTime = stopwatch.elapsedTime(TimeUnit.SECONDS);
+        long elapsedTime = TimeUnit.SECONDS.convert(System.nanoTime() - startTimeNanos, TimeUnit.NANOSECONDS);
 
         int secondsToWaitForIp = (int) (timeoutInSeconds - elapsedTime);
 
@@ -110,7 +109,6 @@ public class PowerOn extends VSphereBuildStep {
 		}
 
 		VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \""+expandedVm+"\" : "+IP);
-        stopwatch.stop();
 
         // useful to tell user about the environment variable
         VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");
@@ -158,12 +156,13 @@ public class PowerOn extends VSphereBuildStep {
                 @QueryParameter String serverName,
 				@QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 
 				if (vm.length() == 0 || serverName.length()==0)
 					return FormValidation.error(Messages.validation_requiredValues());
 
-				VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
@@ -178,6 +177,10 @@ public class PowerOn extends VSphereBuildStep {
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}

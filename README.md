@@ -2,7 +2,7 @@
 
 [![Jenkins Plugin](https://img.shields.io/jenkins/plugin/v/vsphere-cloud.svg)](https://plugins.jenkins.io/vsphere-cloud)
 [![Jenkins Plugin Installs](https://img.shields.io/jenkins/plugin/i/vsphere-cloud.svg?color=blue)](https://plugins.jenkins.io/vsphere-cloud)
-[![Build Status](https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/badge/icon)](https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/)
+[![Build Status](https://ci.jenkins.io/buildStatus/icon?job=Plugins%2Fvsphere-cloud-plugin%2Fmaster)](https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/)
 
 ## Overview:
 * Cloud nodes: Provision nodes (Virtual Machines) from vSphere on demand.
@@ -12,6 +12,7 @@
 ## Documentation:
 * [Jenkins configuration](docs/jenkins-configuration.md)
 * [VM setup hints](docs/vm-configuration.md)
+* [Using the plugin in pipelines](docs/pipeline.md)
 * [Miscellaneous](docs/misc.md)
 
 ## Release history:

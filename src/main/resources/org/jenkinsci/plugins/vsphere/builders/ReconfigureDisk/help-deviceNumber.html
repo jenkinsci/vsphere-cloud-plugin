@@ -1,0 +1,12 @@
+<div>
+  Alternative to Device Label; cannot be combined with it. <b>One-based</b> (1 = first disk), to
+  match the numbering vSphere itself uses in labels like "Hard disk 1".
+  <ul>
+    <li><b>Add</b>: names the new disk's file "&lt;vm&gt;_&lt;N&gt;" -- the same convention, and the
+      same numbering, used when no name is given (fails if a disk with that name already exists).</li>
+    <li><b>Edit</b>/<b>Remove</b>: selects the Nth disk (counting only disks, in the same order
+      vCenter itself returns them) rather than matching a name or address -- if you need a specific
+      controller/unit instead, use Device Label with a moniker like "SCSI(0:2)" or "IDE(1:0)"
+      (those bus/unit numbers are vSphere's own hardware addressing and remain zero-based).</li>
+  </ul>
+</div>

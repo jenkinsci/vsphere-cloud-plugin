@@ -40,10 +40,10 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.Stapler;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
@@ -76,7 +76,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
     }
 
     @Override
-    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         VSphere vsphere = null;
         try {
             String expandedServerName = serverName;
@@ -90,13 +90,17 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             //TODO - also need to improve logging here.
 
             // select by hash if we have one
-            if (serverHash != null) {
-                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, run.getEnvironment(listener).get("JOB_NAME")).vSphereInstance();
-            } else {
-                vsphere = VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, run.getEnvironment(listener).get("JOB_NAME")).vSphereInstance();
-            }
+            final String jobName = run.getEnvironment(listener).get("JOB_NAME");
+            resolveCloud(expandedServerName, jobName).waitWhileInMaintenanceMode(listener);
+            // Re-resolve rather than reusing the instance above: Jenkins replaces a
+            // reconfigured Cloud with a brand-new instance (e.g. the admin toggling
+            // maintenance mode back off while we were blocked), so the instance we just
+            // waited on may no longer be the live one by the time waiting is done.
+            final vSphereCloud resolvedCloud = resolveCloud(expandedServerName, jobName);
+            vsphere = resolvedCloud.vSphereInstance();
 
             buildStep.setVsphere(vsphere);
+            buildStep.setSourceCloud(resolvedCloud);
             if (run instanceof AbstractBuild) {
                 buildStep.perform(((AbstractBuild) run), launcher, (BuildListener) listener);
             } else {
@@ -112,6 +116,13 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
         }
     }
 
+    private vSphereCloud resolveCloud(String expandedServerName, String jobName) throws VSphereException {
+        if (serverHash != null) {
+            return VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByHash(serverHash, jobName);
+        }
+        return VSphereBuildStep.VSphereBuildStepDescriptor.getVSphereCloudByName(expandedServerName, jobName);
+    }
+
     private void startLogs(PrintStream logger, String serverName) {
         VSphereLogger.vsLogger(logger, "");
         VSphereLogger.vsLogger(logger,
@@ -122,7 +133,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
 
     @Extension
     public static final class VSphereBuildStepContainerDescriptor extends BuildStepDescriptor<Builder> {
-        private static final Logger LOGGER = LoggerFactory.getLogger(VSphereBuildStepContainerDescriptor.class);
+        private static final Logger LOGGER = Logger.getLogger(VSphereBuildStepContainerDescriptor.class.getName());
 
         @Initializer(before = InitMilestone.PLUGINS_STARTED)
         public static void addAliases() {
@@ -155,7 +166,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             Folder prevFolder = null;
 
             try {
-                String[] path = Stapler.getCurrentRequest().getRequestURI().split("/");
+                String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
                 for (String item : path) {
 
                     if (item.equals("job") || item.equals("jenkins"))
@@ -192,7 +203,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 }
             } catch (Exception e) {
 
-                LOGGER.error(e.toString(), e);
+                LOGGER.log(Level.SEVERE, e.toString(), e);
             }
 
             return select;

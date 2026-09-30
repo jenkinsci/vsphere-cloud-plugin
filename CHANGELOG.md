@@ -1,5 +1,32 @@
 # Change Log
 
+For current change log please see GitHub release pages at
+https://github.com/jenkinsci/vsphere-cloud-plugin/releases
+
+Pre-release builds can be downloaded (before they expire) from
+https://ci.jenkins.io/job/Plugins/job/vsphere-cloud-plugin/job/master/
+
+As a short summary, release 2.28 was the last manually cut release, in March 2026.
+
+Releases with major number `3.x` are published with an automated procedure and a monotonously incrementing semantic version format.
+
+Releases with major number `4.x` mark the breaking change of JDK 17 deprecation by dependency of the plugin (yavijava) and so requirement of a newer Jenkins LTS core which can no longer run with JDK 17 either (to avoid potential mismatches).
+
+### [Version 2.28](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.28)
+* There may be more works not tracked in this file since summer 2022
+* Resolve JCasC runOnceCloud retention strategy clash with anka-build plugin ([#132](https://github.com/jenkinsci/docker-plugin/pull/132))
+* Expose all options of `cloneOrDeployVm()` method in buildStep `Clone`, allow to use `namedSnapshot` and `extraConfigParameters` ([#137](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/137))
+* Code base modernization for the plugin production code and its self-tests.
+
+### [Version 2.27](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.27)
+_May 12th, 2022_:
+* Prepare for removal of JAXB and Java 11 requirement ([JENKINS-68477](https://issues.jenkins.io/browse/JENKINS-68477), [#131](https://github.com/jenkinsci/docker-plugin/pull/131))
+* Stop using deprecated Util join() ([#129](https://github.com/jenkinsci/docker-plugin/pull/129))
+
+### [Version 2.26](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.26)
+_August 18th, 2021_:
+* Prepare vSphere for core Guava upgrade ([JENKINS-66301](https://issues.jenkins.io/browse/JENKINS-66301), [PR#128](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/128))
+
 ### [Version 2.25](https://github.com/jenkinsci/vsphere-cloud-plugin/releases/tag/vsphere-cloud-2.25)
 _January 25th, 2021_:
 * Bump minimum Jenkins core version to 2.190.1 ([PR#125](https://github.com/jenkinsci/vsphere-cloud-plugin/pull/125))

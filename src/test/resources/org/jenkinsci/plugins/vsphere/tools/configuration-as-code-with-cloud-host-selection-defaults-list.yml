@@ -1,0 +1,13 @@
+jenkins:
+  systemMessage: "Hello World"
+  clouds:
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        hostSelectionMode: "DRS_RECOMMENDED"
+        hostSelectionCandidates:
+          - "esx01.company.example"
+          - "esx02.company.example"
+        vsConnectionConfig:
+          vsHost: "https://company-vsphere"
+        vsDescription: "Cloud Host Selection Defaults List Test vSphere"
