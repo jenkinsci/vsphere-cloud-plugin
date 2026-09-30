@@ -24,6 +24,7 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
     private static final Logger LOGGER = Logger.getLogger(CloudRetentionStrategy.class.getName());
 
     private final int lifespanMinutes;
+    private transient boolean atEndOfLife;
 
     @DataBoundConstructor
     public FixedLifespanCloudRetentionStrategy(int lifespanMinutes) {
@@ -79,8 +80,6 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
     public boolean isAcceptingTasks(AbstractCloudComputer c) {
         return !isAtEndOfLife();
     }
-
-    private transient boolean atEndOfLife;
 
     private synchronized boolean isAtEndOfLife() {
         return atEndOfLife;
