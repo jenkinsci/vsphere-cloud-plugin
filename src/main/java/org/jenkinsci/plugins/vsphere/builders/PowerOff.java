@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -34,6 +34,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -44,7 +45,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 	private final String vm;    
 	private final boolean evenIfSuspended;
     private final boolean shutdownGracefully;
-
+	private Integer gracefulShutdownTimeout;
 
 	private final boolean ignoreIfNotExists;
 
@@ -54,6 +55,11 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 		this.evenIfSuspended = evenIfSuspended;
         this.shutdownGracefully = shutdownGracefully;
         this.ignoreIfNotExists = ignoreIfNotExists;
+	}
+
+	@DataBoundSetter
+	public void setGracefulShutdownTimeout(int gracefulShutdownTimeout) {
+		this.gracefulShutdownTimeout = gracefulShutdownTimeout == 180 ? null : gracefulShutdownTimeout;
 	}
 
 	public boolean isIgnoreIfNotExists() {
@@ -66,6 +72,12 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 
     public boolean isShutdownGracefully() {return shutdownGracefully; }
 
+	public int getGracefulShutdownTimeout() {
+		if (!shutdownGracefully || gracefulShutdownTimeout == null)
+			return 180;
+		return gracefulShutdownTimeout;
+	}
+
 	public String getVm() {
 		return vm;
 	}
@@ -76,7 +88,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 	}
 
 	@Override
-	public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			powerOff(run, launcher, listener);
 		} catch (Exception e) {
@@ -133,7 +145,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         if (vsphereVm != null) {
-			vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully);
+			vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully ? getGracefulShutdownTimeout() : 0);
 
 			VSphereLogger.vsLogger(jLogger, "Successfully shutdown \"" + expandedVm + "\"");
 		} else {
@@ -162,6 +174,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
                 @QueryParameter String serverName,
 				@QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+			VSphere vsphere = null;
 			try {
 				if (serverName.length() == 0 || vm.length()==0 )
 					return FormValidation.error(Messages.validation_requiredValues());
@@ -169,7 +182,7 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 				if (vm.indexOf('$') >= 0)
 					return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+				vsphere = getVSphereCloudByName(serverName).vSphereInstance();
 				VirtualMachine vmObj = vsphere.getVmByName(vm);
 				if ( vmObj == null)
 					return FormValidation.error(Messages.validation_notFound("VM"));
@@ -180,6 +193,10 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 				return FormValidation.ok(Messages.validation_success());
 			} catch (Exception e) {
 				throw new RuntimeException(e);
+			} finally {
+				if (vsphere != null) {
+					vsphere.disconnect();
+				}
 			}
 		}
 	}

@@ -1,6 +1,6 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
-    <table width="100%">
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form" xmlns:v="/lib/vsphere">
+    <v:blockWrapper>
         <f:entry title="${%Clone Name Prefix}" field="cloneNamePrefix">
             <f:textbox/>
         </f:entry>
@@ -24,7 +24,7 @@
             <f:entry title="${%Linked Clone}" field="linkedClone">
                 <f:checkbox/>
             </f:entry>
-            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,allowUntrustedCertificate,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName"/>
+            <f:validateButton title="${%Check Template}" progress="${%Testing...}" method="testCloneParameters" with="vsHost,allowUntrustedCertificate,credentialsId,masterImageName,linkedClone,useSnapshot,snapshotName,targetHost,hostSelectionCandidatesAsString"/>
 
             <f:entry title="${%Cluster}" field="cluster">
                 <f:textbox/>
@@ -39,6 +39,18 @@
             </f:entry>
 
             <f:entry title="${%Folder}" field="folder">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Target Host}" field="targetHost">
+                <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
+                <f:select/>
+            </f:entry>
+
+            <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
                 <f:textbox/>
             </f:entry>
 
@@ -72,7 +84,7 @@
                 <f:checkbox/>
             </f:entry>
 
-            <f:entry title="${%Delay between launch and boot complete}" field="launchDelay" description="${%Number of seconds.}">
+            <f:entry title="${%Delay in seconds}" field="launchDelay">
                 <f:textbox clazz="required number" default="60"/>
             </f:entry>
 
@@ -121,7 +133,10 @@
                 </j:forEach>
             </f:dropdownList>
 
-            <f:descriptorList title="${%Node Properties}" descriptors="${h.getNodePropertyDescriptors(descriptor.clazz)}" field="nodeProperties"/>
+            <f:entry title="Node Properties">
+                <f:repeatableHeteroProperty field="nodeProperties" oneEach="true" hasHeader="true"
+                                            addCaption="Add Node Property" deleteCaption="Delete Node Property"/>
+            </f:entry>
         </f:advanced>
 
         <f:entry title="">
@@ -130,5 +145,5 @@
             </div>
         </f:entry>
 
-    </table>
+    </v:blockWrapper>
 </j:jelly>

@@ -9,7 +9,7 @@ import java.util.TreeSet;
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 
 /**
- * There's a delay between when we give a bunch of slave nodes to Jenkins (when
+ * There's a delay between when we give a bunch of nodes to Jenkins (when
  * it asks us to provision some) and when those nodes appear in vSphere and in
  * Jenkins, so we need to keep a record of what's in progress so we don't
  * over-commit.

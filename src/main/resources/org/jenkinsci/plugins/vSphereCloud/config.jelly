@@ -7,12 +7,49 @@
         <f:property field="vsConnectionConfig"/>
     </f:entry>
 
+    <f:entry title="${%Maintenance mode (offline)}" field="maintenanceMode"
+             description="When checked, VM operations against this cloud (build steps, pipeline calls, agent provisioning/launch/idle actions) log a message and block until this is unchecked.">
+        <f:checkbox/>
+    </f:entry>
+    <f:entry title="${%Maintenance mode message}" field="maintenanceMessage"
+             description="MOTD-style message logged to consumers while this cloud is in maintenance mode.">
+        <f:textbox/>
+    </f:entry>
+
     <f:advanced>
         <f:entry title="${%Max number of VMs online}" field="maxOnlineSlaves" description="0 means unlimited.">
             <f:textbox clazz="required number"/>
         </f:entry>
         <f:entry title="${%Template Instance Cap}" field="instanceCap" description="0 means unlimited.">
             <f:textbox clazz="required number" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Use vSphere connection pool}" field="useConnectionPool">
+            <f:checkbox/>
+        </f:entry>
+        <f:entry title="${%Pool health check interval in seconds}" field="poolHealthCheckIntervalSecs"
+                 description="0 - no periodic health checks are performed.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool session max age in seconds}" field="sessionMaxAgeSecs"
+                 description="0 - the session is never restarted based on age.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool session max uses}" field="sessionMaxUses"
+                 description="0 - the session is never restarted based on use count.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+        <f:entry title="${%Pool idle disconnect timeout in seconds}" field="poolIdleTimeoutSecs"
+                 description="0 - the connection is kept alive indefinitely.">
+            <f:textbox clazz="number" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Default Host Selection Mode}" field="hostSelectionMode">
+            <f:select/>
+        </f:entry>
+
+        <f:entry title="${%Default Host Selection Candidates}" field="hostSelectionCandidatesAsString">
+            <f:textbox/>
         </f:entry>
     </f:advanced>
 

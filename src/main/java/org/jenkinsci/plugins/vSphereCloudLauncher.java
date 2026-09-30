@@ -158,14 +158,14 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     return;
                 }
 
-                // Slaves that take a while to start up make get multiple launch
+                // Agents that take a while to start up make get multiple launch
                 // requests from Jenkins.
                 if (vsSlave.slaveIsStarting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring additional attempt to start the slave; it's already being started");
                     return;
                 }
 
-                // If a slave is disconnecting, don't try to start it up
+                // If a agent is disconnecting, don't try to start it up
                 if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
                     vSphereCloud.Log(slaveComputer, taskListener, "Ignoring connect attempt to start the slave; it's being shutdown");
                     return;
@@ -197,7 +197,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         }
 
                         vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-                        Task task = snap.revertToSnapshot_Task(null);
+                        Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
                         if (!task.waitForTask().equals(Task.SUCCESS)) {
                             throw new IOException("Error while reverting to virtual machine snapshot");
                         }
@@ -216,7 +216,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             break;
                     }
 
-                    if (waitForVMTools) {
+                    // Null in agent configurations saved before the field existed, as with overrideLaunchSupported
+                    if (Boolean.TRUE.equals(waitForVMTools)) {
                         vSphereCloud.Log(slaveComputer, taskListener, "Waiting for VMTools");
 
                         Calendar target = Calendar.getInstance();
@@ -282,18 +283,19 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
 
-        if(vsSlave == null) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Slave is null.");
-            return;
+        if (vsSlave != null) {
+            if (vsSlave.slaveIsStarting == Boolean.TRUE) {
+                vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
+                return;
+            }
+            if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
+                vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
+                return;
+            }
+        } else {
+            vSphereCloud.Log(slaveComputer, taskListener, "Slave is null. Will still attempt to tear down launcher.");
         }
-        if (vsSlave.slaveIsStarting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Ignoring disconnect attempt because a connect attempt is in progress.");
-            return;
-        }
-        if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
-            vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
-            return;
-        }
+
         if (slaveComputer.isTemporarilyOffline()) {
             if (!(slaveComputer.getOfflineCause() instanceof VSphereOfflineCause)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
@@ -301,7 +303,11 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             }
         }
 
-        vsSlave.slaveIsDisconnecting = Boolean.TRUE;
+        if (vsSlave != null) {
+            // This must be done after the isTemporarilyOffline() check, since the full disconnect may not occur
+            vsSlave.slaveIsDisconnecting = Boolean.TRUE;
+        }
+
         VSphere v = null;
         boolean reconnect = false;
         try {
@@ -380,8 +386,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 v.disconnect();
                 v = null;
             }
-            vsSlave.slaveIsDisconnecting = Boolean.FALSE;
-            vsSlave.slaveIsStarting = Boolean.FALSE;
+            if (vsSlave != null) {
+                vsSlave.slaveIsDisconnecting = Boolean.FALSE;
+                vsSlave.slaveIsStarting = Boolean.FALSE;
+            }
 
             if (reconnect) {
                 slaveComputer.connect(false);
@@ -485,13 +493,19 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                           TaskListener taskListener)
             throws IOException, InterruptedException, VSphereException {
         if (!snapName.isEmpty()) {
-            VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
+            VSphere tmpVs = vsC.vSphereInstance();
+            VirtualMachineSnapshot snap;
+            try {
+                snap = tmpVs.getSnapshotInTree(vm, snapName);
+            } finally {
+                tmpVs.disconnect();
+            }
             if (snap == null) {
                 throw new IOException("Virtual Machine snapshot cannot be found");
             }
 
             vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-            Task task = snap.revertToSnapshot_Task(null);
+            Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
             if (!task.waitForTask().equals(Task.SUCCESS)) {
                 throw new IOException("Error while reverting to virtual machine snapshot");
             }

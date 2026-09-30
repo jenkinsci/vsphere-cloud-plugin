@@ -4,13 +4,11 @@ import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUse
 
 import hudson.AbortException;
 import hudson.Extension;
-import hudson.Functions;
 import hudson.Util;
 import hudson.model.Queue.BuildableItem;
 import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.model.Computer;
-import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Run;
 import hudson.model.queue.CauseOfBlockage;
@@ -20,6 +18,8 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
@@ -55,13 +55,13 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private final Boolean waitForVMTools;
     private final String launchDelay;
     private final String idleOption;
-    /** If more than zero then this is the number of build-jobs we limit the slave to. */
+    /** If more than zero then this is the number of build-jobs we limit the agent to. */
     private Integer LimitedTestRunCount = 0;
-    /** A count of the number of build-jobs this slave has done. */
+    /** A count of the number of build-jobs this agent has done. */
     private transient Integer NumberOfLimitedTestRuns = 0;
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
-    // The list of slaves that MIGHT be launched.
+    // The list of agents that MIGHT be launched.
     private static ConcurrentHashMap<vSphereCloudSlave, ProbableLaunchData> ProbableLaunch;
     private static final Boolean ProbableLaunchLock = true;
 
@@ -351,7 +351,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
         @Override
         public void preLaunch(Computer c, TaskListener taskListener) throws IOException, InterruptedException {
-            /* We may be called on any slave type so check that we should
+            /* We may be called on any agent type so check that we should
              * be in here. */
             if (!(c.getNode() instanceof vSphereCloudSlave)) {
                 return;
@@ -366,20 +366,14 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     @Extension
-    public static final class DescriptorImpl extends SlaveDescriptor {
-
+    public static class DescriptorImpl extends SlaveDescriptor {
         public DescriptorImpl() {
             load();
         }
 
         @Override
         public String getDisplayName() {
-            return "Slave virtual computer running under vSphere Cloud";
-        }
-
-        @Override
-        public boolean isInstantiable() {
-            return true;
+            return "Agent running within a vSphere hypervisor";
         }
 
         public List<vSphereCloud> getvSphereClouds() {
@@ -400,16 +394,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 }
             }
             throw new Exception("The vSphere Cloud doesn't exist");
-        }
-
-        public List<Descriptor<ComputerLauncher>> getComputerLauncherDescriptors() {
-            List<Descriptor<ComputerLauncher>> result = new ArrayList<Descriptor<ComputerLauncher>>();
-            for (Descriptor<ComputerLauncher> launcher : Functions.getComputerLauncherDescriptors()) {
-                if (!vSphereCloudLauncher.class.isAssignableFrom(launcher.clazz)) {
-                    result.add(launcher);
-                }
-            }
-            return result;
         }
 
         public List<String> getIdleOptions() {
@@ -437,17 +421,22 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             throwUnlessUserHasPermissionToConfigureSlave(context);
             try {
                 vSphereCloud vsC = getSpecificvSphereCloud(vsDescription);
-                VirtualMachine vm = vsC.vSphereInstance().getVmByName(vmName);
-                if (vm == null) {
-                    return FormValidation.error("Virtual Machine was not found");
-                }
-                if (!snapName.isEmpty()) {
-                    VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
-                    if (snap == null) {
-                        return FormValidation.error("Virtual Machine snapshot was not found");
+                VSphere vs = vsC.vSphereInstance();
+                try {
+                    VirtualMachine vm = vs.getVmByName(vmName);
+                    if (vm == null) {
+                        return FormValidation.error("Virtual Machine was not found");
                     }
+                    if (!snapName.isEmpty()) {
+                        VirtualMachineSnapshot snap = vs.getSnapshotInTree(vm, snapName);
+                        if (snap == null) {
+                            return FormValidation.error("Virtual Machine snapshot was not found");
+                        }
+                    }
+                    return FormValidation.ok("Virtual Machine found successfully");
+                } finally {
+                    vs.disconnect();
                 }
-                return FormValidation.ok("Virtual Machine found successfully");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

@@ -28,6 +28,14 @@ limitations under the License.
     <f:checkbox  />
   </f:entry>
 
+  <f:entry title="${%Use Current Snapshot?}" field="useCurrentSnapshot">
+    <f:checkbox  />
+  </f:entry>
+
+  <f:entry title="${%Use Named Snapshot?}" field="namedSnapshot">
+    <f:textbox  />
+  </f:entry>
+
   <f:entry title="${%Cluster}" field="cluster">
     <f:textbox  />
   </f:entry>
@@ -54,5 +62,21 @@ limitations under the License.
     </f:entry>
   </f:optionalBlock>
 
-  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster"/>
+  <!-- TODO: How can we specify an optional Map<String,String> to set extraConfigParameters? -->
+
+  <f:advanced>
+    <f:entry title="${%Host}" field="host">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
+      <f:select/>
+    </f:entry>
+
+    <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
+      <f:textbox/>
+    </f:entry>
+  </f:advanced>
+
+  <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>
 </j:jelly>

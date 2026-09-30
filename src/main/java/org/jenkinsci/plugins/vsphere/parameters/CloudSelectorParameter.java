@@ -12,7 +12,7 @@ import net.sf.json.JSONObject;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.export.Exported;
 
 import java.util.List;
@@ -35,13 +35,15 @@ public class CloudSelectorParameter extends SimpleParameterDefinition {
 
     private StringParameterValue checkValue(StringParameterValue value) {
         List<String> cloudNames = vSphereCloud.findAllVsphereCloudNames();
-        if (!cloudNames.contains(value.value))
-            throw new IllegalArgumentException("No vsphere cloud with name: " + value.value);
+        String check = String.valueOf(value.getValue());
+        if (!cloudNames.contains(check)) {
+            throw new IllegalArgumentException("No vsphere cloud with name: " + check);
+        }
         return value;
     }
 
     @Override
-    public ParameterValue createValue(StaplerRequest req, JSONObject jo) {
+    public ParameterValue createValue(StaplerRequest2 req, JSONObject jo) {
         StringParameterValue value = req.bindJSON(StringParameterValue.class, jo);
         value.setDescription(getDescription());
         return checkValue(value);

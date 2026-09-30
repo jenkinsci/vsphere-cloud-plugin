@@ -51,7 +51,7 @@
     </f:entry>
 
     <f:entry title="${%Delay between launch and boot complete}" field="launchDelay"
-    description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as a slave.}" >
+    description="${%How many seconds between the VM being brought back to life before Jenkins can connect and bring it online as an agent.}" >
         <f:textbox default="60" />
     </f:entry>
 
@@ -64,11 +64,7 @@
                 <j:set var="descriptor" value="${d}"/>
                 <j:set var="instance"
                        value="${it.delegateLauncher.descriptor==d ? it.delegateLauncher : null}"/>
-                <tr>
-                    <td>
-                        <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                    </td>
-                </tr>
+                <f:invisibleEntry><input type="hidden" name="stapler-class" value="${d.clazz.name}"/></f:invisibleEntry>
                 <st:include from="${d}" page="${d.configPage}" optional="true"/>
             </f:dropdownListBlock>
         </j:forEach>
@@ -86,11 +82,7 @@
                         <j:set var="descriptor" value="${d}"/>
                         <j:set var="instance"
                                value="${it.retentionStrategy.descriptor==d ? it.retentionStrategy : null}"/>
-                        <tr>
-                            <td>
-                                <input type="hidden" name="stapler-class" value="${d.clazz.name}"/>
-                            </td>
-                        </tr>
+                        <f:invisibleEntry><input type="hidden" name="stapler-class" value="${d.clazz.name}"/></f:invisibleEntry>
                         <st:include from="${d}" page="${d.configPage}" optional="true"/>
                     </f:dropdownListBlock>
                 </j:if>

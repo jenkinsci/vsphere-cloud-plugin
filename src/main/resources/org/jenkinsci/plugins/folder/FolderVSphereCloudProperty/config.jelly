@@ -2,7 +2,7 @@
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form">
     <f:section title="${%vSphere Cloud}">
         <f:entry title="${%Clouds}" description="${%List of Clouds}">
-            <f:repeatable field="clouds" add="${%Add vSphere Template}">
+            <f:repeatable field="clouds" add="${%Add vSphere Cloud}">
                 <st:include page="config-inner.jelly" class="${descriptor.clazz}"/>
                 <div align="right">
                     <f:repeatableDeleteButton value="${%Delete vSphere Template}"/>

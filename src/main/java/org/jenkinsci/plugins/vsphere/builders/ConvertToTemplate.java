@@ -29,7 +29,7 @@ import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -60,7 +60,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
     }
 
     @Override
-    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
             convert(run, launcher, listener);
         } catch (Exception e) {
@@ -131,6 +131,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
                                          @QueryParameter String serverName,
                                          @QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (serverName == null){
                     return FormValidation.error(Messages.validation_required("serverName"));
@@ -142,13 +143,17 @@ public class ConvertToTemplate extends VSphereBuildStep {
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
                 if (vsphere.getVmByName(vm) == null)
                     return FormValidation.error(Messages.validation_notFound("VM"));
 
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }
