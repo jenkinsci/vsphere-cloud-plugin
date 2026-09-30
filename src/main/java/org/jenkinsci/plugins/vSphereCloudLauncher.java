@@ -67,7 +67,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         this.vmName = vmName;
         this.waitForVMTools = waitForVMTools;
         this.snapName = snapName;
-        this.launchDelay = Util.tryParseNumber(launchDelay, 60).intValue();
+        final Number parsedLaunchDelay = Util.tryParseNumber(launchDelay, 60);
+        this.launchDelay = parsedLaunchDelay != null ? parsedLaunchDelay.intValue() : 60;
         if (null == idleOption) {
             idleAction = MACHINE_ACTION.NOTHING;
         } else
@@ -97,7 +98,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     idleAction = MACHINE_ACTION.NOTHING;
                     break;
             }
-        this.LimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0).intValue();
+        final Number parsedLimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0);
+        this.LimitedTestRunCount = parsedLimitedTestRunCount != null ? parsedLimitedTestRunCount.intValue() : 0;
     }
 
     private vSphereCloudLauncher(
@@ -183,7 +185,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
                 // Agents that take a while to start up make get multiple launch
                 // requests from Jenkins.
-                if (vsSlave.slaveIsStarting == Boolean.TRUE) {
+                if (Boolean.TRUE.equals(vsSlave.slaveIsStarting)) {
                     vSphereCloud.Log(
                             slaveComputer,
                             taskListener,
@@ -192,7 +194,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 }
 
                 // If a agent is disconnecting, don't try to start it up
-                if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
+                if (Boolean.TRUE.equals(vsSlave.slaveIsDisconnecting)) {
                     vSphereCloud.Log(
                             slaveComputer,
                             taskListener,
@@ -327,14 +329,14 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
 
         if (vsSlave != null) {
-            if (vsSlave.slaveIsStarting == Boolean.TRUE) {
+            if (Boolean.TRUE.equals(vsSlave.slaveIsStarting)) {
                 vSphereCloud.Log(
                         slaveComputer,
                         taskListener,
                         "Ignoring disconnect attempt because a connect attempt is in progress.");
                 return;
             }
-            if (vsSlave.slaveIsDisconnecting == Boolean.TRUE) {
+            if (Boolean.TRUE.equals(vsSlave.slaveIsDisconnecting)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Already disconnecting on a separate thread");
                 return;
             }

@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclusions for findings that are either false positives or intentional,
+  long-standing design choices where "fixing" them would be riskier than leaving them:
+  mostly renaming public classes/methods that have existed since 2013 and are part of
+  this plugin's persisted config.xml format (XStream serializes Describable subclasses
+  by their fully-qualified class name) or its public API surface (callable from Groovy
+  / Pipeline scripts). Every other SpotBugs finding from enabling the check has been
+  fixed in code; see the commit that added this file for the full triage.
+-->
+<FindBugsFilter>
+  <!--
+    Renaming these classes would change the class name XStream persists into every
+    existing installation's config.xml (cloud, slave, template, launcher, step, etc.
+    definitions), breaking deserialization of all pre-existing Jenkins instances on
+    upgrade. Not something to do as a drive-by bug-fix pass.
+  -->
+  <Match>
+    <Bug pattern="NM_CLASS_NAMING_CONVENTION"/>
+  </Match>
+
+  <!--
+    vSphereCloud.Log(...) and a handful of vSphereCloudSlave methods (AddProbableLaunch,
+    RemoveProbableLaunch, ProbableLaunchCleanup, ProbableLaunchCount,
+    ProbablyLaunchCanHandle, StartLimitedTestRun, EndLimitedTestRun) are public API that
+    has kept this exact capitalization since 2013; any external Groovy/Pipeline script
+    or other plugin calling them directly would break on rename. Class-naming concerns
+    above already cover the higher-risk persisted-XML case; this covers the lower-risk
+    (but still non-zero) external-caller case for methods.
+  -->
+  <Match>
+    <Bug pattern="NM_METHOD_NAMING_CONVENTION"/>
+  </Match>
+
+  <!--
+    afterDisconnect() is `synchronized` defensively from the original 2013 implementation;
+    Jenkins core already serializes a given Computer's lifecycle callbacks, so there's no
+    known real contention here. De-synchronizing it (to let Thread.sleep() run lock-free)
+    is a genuine concurrency-semantics change that's out of scope for a bug-triage pass -
+    it deserves its own dedicated review, not a drive-by fix.
+  -->
+  <Match>
+    <Class name="org.jenkinsci.plugins.vSphereCloudLauncher"/>
+    <Method name="afterDisconnect"/>
+    <Bug pattern="SWL_SLEEP_WITH_LOCK_HELD"/>
+  </Match>
+
+  <!--
+    The broad `catch (Exception e)` in launch() is intentional: it's the only thing
+    standing between an unexpected RuntimeException from the vSphere API and a properly
+    logged + markVMOffline() + disconnect(LaunchFailed) cleanup. Narrowing it to the
+    checked exceptions actually declared (IOException/InterruptedException) would let
+    RuntimeExceptions skip that cleanup and propagate to the outer handler instead -
+    a real behavioural regression, not a fix.
+  -->
+  <Match>
+    <Class name="org.jenkinsci.plugins.vSphereCloudLauncher"/>
+    <Method name="launch"/>
+    <Bug pattern="REC_CATCH_EXCEPTION"/>
+  </Match>
+
+  <!--
+    EndLimitedTestRun() catches NullPointerException as a defensive belt-and-suspenders
+    measure around several Jenkins core calls (setTemporarilyOffline/waitUntilOffline/
+    disconnect); removing it changes behaviour (an NPE would then propagate and abort the
+    calling thread) without a clear replacement null-check to add in its place.
+  -->
+  <Match>
+    <Class name="org.jenkinsci.plugins.vSphereCloudSlave"/>
+    <Method name="EndLimitedTestRun"/>
+    <Bug pattern="DCN_NULLPOINTER_EXCEPTION"/>
+  </Match>
+
+  <!--
+    isOkToDeleteUnwantedVM() deliberately returns a tri-state Boolean (null = "not
+    unwanted", false = "someone else is deleting it", true = "go ahead"), documented in
+    its own javadoc. The one caller (vSphereCloud.retryVMdeletionIfNecessary) already
+    handles the null case safely via Boolean.TRUE.equals(...).
+  -->
+  <Match>
+    <Class name="org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState"/>
+    <Method name="isOkToDeleteUnwantedVM"/>
+    <Bug pattern="NP_BOOLEAN_RETURN_NULL"/>
+  </Match>
+
+  <!--
+    setHttpClientClassName() intentionally propagates its value to every known
+    vSphereCloud's VSphereConnectionConfig AND caches it in the static httpClientClass
+    field - the (unusual, but deliberate) design here is a single process-wide preferred
+    HTTP client choice exposed as if it were a per-cloud setting. Redesigning that is out
+    of scope for a bug-triage pass.
+  -->
+  <Match>
+    <Class name="org.jenkinsci.plugins.vsphere.VSphereConnectionConfig"/>
+    <Method name="setHttpClientClassName"/>
+    <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"/>
+  </Match>
+</FindBugsFilter>

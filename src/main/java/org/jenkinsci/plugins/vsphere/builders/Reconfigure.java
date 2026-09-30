@@ -26,6 +26,7 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
@@ -95,7 +96,7 @@ public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep {
 
     @Override
     public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

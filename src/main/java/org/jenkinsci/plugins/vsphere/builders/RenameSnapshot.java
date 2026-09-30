@@ -25,6 +25,7 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
+import java.util.Collections;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -104,7 +105,7 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 
     @Override
     public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

@@ -112,7 +112,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
 
     @Override
     public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-        return null;
+        return Collections.emptyList();
     }
 
     @Override

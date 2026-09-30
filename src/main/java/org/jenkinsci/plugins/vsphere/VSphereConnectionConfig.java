@@ -101,9 +101,11 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         if (VSphereConnectionConfig.httpClientClass == null) {
             VSphereConnectionConfig.httpClientClass = WSClient.class;
             List<vSphereCloud> clouds = vSphereCloud.findAllVsphereClouds(null);
-            if (clouds.size() > 0) {
-                VSphereConnectionConfig.httpClientClass =
-                        httpClientNameToClass(clouds.get(0).getVsConnectionConfig().httpClientClassName);
+            if (!clouds.isEmpty()) {
+                VSphereConnectionConfig firstConfig = clouds.get(0).getVsConnectionConfig();
+                if (firstConfig != null) {
+                    VSphereConnectionConfig.httpClientClass = httpClientNameToClass(firstConfig.httpClientClassName);
+                }
             }
         }
         return VSphereConnectionConfig.httpClientClass;
@@ -117,7 +119,10 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     public void setHttpClientClassName(String httpClientClassName) {
         this.httpClientClassName = (httpClientClassName == null) ? getHttpClientClassName() : httpClientClassName;
         for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
-            cloud.getVsConnectionConfig().httpClientClassName = this.httpClientClassName;
+            VSphereConnectionConfig config = cloud.getVsConnectionConfig();
+            if (config != null) {
+                config.httpClientClassName = this.httpClientClassName;
+            }
         }
         VSphereConnectionConfig.httpClientClass = httpClientNameToClass(this.httpClientClassName);
     }
@@ -153,6 +158,9 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     }
 
     public @CheckForNull StandardCredentials getCredentials() {
+        if (vsHost == null) {
+            return null;
+        }
         return DescriptorImpl.lookupCredentials(credentialsId, vsHost);
     }
 

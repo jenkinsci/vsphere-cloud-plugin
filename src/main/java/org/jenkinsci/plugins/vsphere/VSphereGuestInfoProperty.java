@@ -40,7 +40,7 @@ public final class VSphereGuestInfoProperty implements Describable<VSphereGuestI
     public static final class VSphereGuestInfoPropertyDescriptorImpl extends Descriptor<VSphereGuestInfoProperty> {
         @Override
         public String getDisplayName() {
-            return null;
+            return "";
         }
 
         public FormValidation doCheckName(@QueryParameter String name) {

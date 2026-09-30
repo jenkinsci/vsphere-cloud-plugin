@@ -408,7 +408,7 @@ public class CloudProvisioningState {
             final Map<String, Boolean> currentlyUnwanted = record.getCurrentlyUnwanted();
             final List<String> vmsInNeedOfDeletionForThisRecord = new ArrayList<String>(currentlyUnwanted.size());
             for (Map.Entry<String, Boolean> entry : currentlyUnwanted.entrySet()) {
-                if (entry.getValue() == Boolean.FALSE) {
+                if (Boolean.FALSE.equals(entry.getValue())) {
                     vmsInNeedOfDeletionForThisRecord.add(entry.getKey());
                 }
             }
