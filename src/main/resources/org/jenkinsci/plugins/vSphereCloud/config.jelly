@@ -23,6 +23,9 @@
         <f:entry title="${%Template Instance Cap}" field="instanceCap" description="0 means unlimited.">
             <f:textbox clazz="required number" default="0"/>
         </f:entry>
+        <f:entry title="${%Use No-Delay Provisioner}" field="useNoDelayProvisioner">
+            <f:checkbox/>
+        </f:entry>
 
         <f:entry title="${%Use vSphere connection pool}" field="useConnectionPool">
             <f:checkbox/>

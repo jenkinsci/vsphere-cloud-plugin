@@ -21,7 +21,7 @@ class VSphereConnectionPoolOrphanReapingTest {
     @Test
     @ConfiguredWithCode("configuration-as-code.yml")
     void pool_is_not_reaped_while_its_owning_cloud_is_still_registered(JenkinsConfiguredWithCodeRule r) {
-        vSphereCloud owner = new vSphereCloud(makeConnectionConfig(), "orphan-owner", 0, 0, null);
+        vSphereCloud owner = new vSphereCloud(makeConnectionConfig(), "orphan-owner", 0, 0, false, null);
         r.jenkins.clouds.add(owner);
         VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), owner, 0, 0, 0, 0);
         try {
@@ -39,7 +39,7 @@ class VSphereConnectionPoolOrphanReapingTest {
     @Test
     @ConfiguredWithCode("configuration-as-code.yml")
     void pool_is_reaped_once_its_owning_cloud_is_replaced(JenkinsConfiguredWithCodeRule r) {
-        vSphereCloud owner = new vSphereCloud(makeConnectionConfig(), "orphan-owner", 0, 0, null);
+        vSphereCloud owner = new vSphereCloud(makeConnectionConfig(), "orphan-owner", 0, 0, false, null);
         r.jenkins.clouds.add(owner);
         VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), owner, 0, 0, 0, 0);
 

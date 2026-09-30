@@ -27,7 +27,7 @@ class VSphereCloudMaintenanceModeBlockingTest {
     @Test
     @ConfiguredWithCode("configuration-as-code.yml")
     void waiting_blocks_while_in_maintenance_mode_and_returns_once_it_ends(JenkinsConfiguredWithCodeRule r) throws Exception {
-        vSphereCloud cloud = new vSphereCloud(makeConnectionConfig(), "maint-blocking-test", 0, 0, null);
+        vSphereCloud cloud = new vSphereCloud(makeConnectionConfig(), "maint-blocking-test", 0, 0, false, null);
         cloud.setMaintenanceMode(true);
         r.jenkins.clouds.add(cloud);
         try {
@@ -50,7 +50,7 @@ class VSphereCloudMaintenanceModeBlockingTest {
             assertThat(done.await(500, TimeUnit.MILLISECONDS), is(false));
 
             // Simulate reconfiguration replacing the cloud instance, as Jenkins core does on save.
-            vSphereCloud reconfigured = new vSphereCloud(makeConnectionConfig(), "maint-blocking-test", 0, 0, null);
+            vSphereCloud reconfigured = new vSphereCloud(makeConnectionConfig(), "maint-blocking-test", 0, 0, false, null);
             reconfigured.setMaintenanceMode(false);
             r.jenkins.clouds.remove(cloud);
             r.jenkins.clouds.add(reconfigured);

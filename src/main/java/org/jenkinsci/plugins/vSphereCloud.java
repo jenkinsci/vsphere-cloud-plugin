@@ -62,6 +62,7 @@ public class vSphereCloud extends Cloud {
     VSphereConnectionConfig vsConnectionConfig;
 
     private final int instanceCap;
+    private final boolean useNoDelayProvisioner;
     private final List<? extends vSphereCloudSlaveTemplate> templates;
 
     /** When true, all API calls share one long-lived session via {@link VSphereConnectionPool}. */
@@ -176,11 +177,11 @@ public class vSphereCloud extends Cloud {
     @Deprecated
     public vSphereCloud(String vsHost, String vsDescription,
                         String username, String password, int maxOnlineSlaves) {
-        this(null, vsDescription, maxOnlineSlaves, 0, null);
+        this(null, vsDescription, maxOnlineSlaves, 0, false, null);
     }
 
     @DataBoundConstructor
-    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates) {
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, boolean useNoDelayProvisioner, List<? extends vSphereCloudSlaveTemplate> templates) {
         super("vSphereCloud");
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
@@ -196,6 +197,7 @@ public class vSphereCloud extends Cloud {
         } else {
             this.instanceCap = instanceCap;
         }
+        this.useNoDelayProvisioner = useNoDelayProvisioner;
         try {
             readResolve();
         } catch (IOException ioex) {
@@ -243,6 +245,10 @@ public class vSphereCloud extends Cloud {
 
     public int getInstanceCap() {
         return this.instanceCap;
+    }
+
+    public boolean getUseNoDelayProvisioner() {
+        return useNoDelayProvisioner;
     }
 
     public List<? extends vSphereCloudSlaveTemplate> getTemplates() {

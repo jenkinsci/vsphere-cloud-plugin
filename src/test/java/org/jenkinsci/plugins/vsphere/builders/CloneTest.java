@@ -144,7 +144,7 @@ class CloneTest {
                 "", "", false, null, null, null, null, null);
         assertThat(step.getSourceCloud(), nullValue());
 
-        vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, null);
+        vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, false, null);
         step.setSourceCloud(cloud);
 
         assertThat(step.getSourceCloud(), is(cloud));
