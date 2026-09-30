@@ -7,7 +7,7 @@ f.entry(title:_("vSphere Host"), field:"vsHost") {
     f.textbox()
 }
 
-f.entry(title:_("Change Http Client"), field:"httpClientClassName") {
+f.entry(title:_("Change HTTP Client"), field:"httpClientClassName") {
     f.select()
 }
 
