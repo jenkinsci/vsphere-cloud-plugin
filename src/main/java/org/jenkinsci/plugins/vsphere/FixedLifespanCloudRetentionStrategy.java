@@ -6,10 +6,10 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.RetentionStrategy;
-import hudson.util.TimeUnit2;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -39,7 +39,7 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
         final long creationTimeMillis = c.getAction(CloudComputerCreatedOnInvisibleAction.class).getCreationTimeMillis();
         final long ageMillis = System.currentTimeMillis() - creationTimeMillis;
         final String cname = c.getName();
-        if (!isAtEndOfLife() && ageMillis > TimeUnit2.MINUTES.toMillis(lifespanMinutes)) {
+        if (!isAtEndOfLife() && ageMillis > TimeUnit.MINUTES.toMillis(lifespanMinutes)) {
             LOGGER.log(Level.FINE, "Will terminate {0} once idle - lifespan of {1} minutes reached.", new Object[] { cname, lifespanMinutes });
             setAtEndOfLife();
             final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._fixedLifespanCloudRetentionStrategy_OfflineReason_LifespanReached(String.valueOf(lifespanMinutes)));
