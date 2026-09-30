@@ -1,6 +1,6 @@
 <?jelly escape-by-default='true'?>
-<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:f="/lib/form">
-    <table width="100%">
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:v="/lib/vsphere">
+    <v:blockWrapper>
         <st:include page="config.jelly" class="${descriptor.clazz}"/>
-    </table>
+    </v:blockWrapper>
 </j:jelly>

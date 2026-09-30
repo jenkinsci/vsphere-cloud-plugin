@@ -1,0 +1,18 @@
+<div>
+  Selects which disk to act on, matched by any of:
+  <ul>
+    <li>vSphere device label, e.g. "Hard disk 1";</li>
+    <li>disk file base name, e.g. "kube15_1", taken from a backing file named
+      "[datastore1] kube15/kube15_1.vmdk";</li>
+    <li>controller moniker matching how vSphere itself displays the disk's address, e.g.
+      "SCSI(0:2)" or "IDE(1:0)" (controller bus number : unit number).</li>
+  </ul>
+  Cannot be combined with Device Number.
+  <ul>
+    <li><b>Add</b>: optional; if given, the new disk's file is named after it instead of the
+      default "&lt;vm&gt;_&lt;N&gt;" scheme (fails if a disk with that name already exists).</li>
+    <li><b>Edit</b>: selects the disk to resize; may be left blank if the VM has only one disk.</li>
+    <li><b>Remove</b>: always required (unless Device Number is used), since removing the
+      wrong disk deletes its data.</li>
+  </ul>
+</div>

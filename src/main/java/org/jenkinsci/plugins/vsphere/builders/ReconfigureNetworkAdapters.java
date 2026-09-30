@@ -22,24 +22,31 @@ import hudson.*;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import javax.annotation.Nonnull;
-import javax.servlet.ServletException;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
+
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
     private final DeviceAction deviceAction;
     private final String deviceLabel;
+    private String deviceNumber;
     private final String macAddress;
     private final boolean standardSwitch;
     private final String portGroup;
@@ -69,6 +76,15 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         return deviceLabel;
     }
 
+    public String getDeviceNumber() {
+        return deviceNumber;
+    }
+
+    @DataBoundSetter
+    public void setDeviceNumber(String deviceNumber) {
+        this.deviceNumber = deviceNumber;
+    }
+
     public String getMacAddress() {
         return macAddress;
     }
@@ -94,12 +110,12 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     @Override
-    public void perform(@Nonnull EnvVars env, @Nonnull TaskListener listener) throws VSphereException {
+    public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
         reconfigureNetwork(env, listener);
     }
 
     @Override
-    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
             reconfigureNetwork(run, launcher, listener);
         } catch (Exception e) {
@@ -128,14 +144,25 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
         String expandedDeviceLabel = env.expand(deviceLabel);
+        String expandedDeviceNumber = deviceNumber == null ? null : env.expand(deviceNumber);
         String expandedMacAddress = env.expand(macAddress);
         String expandedPortGroup = env.expand(portGroup);
         String expandedDistributedPortGroup = env.expand(distributedPortGroup);
         String expandedDistributedPortId = env.expand(distributedPortId);
 
-        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter \"" + expandedDeviceLabel + "\"");
+        boolean hasLabel = expandedDeviceLabel != null && !expandedDeviceLabel.isEmpty();
+        boolean hasNumber = expandedDeviceNumber != null && !expandedDeviceNumber.isEmpty();
+        if (hasLabel && hasNumber) {
+            throw new VSphereException("Specify either deviceLabel or deviceNumber, not both");
+        }
+
+        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter " +
+                (hasNumber ? ("#" + expandedDeviceNumber) : ("\"" + expandedDeviceLabel + "\"")));
         VirtualEthernetCard vEth = null;
         if (deviceAction == DeviceAction.ADD) {
+            if (hasNumber) {
+                throw new VSphereException("deviceNumber is not supported for the Add action; use deviceLabel to name the new adapter");
+            }
             vEth = new VirtualE1000();
             vEth.setBacking(new VirtualEthernetCardNetworkBackingInfo());
             Description description = vEth.getDeviceInfo();
@@ -144,6 +171,8 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             }
             description.setLabel(expandedDeviceLabel);
             vEth.setDeviceInfo(description);
+        } else if (hasNumber) {
+            vEth = findNetworkDeviceByIndex(vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
         } else {
             vEth = findNetworkDeviceByLabel(vm.getConfig().getHardware().getDevice(), expandedDeviceLabel);
         }
@@ -242,13 +271,36 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         return true;
     }
 
-    private VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
+    VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
         for (VirtualDevice vd : devices) {
             if (vd instanceof VirtualEthernetCard && (label.isEmpty() || vd.getDeviceInfo().getLabel().contentEquals(label))) {
                 return (VirtualEthernetCard) vd;
             }
         }
         return null;
+    }
+
+    /**
+     * Finds the Nth network adapter, ONE-based (so deviceNumber=1 is the first adapter, matching how
+     * vSphere itself numbers things in its UI, e.g. "Network adapter 1"), counting only
+     * VirtualEthernetCard entries in the same order vCenter itself returns them via
+     * VirtualHardware.device -- no re-sorting or address scheme of our own (raw PCI unit number is
+     * shared with unrelated PCI-bus devices like storage/USB/video controllers, so it doesn't
+     * correspond to "the Nth NIC"), just vCenter's own list order.
+     */
+    VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int number) throws VSphereException {
+        int count = 0;
+        for (VirtualDevice vd : devices) {
+            if (!(vd instanceof VirtualEthernetCard)) {
+                continue;
+            }
+            count++;
+            if (count == number) {
+                return (VirtualEthernetCard) vd;
+            }
+        }
+        throw new VSphereException(String.format(
+                "VM has %d network adapters; no adapter with deviceNumber %d (deviceNumber is one-based)", count, number));
     }
 
     @Extension
@@ -258,27 +310,51 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             load();
         }
     
-        public FormValidation doCheckMacAddress(@QueryParameter String value)
+        @RequirePOST
+        public FormValidation doCheckMacAddress(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
         }
-    
+
+        @RequirePOST
+        public FormValidation doCheckDeviceNumber(@AncestorInPath Item context, @QueryParameter String value)
+                throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
+            if (value == null || value.isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                if (Integer.parseInt(value) < 1) {
+                    return FormValidation.error(Messages.validation_positiveInteger(value));
+                }
+            } catch (NumberFormatException e) {
+                return FormValidation.error(Messages.validation_positiveInteger(value));
+            }
+            return FormValidation.ok();
+        }
+
         @Override
         public String getDisplayName() {
             return Messages.vm_title_ReconfigureNetworkAdapter();
         }
-    
-        public FormValidation doTestData(@QueryParameter DeviceAction deviceAction, @QueryParameter String deviceLabel,
-                @QueryParameter String macAddress, @QueryParameter boolean standardSwitch,
-                @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
+
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter DeviceAction deviceAction,
+                @QueryParameter String deviceLabel, @QueryParameter String deviceNumber, @QueryParameter String macAddress,
+                @QueryParameter boolean standardSwitch, @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
                 @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (standardSwitch && distributedSwitch) {
                     return FormValidation.error(Messages.validation_wrongSwitchSelection());
                 }
-                return doCheckMacAddress(macAddress);
+                if (deviceLabel != null && !deviceLabel.isEmpty() && deviceNumber != null && !deviceNumber.isEmpty()) {
+                    return FormValidation.error("Specify either Device Label or Device Number, not both");
+                }
+                return doCheckMacAddress(context, macAddress);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

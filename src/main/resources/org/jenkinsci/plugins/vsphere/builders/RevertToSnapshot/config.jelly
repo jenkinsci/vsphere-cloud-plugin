@@ -24,5 +24,9 @@ limitations under the License.
     <f:textbox />
   </f:entry>
 
+  <f:entry title="${%Suppress power on?}" field="suppressPowerOn">
+    <f:checkbox />
+  </f:entry>
+
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm,snapshotName"/>
 </j:jelly>

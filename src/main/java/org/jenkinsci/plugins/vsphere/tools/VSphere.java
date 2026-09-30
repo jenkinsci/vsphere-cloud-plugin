@@ -21,20 +21,30 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
-import javax.annotation.CheckForNull;
-import javax.annotation.Nonnull;
+import com.vmware.vim25.ws.ClientCreator;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
+import com.vmware.vim25.ClusterRecommendation;
 import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
+import com.vmware.vim25.HostHardwareSummary;
+import com.vmware.vim25.HostListSummary;
+import com.vmware.vim25.HostListSummaryQuickStats;
+import com.vmware.vim25.HostRuntimeInfo;
+import com.vmware.vim25.HostSystemConnectionState;
 import com.vmware.vim25.InvalidProperty;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.OptionValue;
+import com.vmware.vim25.PlacementResult;
+import com.vmware.vim25.PlacementSpec;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInfo;
 import com.vmware.vim25.TaskInfoState;
@@ -51,6 +61,7 @@ import com.vmware.vim25.mo.ClusterComputeResource;
 import com.vmware.vim25.mo.CustomizationSpecManager;
 import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
+import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.InventoryNavigator;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.ResourcePool;
@@ -63,14 +74,24 @@ import com.vmware.vim25.mo.Datacenter;
 import com.vmware.vim25.mo.Network;
 import com.vmware.vim25.mo.DistributedVirtualPortgroup;
 import com.vmware.vim25.mo.DistributedVirtualSwitch;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
 
 public class VSphere {
     private final URL url;
     private final String session;
     private final static Logger LOGGER = Logger.getLogger(VSphere.class.getName());
 
-    private VSphere(@Nonnull String url, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    /**
+     * When non-null, this instance is managed by a {@link VSphereConnectionPool}:
+     * {@link #disconnect()} calls back into {@link VSphereConnectionPool#release()}
+     * instead of logging out, so the pool can defer the real disconnect until every
+     * borrower has released it.
+     */
+    private volatile VSphereConnectionPool owningPool = null;
+
+    private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
+            ClientCreator.clientClass = VSphereConnectionConfig.setupGlobalHttpClientClass();
             this.url = new URL(url);
             final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
             final ServerConnection serverConnection = serviceInstance.getServerConnection();
@@ -90,7 +111,7 @@ public class VSphere {
      * @throws VSphereException If an error occurred.
      * @return A connected instance.
      */
-    public static VSphere connect(@Nonnull VSphereConnectionConfig connectionDetails) throws VSphereException {
+    public static VSphere connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
         final String server = connectionDetails.getVsHost() + "/sdk";
         final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
@@ -109,22 +130,70 @@ public class VSphere {
      * @deprecated Use {@link #connect(VSphereConnectionConfig)} instead.
      */
     @Deprecated
-    public static VSphere connect(@Nonnull String server, boolean ignoreCert, @Nonnull String user, @CheckForNull String pw) throws VSphereException {
+    public static VSphere connect(@NonNull String server, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         return new VSphere(server, ignoreCert, user, pw);
     }
 
     /**
      * Disconnect from vSphere server.
      * <p>
+     * When this instance is managed by a {@link VSphereConnectionPool}, this instead
+     * signals the pool that this caller is done with it (via
+     * {@link VSphereConnectionPool#release()}); the pool decides when the underlying
+     * session actually gets logged out.
+     * </p>
+     * <p>
      * Note: This logs any {@link Exception} it encounters - it does not pass
      * them to get to the calling method.
      * </p>
      */
     public void disconnect() {
+        final VSphereConnectionPool pool = owningPool;
+        if (pool != null) {
+            pool.release();
+            return;
+        }
         try {
             this.getServiceInstance().getServerConnection().logout();
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Caught exception when trying to disconnect vSphere.", e);
+        }
+    }
+
+    /**
+     * Marks this instance as owned by {@code pool}, so that {@link #disconnect()}
+     * releases it back to the pool instead of logging out directly.
+     * Package-private — only {@link VSphereConnectionPool} should call this.
+     */
+    void markAsPooled(VSphereConnectionPool pool) {
+        owningPool = pool;
+    }
+
+    /**
+     * Disconnects the underlying session regardless of pooled status.
+     * Called by {@link VSphereConnectionPool} when it actually wants to tear down
+     * the session (restart, idle timeout, shutdown).
+     * Package-private — only {@link VSphereConnectionPool} should call this.
+     */
+    void forceDisconnect() {
+        owningPool = null;
+        disconnect();
+    }
+
+    /**
+     * Checks whether the current vSphere session is still alive by issuing a
+     * lightweight {@code currentTime()} call.
+     *
+     * @return {@code true} if the session responds normally; {@code false} if it
+     *         has expired or the server is unreachable.
+     */
+    public boolean isSessionAlive() {
+        try {
+            getServiceInstance().currentTime();
+            return true;
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "vSphere session alive-check failed", e);
+            return false;
         }
     }
 
@@ -144,11 +213,21 @@ public class VSphere {
      * @throws VSphereException If an error occurred.
      */
     public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        deployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, powerOn, customizationSpec, null, null, null, jLogger);
+    }
+
+    /**
+     * Deploys a new VM from an existing template, with control over which ESXi host the clone
+     * is placed on. See {@link #cloneOrDeployVm} for the meaning of {@code host}, {@code
+     * hostSelectionMode} and {@code hostSelectionCandidates}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void deployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsFALSE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, hostSelectionCandidates, jLogger);
     }
 
     /**
@@ -167,11 +246,21 @@ public class VSphere {
      * @throws VSphereException If an error occurred.
      */
     public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        cloneVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, powerOn, customizationSpec, null, null, null, jLogger);
+    }
+
+    /**
+     * Clones a new VM from an existing (named) VM, with control over which ESXi host the clone
+     * is placed on. See {@link #cloneOrDeployVm} for the meaning of {@code host}, {@code
+     * hostSelectionMode} and {@code hostSelectionCandidates}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void cloneVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean powerOn, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
-        logMessage(jLogger, "Creating a " + (linkedClone?"shallow":"deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
-        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, jLogger);
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshotIsTRUE, namedSnapshotIsNULL, powerOn, extraConfigParameters, customizationSpec, host, hostSelectionMode, hostSelectionCandidates, jLogger);
     }
 
     /**
@@ -211,7 +300,7 @@ public class VSphere {
      *            parameter can be read by the VMware Tools on the client OS.
      *            e.g. a variable named "guestinfo.Foo" with value "Bar" could
      *            be read on the guest using the command-line
-     *            <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     *            {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * @param customizationSpec
      *            (Optional) Customization spec to use for this VM, or null
      * @param jLogger
@@ -220,6 +309,54 @@ public class VSphere {
      *             if anything goes wrong.
      */
     public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, PrintStream jLogger) throws VSphereException {
+        cloneOrDeployVm(cloneName, sourceName, linkedClone, resourcePoolName, cluster, datastoreName, folderName, useCurrentSnapshot, namedSnapshot, powerOn, extraConfigParameters, customizationSpec, null, null, null, jLogger);
+    }
+
+    /**
+     * Creates a new VM by cloning an existing VM or Template, with control over which ESXi host
+     * the clone is placed on. Without this, clones are placed wherever vCenter's own default
+     * logic decides (in practice, often the same host the source VM/template is registered on),
+     * which can cause load imbalance across a cluster.
+     *
+     * @param host
+     *            (Optional) The name of a specific ESXi host to place the clone on. When set,
+     *            this always wins and {@code hostSelectionMode} is ignored. Works regardless of
+     *            vSphere edition/license and regardless of DRS configuration.
+     * @param hostSelectionMode
+     *            (Optional) When {@code host} is not set, how to automatically pick a host:
+     *            {@code null}/empty for unchanged legacy behaviour (let vCenter decide),
+     *            {@code "LEAST_LOADED"} to have this plugin rank candidate hosts in {@code
+     *            cluster} by current CPU/memory usage and pick the least loaded one, or
+     *            {@code "DRS_RECOMMENDED"} to ask vCenter's own DRS engine for a placement
+     *            recommendation restricted to the candidate hosts (requires DRS to be enabled
+     *            and licensed on the cluster; falls back to {@code "LEAST_LOADED"} behaviour
+     *            if DRS is unavailable or returns no recommendation).
+     * @param hostSelectionCandidates
+     *            (Optional) Set of host names that {@code hostSelectionMode} is allowed to
+     *            consider; other hosts in the cluster are ignored even if they would otherwise
+     *            be a better pick. Use this when the vCenter account used for cloning does not
+     *            have provisioning permission on every host in the cluster. Empty/null means
+     *            every (usable) host in {@code cluster} is a candidate. Callers holding a
+     *            comma-separated string can use {@link VSphereHostSelection#parseAllowList}.
+     * @throws VSphereException
+     *             if anything goes wrong.
+     */
+    public void cloneOrDeployVm(String cloneName, String sourceName, boolean linkedClone, String resourcePoolName, String cluster, String datastoreName, String folderName, boolean useCurrentSnapshot, final String namedSnapshot, boolean powerOn, Map<String, String> extraConfigParameters, String customizationSpec, String host, String hostSelectionMode, Set<String> hostSelectionCandidates, PrintStream jLogger) throws VSphereException {
+        if (namedSnapshot == null && extraConfigParameters == null) {
+            // NOTE: This "if" clause may be superfluous - just that previously
+            // this message was only logged by cloneVm() or deployVm()... so for
+            // least surprise and unexpected noise in the logs, effectively kept
+            // so for upgraded plugins where we can also directly call this method
+            // as a "buildStep" under a "vSphere" pipeline step.
+            if (useCurrentSnapshot) {
+                // Called from cloneVm() above.
+                logMessage(jLogger, "Creating a " + (linkedClone ? "shallow" : "deep") + " clone of \"" + sourceName + "\" to \"" + cloneName + "\"");
+            } else {
+                // Called from deployVm() above.
+                logMessage(jLogger, "Deploying new vm \""+ cloneName + "\" from template \""+sourceName+"\"");
+            }
+        }
+
         try {
             final VirtualMachine sourceVm = getVmByName(sourceName);
             if (sourceVm==null) {
@@ -239,11 +376,11 @@ public class VSphere {
 
             if (namedSnapshot != null && !namedSnapshot.isEmpty()) {
                 if (useCurrentSnapshot) {
-                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + "  \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
+                    throw new IllegalArgumentException("It is not valid to request a clone of " + sourceType + " \"" + sourceName + "\" based on its snapshot \"" + namedSnapshot + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
-                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + "  \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
+                    throw new VSphereNotFoundException("Snapshot", namedSnapshot, "Source " + sourceType + " \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot + "\".");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \"" + namedSnapshot + "\".");
                 cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
@@ -251,7 +388,7 @@ public class VSphere {
             if (useCurrentSnapshot) {
                 final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
                 if (currentSnapShot==null) {
-                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + "  \"" + sourceName + "\" requires at least one snapshot.");
+                    throw new VSphereNotFoundException("Snapshot", null, "Source " + sourceType + " \"" + sourceName + "\" requires at least one snapshot.");
                 }
                 logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \"" + currentSnapShot.toString() + "\".");
                 cloneSpec.setSnapshot(currentSnapShot.getMOR());
@@ -276,6 +413,12 @@ public class VSphere {
                 logMessage(jLogger, "Unable to find the specified folder. Creating VM in the same folder as its parent ");
             } else {
                 folder = getFolder(folderName);
+            }
+
+            final HostSystem selectedHost = selectHost(jLogger, getClusterByName(cluster), sourceVm, cloneName, cloneSpec, rel, host, hostSelectionMode, hostSelectionCandidates);
+            if (selectedHost != null) {
+                rel.setHost(selectedHost.getMOR());
+                logMessage(jLogger, "Clone of " + sourceType + " \"" + sourceName + "\" will be placed on host \"" + selectedHost.getName() + "\".");
             }
 
             final Task task = sourceVm.cloneVM_Task(folder,
@@ -338,6 +481,203 @@ public class VSphere {
             rel.setDatastore(datastore.getMOR());
         }
        return rel;
+    }
+
+    /**
+     * Checks whether a host with this name exists anywhere in the vCenter inventory. Used by
+     * build-step/config live-validation ("Check Data"/"Check Template" buttons) for the
+     * {@code host}/{@code targetHost} and {@code hostSelectionCandidates} fields.
+     *
+     * @throws VSphereException If an error occurred while querying vCenter.
+     */
+    public boolean hostExists(final String hostName) throws VSphereException {
+        try {
+            return getHostByName(hostName, null) != null;
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * @param hostName - Name of host to find
+     * @param rootEntity - managed entity to search, or null to search the whole inventory
+     * @return - HostSystem object, or null if not found
+     */
+    private HostSystem getHostByName(final String hostName, ManagedEntity rootEntity) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity == null) rootEntity = getServiceInstance().getRootFolder();
+
+        return (HostSystem) new InventoryNavigator(
+                rootEntity).searchManagedEntity(
+                        "HostSystem", hostName);
+    }
+
+    /**
+     * If the vCenter inventory contains exactly one cluster, returns it - so that host
+     * selection can still work when the caller didn't (or couldn't be bothered to)
+     * specify a {@code cluster}. Returns null if there are zero or multiple clusters,
+     * since then there's no way to pick one automatically.
+     */
+    private ClusterComputeResource getSingleClusterIfUnambiguous(PrintStream jLogger) throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        final ManagedEntity[] allClusters = new InventoryNavigator(
+                getServiceInstance().getRootFolder()).searchManagedEntities("ClusterComputeResource");
+        if (allClusters == null || allClusters.length == 0) {
+            logMessage(jLogger, "No cluster was specified, and no cluster exists in this vCenter's inventory; cannot auto-select a host.");
+            return null;
+        }
+        if (allClusters.length > 1) {
+            logMessage(jLogger, "No cluster was specified, and " + allClusters.length + " clusters exist in this vCenter's inventory; specify \"cluster\" explicitly to enable host selection.");
+            return null;
+        }
+        final ClusterComputeResource onlyCluster = (ClusterComputeResource) allClusters[0];
+        logMessage(jLogger, "No cluster was specified; auto-detected the only cluster in this vCenter's inventory: \"" + onlyCluster.getName() + "\".");
+        return onlyCluster;
+    }
+
+    /**
+     * Decides which ESXi host (if any) a clone should be placed on. Returns null to mean
+     * "no restriction, let vCenter/DRS decide with its own default logic" (today's behaviour).
+     */
+    private HostSystem selectHost(PrintStream jLogger, ClusterComputeResource clusterResource, VirtualMachine sourceVm,
+            String cloneName, VirtualMachineCloneSpec cloneSpec, VirtualMachineRelocateSpec rel,
+            String host, String hostSelectionMode, Set<String> hostSelectionCandidates)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException, VSphereException {
+        if (host != null && !host.isEmpty()) {
+            HostSystem explicitHost = getHostByName(host, clusterResource);
+            if (explicitHost == null) {
+                throw new VSphereNotFoundException("Host", host);
+            }
+            return explicitHost;
+        }
+
+        if (hostSelectionMode == null || hostSelectionMode.isEmpty()) {
+            return null;
+        }
+
+        if (clusterResource == null) {
+            clusterResource = getSingleClusterIfUnambiguous(jLogger);
+        }
+        if (clusterResource == null) {
+            logMessage(jLogger, "Host selection mode \"" + hostSelectionMode + "\" requires a valid cluster to be specified (or exactly one cluster to exist in the vCenter inventory); letting vSphere decide placement.");
+            return null;
+        }
+
+        final HostSystem[] members = clusterResource.getHost();
+        final List<HostSystem> hostSystems = new ArrayList<>();
+        final List<HostCandidate> candidates = new ArrayList<>();
+        if (members != null) {
+            for (HostSystem hostSystem : members) {
+                hostSystems.add(hostSystem);
+                candidates.add(toHostCandidate(hostSystem));
+            }
+        }
+
+        final List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(candidates, hostSelectionCandidates);
+        if (filtered.isEmpty()) {
+            logMessage(jLogger, "No usable candidate hosts found in cluster \"" + clusterResource.getName() + "\" for host selection mode \"" + hostSelectionMode + "\"; letting vSphere decide placement.");
+            return null;
+        }
+
+        if ("DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            HostSystem recommended = recommendHostViaDrs(jLogger, clusterResource, sourceVm, cloneName, cloneSpec, rel, hostSystems, filtered);
+            if (recommended != null) {
+                return recommended;
+            }
+            logMessage(jLogger, "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
+        }
+
+        final HostCandidate winner = VSphereHostSelection.pickLeastLoaded(filtered);
+        if (winner == null) {
+            logMessage(jLogger, "Unable to determine current load for any candidate host; letting vSphere decide placement.");
+            return null;
+        }
+        return findHostSystemByName(hostSystems, winner.getName());
+    }
+
+    /**
+     * Asks vCenter's own DRS engine for a placement recommendation, restricted to the given
+     * (already permission/availability-filtered) candidate hosts. Returns null - never throws -
+     * if DRS is unavailable, unlicensed, disabled on the cluster, or gives no recommendation, so
+     * callers can fall back to a simpler heuristic.
+     */
+    private HostSystem recommendHostViaDrs(PrintStream jLogger, ClusterComputeResource clusterResource, VirtualMachine sourceVm,
+            String cloneName, VirtualMachineCloneSpec cloneSpec, VirtualMachineRelocateSpec rel,
+            List<HostSystem> hostSystems, List<HostCandidate> filtered) {
+        try {
+            final ManagedObjectReference[] candidateMors = new ManagedObjectReference[filtered.size()];
+            for (int i = 0; i < filtered.size(); i++) {
+                HostSystem hostSystem = findHostSystemByName(hostSystems, filtered.get(i).getName());
+                if (hostSystem == null) {
+                    return null;
+                }
+                candidateMors[i] = hostSystem.getMOR();
+            }
+
+            final PlacementSpec placementSpec = new PlacementSpec();
+            placementSpec.setPlacementType("clone");
+            placementSpec.setVm(sourceVm.getMOR());
+            placementSpec.setCloneName(cloneName);
+            placementSpec.setCloneSpec(cloneSpec);
+            placementSpec.setRelocateSpec(rel);
+            placementSpec.setHosts(candidateMors);
+
+            final PlacementResult result = clusterResource.placeVm(placementSpec);
+            if (result == null || result.getRecommendations() == null || result.getRecommendations().length == 0) {
+                return null;
+            }
+
+            ClusterRecommendation best = null;
+            for (ClusterRecommendation recommendation : result.getRecommendations()) {
+                if (best == null || recommendation.getRating() > best.getRating()) {
+                    best = recommendation;
+                }
+            }
+            if (best == null || best.getTarget() == null) {
+                return null;
+            }
+            for (HostSystem hostSystem : hostSystems) {
+                if (hostSystem.getMOR().equals(best.getTarget())) {
+                    return hostSystem;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "DRS placement recommendation failed, will fall back to least-loaded host selection", e);
+            return null;
+        }
+    }
+
+    private HostCandidate toHostCandidate(HostSystem hostSystem) {
+        final HostListSummary summary = hostSystem.getSummary();
+        final HostRuntimeInfo runtime = hostSystem.getRuntime();
+        final boolean connected = runtime != null && runtime.getConnectionState() == HostSystemConnectionState.connected;
+        final boolean inMaintenanceMode = runtime != null && runtime.isInMaintenanceMode();
+
+        Integer cpuUsageMhz = null;
+        Integer memUsageMB = null;
+        int cpuCapacityMhz = 0;
+        long memCapacityMB = 0L;
+        if (summary != null) {
+            final HostListSummaryQuickStats quickStats = summary.getQuickStats();
+            if (quickStats != null) {
+                cpuUsageMhz = quickStats.getOverallCpuUsage();
+                memUsageMB = quickStats.getOverallMemoryUsage();
+            }
+            final HostHardwareSummary hardware = summary.getHardware();
+            if (hardware != null) {
+                cpuCapacityMhz = hardware.getCpuMhz() * hardware.getNumCpuCores();
+                memCapacityMB = hardware.getMemorySize() / (1024L * 1024L);
+            }
+        }
+        return new HostCandidate(hostSystem.getName(), connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB);
+    }
+
+    private static HostSystem findHostSystemByName(List<HostSystem> hostSystems, String name) {
+        for (HostSystem hostSystem : hostSystems) {
+            if (hostSystem.getName().equals(name)) {
+                return hostSystem;
+            }
+        }
+        return null;
     }
 
     public void reconfigureVm(String name, VirtualMachineConfigSpec spec) throws VSphereException {
@@ -456,6 +796,10 @@ public class VSphere {
     }
 
     public void revertToSnapshot(String vmName, String snapName) throws VSphereException {
+        revertToSnapshot(vmName, snapName, false);
+    }
+
+    public void revertToSnapshot(String vmName, String snapName, boolean suppressPowerOn) throws VSphereException {
 
         VirtualMachine vm = getVmByName(vmName);
         VirtualMachineSnapshot snap = getSnapshotInTree(vm, snapName);
@@ -466,7 +810,7 @@ public class VSphere {
         }
 
         try {
-            Task task = snap.revertToSnapshot_Task(null);
+            Task task = snap.revertToSnapshot_Task(null, Boolean.valueOf(suppressPowerOn));
             if (!task.waitForTask().equals(Task.SUCCESS)) {
                 final String msg = "Could not revert to snapshot '" + snap.toString() + "' for virtual machine:'" + vm.getName()+"'";
                 LOGGER.log(Level.SEVERE, msg);
@@ -491,8 +835,10 @@ public class VSphere {
         try {
             Task task;
             if (snap!=null) {
-                //Does not delete subtree; Implicitly consolidates disk
-                task = snap.removeSnapshot_Task(false);
+                //Does not delete subtree; consolidates the disk, which the API did implicitly while the flag was
+                //omitted - it has to be explicit now, as the single-argument overload delegates a null Boolean
+                //that the SDK unboxes
+                task = snap.removeSnapshot_Task(false, Boolean.TRUE);
                 if (!task.waitForTask().equals(Task.SUCCESS)) {
                     throw newVSphereException(task.getTaskInfo(), "Could not delete snapshot");
                 }
@@ -668,7 +1014,7 @@ public class VSphere {
         // try to fetch data store directly from cluster if above approach doesn't work
         ClusterComputeResource clusterResource = (ClusterComputeResource) rootEntity;
 
-        for (Datastore dataStore : clusterResource.getDatastores()) {
+        for (Datastore dataStore : clusterResource.getDatastore()) {
             if (dataStore.getName().equals(datastoreName)) {
                 return dataStore;
             }
@@ -847,7 +1193,7 @@ public class VSphere {
 
             VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
 
-            snapshot.renameSnapshot(newName, newDescription);
+            snapshot.rename(newName, newDescription);
 
             LOGGER.log(Level.FINER, "VM Snapshot was renamed successfully.");
             return;
@@ -1030,7 +1376,7 @@ public class VSphere {
             String name) throws VSphereException {
         try {
             Datacenter datacenter = getDataCenter(virtualMachine);
-            for (Network network : datacenter.getNetworks()) {
+            for (Network network : datacenter.getNetwork()) {
                 if (network instanceof Network &&
                         (name.isEmpty() || network.getName().contentEquals(name))) {
                     return network;
@@ -1053,7 +1399,7 @@ public class VSphere {
             String name) throws VSphereException {
         try {
             Datacenter datacenter = getDataCenter(virtualMachine);
-            for (Network network : datacenter.getNetworks()) {
+            for (Network network : datacenter.getNetwork()) {
                 if (network instanceof DistributedVirtualPortgroup &&
                         (name.isEmpty() || network.getName().contentEquals(name))) {
                     return (DistributedVirtualPortgroup)network;
@@ -1092,7 +1438,7 @@ public class VSphere {
      * <p>
      * e.g. a variable named "guestinfo.Foo" with value "Bar" could be read on
      * the guest using the command-line
-     * <tt>vmtoolsd --cmd "info-get guestinfo.Foo"</tt>.
+     * {@code vmtoolsd --cmd "info-get guestinfo.Foo"}.
      * </p>
      * 
      * @param vmName

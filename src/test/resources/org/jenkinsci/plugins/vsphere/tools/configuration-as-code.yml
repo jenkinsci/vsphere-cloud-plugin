@@ -1,7 +1,5 @@
 jenkins:
   systemMessage: "Hello World"
-  agentProtocols:
-    - "JNLP4-connect"
   clouds:
     - vSphere:
         instanceCap: 100
@@ -35,12 +33,13 @@ jenkins:
             remoteFS: "C:/jenkins"
             resourcePool: "Resources"
             retentionStrategy:
-              runOnceCloud:
+              vsphereRunOnceCloud:
                 idleMinutes: 2
             saveFailure: false
             templateInstanceCap: 5
             useSnapshot: true
             waitForVMTools: true
+        useNoDelayProvisioner: true
         vsConnectionConfig:
           vsHost: "https://company-vsphere"
         vsDescription: "Company vSphere"

@@ -26,7 +26,7 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import java.io.IOException;
 
 /**
@@ -37,12 +37,30 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 
 	protected VSphere vsphere;
 
+	/**
+	 * The {@link vSphereCloud} this step is currently running against, set by whatever
+	 * resolves {@link #vsphere} for this run (currently only {@link VSphereBuildStepContainer}).
+	 * Used to fall back to cloud-level defaults (e.g. {@code hostSelectionMode}) for
+	 * fields a subclass leaves unset. May be null if a caller never sets it (e.g. a
+	 * build step invoked directly, bypassing the container), in which case there is
+	 * simply no cloud-level default to fall back to.
+	 */
+	protected vSphereCloud sourceCloud;
+
 	public VSphere getVsphere() {
 		return vsphere;
 	}
 
 	public void setVsphere(VSphere vsphere) {
 		this.vsphere = vsphere;
+	}
+
+	public vSphereCloud getSourceCloud() {
+		return sourceCloud;
+	}
+
+	public void setSourceCloud(vSphereCloud sourceCloud) {
+		this.sourceCloud = sourceCloud;
 	}
 
 	public String getIP() {
@@ -55,7 +73,7 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 
 	public abstract boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws Exception;
 
-	public abstract void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException;
+	public abstract void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException;
 
 	@Override
 	public VSphereBuildStepDescriptor getDescriptor() {

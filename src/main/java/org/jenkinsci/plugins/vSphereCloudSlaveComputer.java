@@ -98,8 +98,12 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
                 final String ourVmName = vSlave.getVmName();
                 final vSphereCloud ourCloud = vSlave.findOurVsInstance();
                 final VSphere vSphereInstance = ourCloud.vSphereInstance();
-                final VirtualMachine ourVm = vSphereInstance.getVmByName(ourVmName);
-                vmInformation = new VMInformation(systemUptimeNow, ourVm);
+                try {
+                    final VirtualMachine ourVm = vSphereInstance.getVmByName(ourVmName);
+                    vmInformation = new VMInformation(systemUptimeNow, ourVm);
+                } finally {
+                    vSphereInstance.disconnect();
+                }
             } catch (Throwable e) {
                 vmInformation = new VMInformation(systemUptimeNow, e);
             }

@@ -15,25 +15,29 @@ import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.slaves.SlaveComputer;
 import hudson.util.DescribableList;
 import hudson.util.FormValidation;
+import hudson.util.ListBoxModel;
 import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import net.sf.json.JSONObject;
-import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
-import org.kohsuke.stapler.StaplerRequest;
+import org.kohsuke.stapler.StaplerRequest2;
 
-import javax.annotation.CheckForNull;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -58,11 +62,42 @@ public class vSphereCloud extends Cloud {
     VSphereConnectionConfig vsConnectionConfig;
 
     private final int instanceCap;
+    private final boolean useNoDelayProvisioner;
     private final List<? extends vSphereCloudSlaveTemplate> templates;
+
+    /** When true, all API calls share one long-lived session via {@link VSphereConnectionPool}. */
+    private boolean useConnectionPool = false;
+    /** Seconds between pool session health checks; 0 disables health checks. */
+    private int poolHealthCheckIntervalSecs = 0;
+    /** Restart the pooled session after this many seconds (0 = never restart based on age). */
+    private int sessionMaxAgeSecs = 0;
+    /** Restart the pooled session after this many uses (0 = never restart based on uses). */
+    private int sessionMaxUses = 0;
+    /** Disconnect the pooled session after this many idle seconds (0 = keep alive indefinitely). */
+    private int poolIdleTimeoutSecs = 0;
+
+    /** When true, this cloud is considered to be undergoing vCenter maintenance; VM-state-changing operations block until this is turned off. */
+    private boolean maintenanceMode = false;
+    /** MOTD-style message shown to consumers (build console / agent launch log) while this cloud is in maintenance mode. */
+    private String maintenanceMessage = "";
+
+    /**
+     * Default {@code hostSelectionMode} for every template/build-step using this cloud,
+     * unless that call site sets its own (or opts out with "NONE"). Null/blank means no
+     * default - unchanged legacy behaviour if nothing sets a mode anywhere.
+     */
+    private String hostSelectionMode;
+    /**
+     * Default {@code hostSelectionCandidates} allow-list for every template/build-step
+     * using this cloud, unless that call site sets its own (including an explicit empty
+     * override). Null means no default - every host is a candidate unless overridden.
+     */
+    private Set<String> hostSelectionCandidates;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient CloudProvisioningState templateState;
+    private transient volatile VSphereConnectionPool connectionPool;
 
     private static final java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
 
@@ -142,11 +177,11 @@ public class vSphereCloud extends Cloud {
     @Deprecated
     public vSphereCloud(String vsHost, String vsDescription,
                         String username, String password, int maxOnlineSlaves) {
-        this(null, vsDescription, maxOnlineSlaves, 0, null);
+        this(null, vsDescription, maxOnlineSlaves, 0, false, null);
     }
 
     @DataBoundConstructor
-    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, List<? extends vSphereCloudSlaveTemplate> templates) {
+    public vSphereCloud(VSphereConnectionConfig vsConnectionConfig, String vsDescription, int maxOnlineSlaves, int instanceCap, boolean useNoDelayProvisioner, List<? extends vSphereCloudSlaveTemplate> templates) {
         super("vSphereCloud");
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
@@ -162,6 +197,7 @@ public class vSphereCloud extends Cloud {
         } else {
             this.instanceCap = instanceCap;
         }
+        this.useNoDelayProvisioner = useNoDelayProvisioner;
         try {
             readResolve();
         } catch (IOException ioex) {
@@ -172,7 +208,7 @@ public class vSphereCloud extends Cloud {
 
     public Object readResolve() throws IOException {
         if (vsConnectionConfig == null) {
-            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null);
+            vsConnectionConfig = new VSphereConnectionConfig(vsHost, null, null);
         }
         if (this.templates != null) {
             for (vSphereCloudSlaveTemplate template : templates) {
@@ -211,8 +247,132 @@ public class vSphereCloud extends Cloud {
         return this.instanceCap;
     }
 
+    public boolean getUseNoDelayProvisioner() {
+        return useNoDelayProvisioner;
+    }
+
     public List<? extends vSphereCloudSlaveTemplate> getTemplates() {
         return this.templates;
+    }
+
+    public boolean isUseConnectionPool() {
+        return useConnectionPool;
+    }
+
+    @DataBoundSetter
+    public void setUseConnectionPool(boolean useConnectionPool) {
+        this.useConnectionPool = useConnectionPool;
+        resetPool();
+    }
+
+    public int getPoolHealthCheckIntervalSecs() {
+        return poolHealthCheckIntervalSecs;
+    }
+
+    @DataBoundSetter
+    public void setPoolHealthCheckIntervalSecs(int poolHealthCheckIntervalSecs) {
+        this.poolHealthCheckIntervalSecs = poolHealthCheckIntervalSecs;
+        resetPool();
+    }
+
+    public int getSessionMaxAgeSecs() {
+        return sessionMaxAgeSecs;
+    }
+
+    @DataBoundSetter
+    public void setSessionMaxAgeSecs(int sessionMaxAgeSecs) {
+        this.sessionMaxAgeSecs = sessionMaxAgeSecs;
+        resetPool();
+    }
+
+    public int getSessionMaxUses() {
+        return sessionMaxUses;
+    }
+
+    @DataBoundSetter
+    public void setSessionMaxUses(int sessionMaxUses) {
+        this.sessionMaxUses = sessionMaxUses;
+        resetPool();
+    }
+
+    public int getPoolIdleTimeoutSecs() {
+        return poolIdleTimeoutSecs;
+    }
+
+    @DataBoundSetter
+    public void setPoolIdleTimeoutSecs(int poolIdleTimeoutSecs) {
+        this.poolIdleTimeoutSecs = poolIdleTimeoutSecs;
+        resetPool();
+    }
+
+    public boolean isMaintenanceMode() {
+        return maintenanceMode;
+    }
+
+    @DataBoundSetter
+    public void setMaintenanceMode(boolean maintenanceMode) {
+        this.maintenanceMode = maintenanceMode;
+    }
+
+    public String getMaintenanceMessage() {
+        return maintenanceMessage;
+    }
+
+    @DataBoundSetter
+    public void setMaintenanceMessage(String maintenanceMessage) {
+        this.maintenanceMessage = maintenanceMessage;
+    }
+
+    /** Default {@code hostSelectionMode} for templates/build-steps that leave their own blank. */
+    public String getHostSelectionMode() {
+        return hostSelectionMode;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionMode(String hostSelectionMode) {
+        this.hostSelectionMode = hostSelectionMode;
+    }
+
+    /** Default {@code hostSelectionCandidates} for templates/build-steps that leave their own unset. */
+    public Set<String> getHostSelectionCandidates() {
+        return hostSelectionCandidates;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
+        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+    }
+
+    /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
+    public String getHostSelectionCandidatesAsString() {
+        return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
+        this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
+    }
+
+    /** Shuts down any running pool and clears the reference so it is recreated on next use. */
+    private synchronized void resetPool() {
+        if (connectionPool != null) {
+            connectionPool.shutdown();
+            connectionPool = null;
+        }
+    }
+
+    /** Returns (lazily creating) the connection pool for this cloud instance. */
+    private synchronized VSphereConnectionPool getOrCreatePool(VSphereConnectionConfig config) {
+        if (connectionPool == null) {
+            connectionPool = new VSphereConnectionPool(
+                    config,
+                    this,
+                    poolHealthCheckIntervalSecs,
+                    sessionMaxAgeSecs,
+                    sessionMaxUses,
+                    poolIdleTimeoutSecs);
+        }
+        return connectionPool;
     }
 
     private vSphereCloudSlaveTemplate getTemplateForVM(final String vmName) {
@@ -299,7 +459,61 @@ public class vSphereCloud extends Cloud {
             throw new VSphereException("vSphere username is not specified");
         }
 
+        if (useConnectionPool) {
+            return getOrCreatePool(connectionConfig).acquire();
+        }
         return VSphere.connect(connectionConfig);
+    }
+
+    /** Minimum time between repeated "still in maintenance mode" log lines while blocked, to avoid flooding logs. */
+    private static final long MAINTENANCE_LOG_INTERVAL_MS = 60_000L;
+    /** How long to sleep between polls while blocked waiting for maintenance mode to end. */
+    private static final long MAINTENANCE_POLL_INTERVAL_MS = 5_000L;
+
+    /**
+     * If this cloud (or whichever {@link vSphereCloud} instance now holds its configuration - Jenkins
+     * constructs a brand-new {@link Cloud} instance on every reconfiguration rather than mutating the
+     * existing one, see {@link #resolveCurrentInstance()}) is in maintenance mode, logs the configured
+     * message to {@code listener} and blocks the calling thread, polling every
+     * {@link #MAINTENANCE_POLL_INTERVAL_MS}, until maintenance mode is turned off. Returns immediately
+     * if the cloud is not currently in maintenance mode.
+     */
+    public void waitWhileInMaintenanceMode(TaskListener listener) throws InterruptedException {
+        if (!maintenanceMode) {
+            return;
+        }
+        vSphereCloud current = resolveCurrentInstance();
+        if (!current.maintenanceMode) {
+            return;
+        }
+        long lastLogAtMs = 0L;
+        do {
+            long now = System.currentTimeMillis();
+            if (now - lastLogAtMs >= MAINTENANCE_LOG_INTERVAL_MS) {
+                final String message = current.maintenanceMessage;
+                Log(listener, "vSphere cloud '%s' is in maintenance mode%s; waiting for it to come back online before proceeding...",
+                        current.getVsDescription(),
+                        (message == null || message.trim().isEmpty()) ? "" : (": " + message));
+                lastLogAtMs = now;
+            }
+            Thread.sleep(MAINTENANCE_POLL_INTERVAL_MS);
+            current = current.resolveCurrentInstance();
+        } while (current.maintenanceMode);
+        Log(listener, "vSphere cloud '%s' is no longer in maintenance mode; resuming.", getVsDescription());
+    }
+
+    /**
+     * Re-resolves the live {@link vSphereCloud} instance sharing this cloud's description, in case
+     * Jenkins replaced it with a new instance since this reference was obtained. Falls back to
+     * {@code this} if no such cloud can currently be found (e.g. it was deleted).
+     */
+    private vSphereCloud resolveCurrentInstance() {
+        for (Cloud c : Jenkins.getInstance().clouds) {
+            if (c instanceof vSphereCloud && vsDescription.equals(((vSphereCloud) c).getVsDescription())) {
+                return (vSphereCloud) c;
+            }
+        }
+        return this;
     }
 
     @Override
@@ -603,8 +817,8 @@ public class vSphereCloud extends Cloud {
         String[] path = new String[0];
         Folder prevFolder = null;
 
-        if (Stapler.getCurrentRequest() != null){
-            path = Stapler.getCurrentRequest().getRequestURI().split("/");
+        if (Stapler.getCurrentRequest2() != null){
+            path = Stapler.getCurrentRequest2().getRequestURI().split("/");
         } else if (jobName != null) {
             path = jobName.split("/");
         }
@@ -630,9 +844,11 @@ public class vSphereCloud extends Cloud {
             }
         }
 
-        for (Cloud cloud : Jenkins.getInstance().clouds) {
-            if (cloud instanceof vSphereCloud) {
-                vSphereClouds.add((vSphereCloud) cloud);
+        if (Jenkins.getInstance() != null) {
+            for (Cloud cloud : Jenkins.getInstance().clouds) {
+                if (cloud instanceof vSphereCloud) {
+                    vSphereClouds.add((vSphereCloud) cloud);
+                }
             }
         }
         return vSphereClouds;
@@ -685,7 +901,7 @@ public class vSphereCloud extends Cloud {
         }
 
         @Override
-        public boolean configure(StaplerRequest req, JSONObject o)
+        public boolean configure(StaplerRequest2 req, JSONObject o)
                 throws FormException {
             vsHost = o.getString("vsHost");
             username = o.getString("username");
@@ -705,6 +921,37 @@ public class vSphereCloud extends Cloud {
 
         public FormValidation doCheckInstanceCap(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckPoolHealthCheckIntervalSecs(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckSessionMaxAgeSecs(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckSessionMaxUses(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckPoolIdleTimeoutSecs(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckMaintenanceMode(@QueryParameter boolean value) {
+            if (value) {
+                return FormValidation.warning("This cloud's VM operations will block (and log a message to consumers) until maintenance mode is turned off.");
+            }
+            return FormValidation.ok();
+        }
+
+        public ListBoxModel doFillHostSelectionModeItems() {
+            ListBoxModel items = new ListBoxModel();
+            items.add("(none - no cloud-wide default)", "");
+            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            return items;
         }
     }
 }

@@ -9,7 +9,7 @@
                 </p>
                 <l:isAdmin>
                     <form method="get" action="launchSlaveAgent">
-                        <f:submit value="${%Relaunch slave agent}" />
+                        <f:submit value="${%Relaunch agent}" />
                     </form>
                 </l:isAdmin>
             </j:when>
@@ -17,7 +17,7 @@
             <j:otherwise>
                 <l:isAdmin>
                     <form method="get" action="launchSlaveAgent">
-                        <f:submit value="${%Launch slave agent}" />
+                        <f:submit value="${%Launch agent}" />
                     </form>
                 </l:isAdmin>
             </j:otherwise>

@@ -27,7 +27,7 @@ import hudson.util.FormValidation;
 import java.io.IOException;
 import java.io.PrintStream;
 
-import javax.annotation.Nonnull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -66,7 +66,7 @@ public class ConvertToVm extends VSphereBuildStep {
     }
 
     @Override
-    public void perform(@Nonnull Run<?, ?> run, @Nonnull FilePath filePath, @Nonnull Launcher launcher, @Nonnull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
             convert(run, launcher, listener);
         } catch (Exception e) {
@@ -149,6 +149,7 @@ public class ConvertToVm extends VSphereBuildStep {
                                          @QueryParameter String template, @QueryParameter String resourcePool,
                                          @QueryParameter String cluster) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
 
                 if (serverName.length() == 0 || template.length() == 0
@@ -158,7 +159,7 @@ public class ConvertToVm extends VSphereBuildStep {
                 if (template.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("Template"));
 
-                VSphere vsphere = getVSphereCloudByName(serverName).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName).vSphereInstance();
                 VirtualMachine vm = vsphere.getVmByName(template);
                 if (vm == null)
                     return FormValidation.error(Messages.validation_notFound("template"));
@@ -169,6 +170,10 @@ public class ConvertToVm extends VSphereBuildStep {
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }
