@@ -179,6 +179,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return "N/A";
         }
 
+        @RequirePOST
         public ListBoxModel doFillHttpClientClassNameItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
 
