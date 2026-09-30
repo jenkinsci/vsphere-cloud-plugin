@@ -25,6 +25,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -41,16 +42,12 @@ public class ReconfigureCpu extends ReconfigureStep {
 
     private final String cpuCores;
     private final String coresPerSocket;
-    private final String cpuLimitMHz;
-    private final ResourceAllocationInfo cpuReservation;
+    /* almost final */ private String cpuLimitMHz;
 
 	@DataBoundConstructor
-	public ReconfigureCpu(String cpuCores, String coresPerSocket, String cpuLimitMHz) throws VSphereException {
+	public ReconfigureCpu(String cpuCores, String coresPerSocket) throws VSphereException {
 		this.cpuCores = cpuCores;
         this.coresPerSocket = coresPerSocket;
-        this.cpuLimitMHz = cpuLimitMHz;
-        this.cpuReservation = new ResourceAllocationInfo();
-        this.cpuReservation.setReservation((long)Integer.valueOf(this.cpuLimitMHz));
 	}
 
 	public String getCpuCores() {
@@ -59,6 +56,16 @@ public class ReconfigureCpu extends ReconfigureStep {
 
     public String getCoresPerSocket() {
         return coresPerSocket;
+    }
+
+    public String getCpuLimitMHz() {
+        return cpuLimitMHz;
+    }
+
+    /** Optional CPU MHz reservation; leave unset to preserve the previous default (no reservation). */
+    @DataBoundSetter
+    public void setCpuLimitMHz(String cpuLimitMHz) {
+        this.cpuLimitMHz = cpuLimitMHz;
     }
 
     @Override
@@ -87,7 +94,7 @@ public class ReconfigureCpu extends ReconfigureStep {
         PrintStream jLogger = listener.getLogger();
         String expandedCPUCores = cpuCores;
         String expandedCoresPerSocket = coresPerSocket;
-        ResourceAllocationInfo resAllInfo = cpuReservation;
+        String expandedCpuLimitMHz = cpuLimitMHz;
 
         EnvVars env;
         try {
@@ -100,12 +107,22 @@ public class ReconfigureCpu extends ReconfigureStep {
             env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
             expandedCPUCores = env.expand(cpuCores);
             expandedCoresPerSocket = env.expand(coresPerSocket);
+            if (expandedCpuLimitMHz != null) {
+                expandedCpuLimitMHz = env.expand(expandedCpuLimitMHz);
+            }
         }
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: CPU");
         spec.setNumCPUs(Integer.valueOf(expandedCPUCores));
         spec.setNumCoresPerSocket(Integer.valueOf(expandedCoresPerSocket));
-        spec.setCpuAllocation(resAllInfo);
+
+        // Only set an allocation at all if the user actually asked for a reservation --
+        // otherwise preserve the previous default behavior (no CPU reservation/limit).
+        if (expandedCpuLimitMHz != null && !expandedCpuLimitMHz.isEmpty()) {
+            ResourceAllocationInfo resAllInfo = new ResourceAllocationInfo();
+            resAllInfo.setReservation((long) Integer.parseInt(expandedCpuLimitMHz));
+            spec.setCpuAllocation(resAllInfo);
+        }
 
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
@@ -136,6 +153,25 @@ public class ReconfigureCpu extends ReconfigureStep {
 
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("Cores per socket"));
+            return FormValidation.ok();
+        }
+
+        @RequirePOST
+        public FormValidation doCheckCpuLimitMHz(@AncestorInPath Item context, @QueryParameter String value)
+                throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
+
+            // Optional field: a blank value just means "no CPU reservation", which is fine.
+            if (value == null || value.isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                if (Integer.parseInt(value) < 0) {
+                    return FormValidation.error(Messages.validation_positiveInteger(value));
+                }
+            } catch (NumberFormatException e) {
+                return FormValidation.error(Messages.validation_positiveInteger(value));
+            }
             return FormValidation.ok();
         }
 
