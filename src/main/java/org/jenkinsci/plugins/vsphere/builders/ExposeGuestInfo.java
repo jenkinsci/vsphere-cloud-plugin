@@ -60,6 +60,12 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
         return envVariablePrefix;
     }
 
+    public boolean isWaitForIp4() {
+        // Null whenever the flag was never set: a pipeline step that omits it, or a job configured before
+        // the field existed. Waiting was not an option back then, so that is the compatible answer.
+        return Boolean.TRUE.equals(waitForIp4);
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -133,7 +139,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
         }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
 
-        if (waitForIp4){
+        if (isWaitForIp4()){
             String prefix = resolvedEnvVariablePrefix == null ? envVariablePrefix : resolvedEnvVariablePrefix;
             String machineIP = envAction.data.get(prefix + "_IpAddress");
             while (!ipv4Pattern.matcher(machineIP).find()) {
@@ -221,11 +227,12 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                                          @QueryParameter String serverName,
                                          @QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
             try {
                 if (vm.length() == 0 || serverName.length()==0)
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                VSphere vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 if (vm.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("VM"));
@@ -240,6 +247,10 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
             }
         }
     }

@@ -197,7 +197,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         }
 
                         vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-                        Task task = snap.revertToSnapshot_Task(null);
+                        Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
                         if (!task.waitForTask().equals(Task.SUCCESS)) {
                             throw new IOException("Error while reverting to virtual machine snapshot");
                         }
@@ -216,7 +216,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             break;
                     }
 
-                    if (waitForVMTools) {
+                    // Null in agent configurations saved before the field existed, as with overrideLaunchSupported
+                    if (Boolean.TRUE.equals(waitForVMTools)) {
                         vSphereCloud.Log(slaveComputer, taskListener, "Waiting for VMTools");
 
                         Calendar target = Calendar.getInstance();
@@ -492,13 +493,19 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                           TaskListener taskListener)
             throws IOException, InterruptedException, VSphereException {
         if (!snapName.isEmpty()) {
-            VirtualMachineSnapshot snap = vsC.vSphereInstance().getSnapshotInTree(vm, snapName);
+            VSphere tmpVs = vsC.vSphereInstance();
+            VirtualMachineSnapshot snap;
+            try {
+                snap = tmpVs.getSnapshotInTree(vm, snapName);
+            } finally {
+                tmpVs.disconnect();
+            }
             if (snap == null) {
                 throw new IOException("Virtual Machine snapshot cannot be found");
             }
 
             vSphereCloud.Log(slaveComputer, taskListener, "Reverting to snapshot:" + snapName);
-            Task task = snap.revertToSnapshot_Task(null);
+            Task task = snap.revertToSnapshot_Task(null, Boolean.FALSE);
             if (!task.waitForTask().equals(Task.SUCCESS)) {
                 throw new IOException("Error while reverting to virtual machine snapshot");
             }
