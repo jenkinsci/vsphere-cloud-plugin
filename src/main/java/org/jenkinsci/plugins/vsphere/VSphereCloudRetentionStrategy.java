@@ -1,5 +1,7 @@
 package org.jenkinsci.plugins.vsphere;
 
+import static java.util.logging.Level.WARNING;
+
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
@@ -10,19 +12,15 @@ import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.RetentionStrategy;
-
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
-
-import static java.util.logging.Level.WARNING;
 
 /**
  * Retains a cloud computer until it has been idle for {@link #getIdleMinutes()} minutes (that part
@@ -112,8 +110,12 @@ public class VSphereCloudRetentionStrategy extends CloudRetentionStrategy {
             final long ageMillis = System.currentTimeMillis() - created.getCreationTimeMillis();
             if (isPastLifespan(ageMillis, lifespanMinutes)) {
                 final String cname = c.getName();
-                LOGGER.log(Level.FINE, "Will terminate {0} once idle - lifespan of {1} minutes reached.", new Object[] { cname, lifespanMinutes });
-                final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._vSphereCloudRetentionStrategy_OfflineReason_LifespanReached(String.valueOf(lifespanMinutes)));
+                LOGGER.log(Level.FINE, "Will terminate {0} once idle - lifespan of {1} minutes reached.", new Object[] {
+                    cname, lifespanMinutes
+                });
+                final VSphereOfflineCause cause =
+                        new VSphereOfflineCause(Messages._vSphereCloudRetentionStrategy_OfflineReason_LifespanReached(
+                                String.valueOf(lifespanMinutes)));
                 try {
                     c.disconnect(cause).get();
                     // Only latch atEndOfLife once the disconnect has actually gone through -- otherwise

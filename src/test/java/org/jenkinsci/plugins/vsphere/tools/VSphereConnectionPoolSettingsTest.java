@@ -1,11 +1,11 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.Is.is;
+
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.junit.jupiter.api.Test;
-
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.Is.is;
 
 /**
  * Unit tests for the connection-pool toggle and associated settings on
@@ -85,31 +85,27 @@ class VSphereConnectionPoolSettingsTest {
     @Test
     void pool_shutdown_is_safe_before_any_connection() {
         // Pool with background threads; shut down immediately — must not throw.
-        VSphereConnectionPool pool = new VSphereConnectionPool(
-                makeConnectionConfig(), 30, 3600, 0, 300);
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 30, 3600, 0, 300);
         pool.shutdown();
     }
 
     @Test
     void pool_with_all_features_disabled_does_not_start_scheduler() {
         // All-zero config → no background thread is started.
-        VSphereConnectionPool pool = new VSphereConnectionPool(
-                makeConnectionConfig(), 0, 0, 0, 0);
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 0, 0, 0, 0);
         pool.shutdown(); // must be safe even with no scheduler
     }
 
     @Test
     void pool_clamps_negative_arguments_to_zero() {
         // Negative values must be silently clamped; no exception expected.
-        VSphereConnectionPool pool = new VSphereConnectionPool(
-                makeConnectionConfig(), -1, -100, -5, -60);
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), -1, -100, -5, -60);
         pool.shutdown();
     }
 
     @Test
     void pool_shutdown_is_idempotent() {
-        VSphereConnectionPool pool = new VSphereConnectionPool(
-                makeConnectionConfig(), 0, 0, 0, 0);
+        VSphereConnectionPool pool = new VSphereConnectionPool(makeConnectionConfig(), 0, 0, 0, 0);
         pool.shutdown();
         pool.shutdown(); // second call must not throw
     }
@@ -127,16 +123,22 @@ class VSphereConnectionPoolSettingsTest {
             pool.setBorrowCountForTesting(2);
 
             pool.shutdown();
-            assertThat("still borrowed, so shutdown must be deferred",
-                    VSphereConnectionPoolRegistry.isTracked(pool), is(true));
+            assertThat(
+                    "still borrowed, so shutdown must be deferred",
+                    VSphereConnectionPoolRegistry.isTracked(pool),
+                    is(true));
 
             pool.release();
-            assertThat("one borrower released, one still outstanding: still deferred",
-                    VSphereConnectionPoolRegistry.isTracked(pool), is(true));
+            assertThat(
+                    "one borrower released, one still outstanding: still deferred",
+                    VSphereConnectionPoolRegistry.isTracked(pool),
+                    is(true));
 
             pool.release();
-            assertThat("last borrower released: deferred shutdown now completes",
-                    VSphereConnectionPoolRegistry.isTracked(pool), is(false));
+            assertThat(
+                    "last borrower released: deferred shutdown now completes",
+                    VSphereConnectionPoolRegistry.isTracked(pool),
+                    is(false));
         } finally {
             pool.shutdown(); // safety net; must be a no-op if already shut down
         }

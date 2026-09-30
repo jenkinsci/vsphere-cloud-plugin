@@ -16,15 +16,17 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
+import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.Item;
-import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.PrintWriter;
@@ -34,9 +36,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -48,9 +47,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 public class Clone extends VSphereBuildStep {
 
@@ -67,6 +63,7 @@ public class Clone extends VSphereBuildStep {
     private final boolean powerOn;
     /** null means use default, zero or negative means don't even try at all. */
     private final Integer timeoutInSeconds;
+
     private String IP;
 
     /** Optionally used by {@code #linkedClone} setting or on its own,
@@ -75,6 +72,7 @@ public class Clone extends VSphereBuildStep {
     /** Optionally used by {@code #linkedClone} setting or on its own,
      *  conflicts with {@code #useCurrentSnapshot}. Is {@code null} by default. */
     private final String namedSnapshot;
+
     private final Map<String, String> extraConfigParameters;
 
     /** Optional; unset means unchanged legacy behaviour (vCenter's own default placement). */
@@ -85,11 +83,21 @@ public class Clone extends VSphereBuildStep {
     private Set<String> hostSelectionCandidates;
 
     @DataBoundConstructor
-    public Clone(String sourceName, String clone, boolean linkedClone,
-                 String resourcePool, String cluster, String datastore, String folder,
-                 boolean powerOn, Integer timeoutInSeconds, String customizationSpec,
-                 Boolean useCurrentSnapshot, String namedSnapshot,
-                 Map<String, String> extraConfigParameters) throws VSphereException {
+    public Clone(
+            String sourceName,
+            String clone,
+            boolean linkedClone,
+            String resourcePool,
+            String cluster,
+            String datastore,
+            String folder,
+            boolean powerOn,
+            Integer timeoutInSeconds,
+            String customizationSpec,
+            Boolean useCurrentSnapshot,
+            String namedSnapshot,
+            Map<String, String> extraConfigParameters)
+            throws VSphereException {
         this.sourceName = sourceName;
         this.clone = clone;
         this.linkedClone = linkedClone;
@@ -160,7 +168,7 @@ public class Clone extends VSphereBuildStep {
     public String getDatastore() {
         return datastore;
     }
-    
+
     public String getFolder() {
         return folder;
     }
@@ -174,7 +182,7 @@ public class Clone extends VSphereBuildStep {
     }
 
     public int getTimeoutInSeconds() {
-        if (timeoutInSeconds==null) {
+        if (timeoutInSeconds == null) {
             return TIMEOUT_DEFAULT;
         }
         return timeoutInSeconds.intValue();
@@ -218,7 +226,8 @@ public class Clone extends VSphereBuildStep {
      */
     @DataBoundSetter
     public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
-        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+        this.hostSelectionCandidates =
+                hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
     /**
@@ -238,7 +247,12 @@ public class Clone extends VSphereBuildStep {
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         try {
             cloneFromSource(run, launcher, listener);
         } catch (Exception e) {
@@ -252,7 +266,8 @@ public class Clone extends VSphereBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws AbortException {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)
+            throws AbortException {
         boolean retVal = false;
         try {
             retVal = cloneFromSource(build, launcher, listener);
@@ -272,7 +287,8 @@ public class Clone extends VSphereBuildStep {
         return retVal;
     }
 
-    private boolean cloneFromSource(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+    private boolean cloneFromSource(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         PrintStream jLogger = listener.getLogger();
         String expandedClone = clone;
         String expandedSource = sourceName;
@@ -331,21 +347,41 @@ public class Clone extends VSphereBuildStep {
 
         final vSphereCloud sourceCloud = getSourceCloud();
         final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
-        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
-        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
-        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final Set<String> cloudDefaultHostSelectionCandidates =
+                sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode =
+                VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
+                cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
 
-        vsphere.cloneOrDeployVm(expandedClone, expandedSource, linkedClone, expandedResourcePool, expandedCluster,
-                expandedDatastore, expandedFolder, this.isUseCurrentSnapshot(), expandedNamedSnapshot,
-                powerOn, expandedExtraConfigParameters, expandedCustomizationSpec,
-                expandedHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, jLogger);
+        vsphere.cloneOrDeployVm(
+                expandedClone,
+                expandedSource,
+                linkedClone,
+                expandedResourcePool,
+                expandedCluster,
+                expandedDatastore,
+                expandedFolder,
+                this.isUseCurrentSnapshot(),
+                expandedNamedSnapshot,
+                powerOn,
+                expandedExtraConfigParameters,
+                expandedCustomizationSpec,
+                expandedHost,
+                resolvedHostSelectionMode,
+                resolvedHostSelectionCandidates,
+                jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
-        if (powerOn && timeoutInSecondsForGetIp>0) {
-            VSphereLogger.vsLogger(jLogger, "Powering on VM \""+expandedClone+"\".  Waiting for its IP for the next "+timeoutInSecondsForGetIp+" seconds.");
+        if (powerOn && timeoutInSecondsForGetIp > 0) {
+            VSphereLogger.vsLogger(
+                    jLogger,
+                    "Powering on VM \"" + expandedClone + "\".  Waiting for its IP for the next "
+                            + timeoutInSecondsForGetIp + " seconds.");
             IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
         }
-        VSphereLogger.vsLogger(jLogger, "\""+expandedClone+"\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");
+        VSphereLogger.vsLogger(
+                jLogger, "\"" + expandedClone + "\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");
 
         return true;
     }
@@ -367,39 +403,39 @@ public class Clone extends VSphereBuildStep {
         }
 
         public FormValidation doCheckSource(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error("Please enter the sourceName name");
+            if (value.length() == 0) return FormValidation.error("Please enter the sourceName name");
             return FormValidation.ok();
         }
 
         public FormValidation doCheckClone(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the clone name"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the clone name"));
             return FormValidation.ok();
         }
 
         @RequirePOST
-        public FormValidation doCheckResourcePool(@AncestorInPath Item context,
-                                                  @QueryParameter String value,
-                                                  @QueryParameter String serverName,
-                                                  @QueryParameter String sourceName) {
+        public FormValidation doCheckResourcePool(
+                @AncestorInPath Item context,
+                @QueryParameter String value,
+                @QueryParameter String serverName,
+                @QueryParameter String sourceName) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
-                if (serverName == null){
+                if (serverName == null) {
                     return FormValidation.error(Messages.validation_required("serverName"));
                 }
                 vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
                 VirtualMachine virtualMachine = vsphere.getVmByName(sourceName);
                 if (virtualMachine == null) {
-                    return FormValidation.error("The source VM \""+sourceName+"\"was not found cannot check the configuration.");
+                    return FormValidation.error(
+                            "The source VM \"" + sourceName + "\"was not found cannot check the configuration.");
                 }
                 if ((virtualMachine.getConfig().template) && (value.length() == 0)) {
                     return FormValidation.error(Messages.validation_required("the resource pool"));
                 }
             } catch (VSphereException ve) {
-                return FormValidation.error("Cannot connect to vsphere. "+ve.getMessage());
+                return FormValidation.error("Cannot connect to vsphere. " + ve.getMessage());
             } finally {
                 if (vsphere != null) {
                     vsphere.disconnect();
@@ -409,8 +445,7 @@ public class Clone extends VSphereBuildStep {
         }
 
         public FormValidation doCheckCluster(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the cluster"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
         }
 
@@ -432,37 +467,39 @@ public class Clone extends VSphereBuildStep {
         }
 
         @RequirePOST
-        public FormValidation doTestData(@AncestorInPath Item context,
-                                         @QueryParameter String serverName,
-                                         @QueryParameter String sourceName, @QueryParameter String clone,
-                                         @QueryParameter String resourcePool, @QueryParameter String cluster,
-                                         @QueryParameter String customizationSpec,
-                                         @QueryParameter Boolean linkedClone,
-                                         @QueryParameter Boolean useCurrentSnapshot,
-                                         @QueryParameter String namedSnapshot,
-                                         @QueryParameter String host,
-                                         @QueryParameter String hostSelectionCandidatesAsString) {
+        public FormValidation doTestData(
+                @AncestorInPath Item context,
+                @QueryParameter String serverName,
+                @QueryParameter String sourceName,
+                @QueryParameter String clone,
+                @QueryParameter String resourcePool,
+                @QueryParameter String cluster,
+                @QueryParameter String customizationSpec,
+                @QueryParameter Boolean linkedClone,
+                @QueryParameter Boolean useCurrentSnapshot,
+                @QueryParameter String namedSnapshot,
+                @QueryParameter String host,
+                @QueryParameter String hostSelectionCandidatesAsString) {
             // TODO? @QueryParameter Map<String, String> extraConfigParameters
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
-                if (sourceName.length() == 0 || clone.length()==0 || serverName.length()==0
-                        || cluster.length()==0 )
-                    return FormValidation.error(Messages.validation_requiredValues());
+                if (sourceName.length() == 0
+                        || clone.length() == 0
+                        || serverName.length() == 0
+                        || cluster.length() == 0) return FormValidation.error(Messages.validation_requiredValues());
 
                 vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
 
-                //TODO what if clone name is variable?
+                // TODO what if clone name is variable?
                 VirtualMachine cloneVM = vsphere.getVmByName(clone);
-                if (cloneVM != null)
-                    return FormValidation.error(Messages.validation_exists("clone"));
+                if (cloneVM != null) return FormValidation.error(Messages.validation_exists("clone"));
 
                 if (sourceName.indexOf('$') >= 0)
                     return FormValidation.warning(Messages.validation_buildParameter("sourceName"));
 
                 VirtualMachine vm = vsphere.getVmByName(sourceName);
-                if (vm == null)
-                    return FormValidation.error(Messages.validation_notFound("sourceName"));
+                if (vm == null) return FormValidation.error(Messages.validation_notFound("sourceName"));
 
                 if (linkedClone || useCurrentSnapshot || (namedSnapshot != null && !(namedSnapshot.isEmpty()))) {
                     // Use-case (according to parameters) requires a snapshot
@@ -476,12 +513,12 @@ public class Clone extends VSphereBuildStep {
                             return FormValidation.error(Messages.validation_useCurrentAndNamedSnapshots());
                         snap = vsphere.getSnapshotInTree(vm, namedSnapshot);
                     }
-                    if (snap == null)
-                        return FormValidation.error(Messages.validation_noSnapshots());
+                    if (snap == null) return FormValidation.error(Messages.validation_noSnapshots());
                 }
 
-                if(customizationSpec != null && customizationSpec.length() > 0 &&
-                        vsphere.getCustomizationSpecByName(customizationSpec) == null) {
+                if (customizationSpec != null
+                        && customizationSpec.length() > 0
+                        && vsphere.getCustomizationSpecByName(customizationSpec) == null) {
                     return FormValidation.error(Messages.validation_notFound("customizationSpec"));
                 }
 

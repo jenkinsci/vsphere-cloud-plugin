@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
-
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -16,13 +15,12 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
  * How we decide what template to create the next agent on.
  */
 public final class CloudProvisioningAlgorithm {
-    private CloudProvisioningAlgorithm() {
-    }
+    private CloudProvisioningAlgorithm() {}
 
     /**
      * Given a bunch of templates to choose from, works out which one we should
      * use next.
-     * 
+     *
      * @param provisionables
      *            Template records to decide between.
      * @return The record with the most free capacity, or null if there are none
@@ -30,8 +28,8 @@ public final class CloudProvisioningAlgorithm {
      */
     public static CloudProvisioningRecord findTemplateWithMostFreeCapacity(
             Collection<? extends CloudProvisioningRecord> provisionables) {
-        final SortedSet<CloudProvisioningRecord> sortedSet = new TreeSet<CloudProvisioningRecord>(
-                CloudProvisioningRecord.leastUsedFirst);
+        final SortedSet<CloudProvisioningRecord> sortedSet =
+                new TreeSet<CloudProvisioningRecord>(CloudProvisioningRecord.leastUsedFirst);
         sortedSet.addAll(provisionables);
         final Iterator<CloudProvisioningRecord> iterator = sortedSet.iterator();
         if (iterator.hasNext()) {
@@ -56,7 +54,7 @@ public final class CloudProvisioningAlgorithm {
      * is a random UUID's 32-byte (128 bit) number (rendered using a high radix
      * to keep the string short).</li>
      * </ul>
-     * 
+     *
      * @param record
      *            Our record regarding the template the agent will be created
      *            from.
@@ -93,7 +91,8 @@ public final class CloudProvisioningAlgorithm {
      * @return A number of nodes to be provisioned.
      */
     public static int shouldPreProvisionNodes(CloudProvisioningRecord record) {
-        int provisionedNodes = record.getCurrentlyProvisioned().size() + record.getCurrentlyPlanned().size();
+        int provisionedNodes = record.getCurrentlyProvisioned().size()
+                + record.getCurrentlyPlanned().size();
         int requiredPreProvisionedNodes = record.getTemplate().getInstancesMin();
         return requiredPreProvisionedNodes - provisionedNodes;
     }
@@ -122,7 +121,7 @@ public final class CloudProvisioningAlgorithm {
      * <p>
      * <b>Note:</b> This is only package-level access for unit-testing.
      * </p>
-     * 
+     *
      * @param msb
      *            The most-significant 64 bits.
      * @param lsb

@@ -1,5 +1,15 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
+import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
+import static io.jenkins.plugins.casc.misc.Util.toStringFromYamlFile;
+import static io.jenkins.plugins.casc.misc.Util.toYamlString;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.instanceOf;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.core.Is.is;
+
 import hudson.model.Node.Mode;
 import hudson.slaves.ComputerLauncher;
 import hudson.slaves.JNLPLauncher;
@@ -18,16 +28,6 @@ import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
-
-import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
-import static io.jenkins.plugins.casc.misc.Util.toStringFromYamlFile;
-import static io.jenkins.plugins.casc.misc.Util.toYamlString;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.core.Is.is;
 
 @WithJenkinsConfiguredWithCode
 class ConfigurationAsCodeTest {
@@ -204,6 +204,5 @@ class ConfigurationAsCodeTest {
         String expected = toStringFromYamlFile(this, "expected_output.yml");
 
         assertThat(exported, is(expected));
-
     }
 }

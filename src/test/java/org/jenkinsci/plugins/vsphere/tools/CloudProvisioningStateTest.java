@@ -1,18 +1,18 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
 import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.either;
 import static org.hamcrest.CoreMatchers.any;
 import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.either;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.everyItem;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.collection.ArrayMatching.arrayContaining;
 import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
+
 import hudson.model.Node.Mode;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -21,7 +21,6 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
@@ -44,8 +43,10 @@ class CloudProvisioningStateTest {
     @BeforeAll
     static void setupClass() {
         stubVSphereCloudTemplates = new ArrayList<>();
-        final VSphereConnectionConfig vsConnectionConfig = new VSphereConnectionConfig("vsHost", false, "credentialsId");
-        stubVSphereCloud = new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, false, stubVSphereCloudTemplates);
+        final VSphereConnectionConfig vsConnectionConfig =
+                new VSphereConnectionConfig("vsHost", false, "credentialsId");
+        stubVSphereCloud =
+                new vSphereCloud(vsConnectionConfig, "vsDescription", 0, 0, false, stubVSphereCloudTemplates);
     }
 
     @BeforeEach
@@ -67,12 +68,10 @@ class CloudProvisioningStateTest {
             }
 
             @Override
-            public void flush() {
-            }
+            public void flush() {}
 
             @Override
-            public void close() {
-            }
+            public void close() {}
         };
         logger.addHandler(testHandler);
         testLogger = logger;
@@ -81,7 +80,7 @@ class CloudProvisioningStateTest {
     @Test
     void constructorGivenCalledThenLogsConstructions() {
         // Given
-        final Object[] expectedArgs = { stubVSphereCloud.toString() };
+        final Object[] expectedArgs = {stubVSphereCloud.toString()};
 
         // When
         createInstance();
@@ -94,7 +93,7 @@ class CloudProvisioningStateTest {
     void provisioningStartedGivenNoPreviousStateThenLogs() {
         // Given
         final String nodeName = createNodeName();
-        final Object[] expectedArgs = { nodeName };
+        final Object[] expectedArgs = {nodeName};
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord provisionable = createRecord(instance);
         wipeLog();
@@ -110,7 +109,7 @@ class CloudProvisioningStateTest {
     void provisioningStartedGivenPreviouslyStartedThenWarns() {
         // Given
         final String nodeName = createNodeName();
-        final Object[] expectedArgs = { nodeName };
+        final Object[] expectedArgs = {nodeName};
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord provisionable = createRecord(instance);
         instance.provisioningStarted(provisionable, nodeName);
@@ -127,7 +126,7 @@ class CloudProvisioningStateTest {
     void normalLifecycleGivenNoErrorsThenLogs() {
         // Given
         final String nodeName = createNodeName();
-        final Object[] expectedArgs = { nodeName };
+        final Object[] expectedArgs = {nodeName};
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord provisionable = createRecord(instance);
         wipeLog();
@@ -147,7 +146,7 @@ class CloudProvisioningStateTest {
     void failedToProvisionGivenNothingOutOfSequenceThenLogs() {
         // Given
         final String nodeName = createNodeName();
-        final Object[] expectedArgs = { nodeName };
+        final Object[] expectedArgs = {nodeName};
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord provisionable = createRecord(instance);
         wipeLog();
@@ -159,7 +158,8 @@ class CloudProvisioningStateTest {
         // Then
         assertThat(
                 loggedMessages,
-                contains(logMessage(Level.FINE, expectedArgs),
+                contains(
+                        logMessage(Level.FINE, expectedArgs),
                         logMessage(containsString("failed"), Level.INFO, expectedArgs)));
         assertThat(loggedMessages, IsIterableWithSize.iterableWithSize(2));
     }
@@ -168,7 +168,7 @@ class CloudProvisioningStateTest {
     void provisionGivenOutOfOrderSequenceThenComplains() {
         // Given
         final String nodeName = createNodeName();
-        final Object[] expectedArgs = { nodeName };
+        final Object[] expectedArgs = {nodeName};
         final CloudProvisioningState instance = createInstance();
         final CloudProvisioningRecord provisionable = createRecord(instance);
         wipeLog();
@@ -257,7 +257,11 @@ class CloudProvisioningStateTest {
         // Then
         assertThat(
                 loggedMessages,
-                contains(logMessage(containsString("Disposing"), Level.FINE, deletedAndInactiveTemplate.getCloneNamePrefix(), deletedAndInactiveTemplate.toString())));
+                contains(logMessage(
+                        containsString("Disposing"),
+                        Level.FINE,
+                        deletedAndInactiveTemplate.getCloneNamePrefix(),
+                        deletedAndInactiveTemplate.toString())));
     }
 
     @Test
@@ -484,17 +488,43 @@ class CloudProvisioningStateTest {
     private CloudProvisioningRecord createRecord(CloudProvisioningState instance) {
         recordNumber++;
         final String cloneNamePrefix = "prefix" + recordNumber;
-        final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(cloneNamePrefix, "masterImageName",
-                null, "snapshotName", false, "cluster", "resourcePool", "datastore", "folder", "customizationSpec", "templateDescription", 0, 1, "remoteFS",
-                "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", 0, null,
-                new JNLPLauncher(), RetentionStrategy.NOOP, Collections.emptyList(),
-                Collections.emptyList(), Collections.emptyList());
+        final vSphereCloudSlaveTemplate template = new vSphereCloudSlaveTemplate(
+                cloneNamePrefix,
+                "masterImageName",
+                null,
+                "snapshotName",
+                false,
+                "cluster",
+                "resourcePool",
+                "datastore",
+                "folder",
+                "customizationSpec",
+                "templateDescription",
+                0,
+                1,
+                "remoteFS",
+                "",
+                Mode.NORMAL,
+                false,
+                false,
+                0,
+                0,
+                false,
+                "targetResourcePool",
+                "targetHost",
+                0,
+                null,
+                new JNLPLauncher(),
+                RetentionStrategy.NOOP,
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.emptyList());
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<>();
         templates.add(template);
         final List<CloudProvisioningRecord> records = instance.calculateProvisionableTemplates(templates);
         assertThat(records, IsIterableWithSize.iterableWithSize(1));
-	    return records.get(0);
+        return records.get(0);
     }
 
     private String createNodeName() {
@@ -507,8 +537,7 @@ class CloudProvisioningStateTest {
     }
 
     private static Matcher<LogRecord> logMessage(final Level expectedLevel, final Object... expectedArgs) {
-        final List<Matcher<? super String>> messageMatchers = new ArrayList<>(
-		        expectedArgs.length);
+        final List<Matcher<? super String>> messageMatchers = new ArrayList<>(expectedArgs.length);
         for (int i = 0; i < expectedArgs.length; i++) {
             final String expectedString = "{" + i + "}";
             messageMatchers.add(containsString(expectedString));
@@ -522,40 +551,41 @@ class CloudProvisioningStateTest {
         return logMessage(messageMatcher, expectedLevel, expectedArgs);
     }
 
-    private static Matcher<LogRecord> logMessage(final Matcher<String> messageMatcher, final Level expectedLevel,
-            final Object... expectedArgs) {
+    private static Matcher<LogRecord> logMessage(
+            final Matcher<String> messageMatcher, final Level expectedLevel, final Object... expectedArgs) {
         final Matcher<Level> levelMatcher = equalTo(expectedLevel);
         final Matcher<Object[]> parametersMatcher = arrayContaining(expectedArgs);
         return new TypeSafeMatcher<>(LogRecord.class) {
-	        @Override
-	        public boolean matchesSafely(LogRecord actual) {
-		        final String actualMessage = actual.getMessage();
-		        final Level actualLevel = actual.getLevel();
-		        final Object[] actualParameters = actual.getParameters();
-		        return messageMatcher.matches(actualMessage) && levelMatcher.matches(actualLevel)
-				        && parametersMatcher.matches(actualParameters);
-	        }
+            @Override
+            public boolean matchesSafely(LogRecord actual) {
+                final String actualMessage = actual.getMessage();
+                final Level actualLevel = actual.getLevel();
+                final Object[] actualParameters = actual.getParameters();
+                return messageMatcher.matches(actualMessage)
+                        && levelMatcher.matches(actualLevel)
+                        && parametersMatcher.matches(actualParameters);
+            }
 
-	        @Override
-	        public void describeTo(Description description) {
-		        description.appendText("LogRecord(");
-		        description.appendText("message ").appendDescriptionOf(messageMatcher);
-		        description.appendText(" && level ").appendDescriptionOf(levelMatcher);
-		        description.appendText(" && parameters ").appendDescriptionOf(parametersMatcher);
-		        description.appendText(")");
-	        }
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("LogRecord(");
+                description.appendText("message ").appendDescriptionOf(messageMatcher);
+                description.appendText(" && level ").appendDescriptionOf(levelMatcher);
+                description.appendText(" && parameters ").appendDescriptionOf(parametersMatcher);
+                description.appendText(")");
+            }
 
-	        @Override
-	        protected void describeMismatchSafely(LogRecord actual, Description description) {
-		        final String actualMessage = actual.getMessage();
-		        final Level actualLevel = actual.getLevel();
-		        final Object[] actualParameters = actual.getParameters();
-		        description.appendText("was LogRecord(");
-		        description.appendText("message=\"").appendValue(actualMessage);
-		        description.appendText("\", level ").appendValue(actualLevel);
-		        description.appendText(", parameters ").appendValueList("[", ",", "]", actualParameters);
-		        description.appendText(")");
-	        }
+            @Override
+            protected void describeMismatchSafely(LogRecord actual, Description description) {
+                final String actualMessage = actual.getMessage();
+                final Level actualLevel = actual.getLevel();
+                final Object[] actualParameters = actual.getParameters();
+                description.appendText("was LogRecord(");
+                description.appendText("message=\"").appendValue(actualMessage);
+                description.appendText("\", level ").appendValue(actualLevel);
+                description.appendText(", parameters ").appendValueList("[", ",", "]", actualParameters);
+                description.appendText(")");
+            }
         };
     }
 }

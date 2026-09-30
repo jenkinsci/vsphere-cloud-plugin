@@ -1,19 +1,18 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.jenkinsci.plugins.structs.describable.DescribableModel;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.junit.jupiter.api.Test;
-import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
-
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.jenkinsci.plugins.structs.describable.DescribableModel;
+import org.jenkinsci.plugins.vSphereCloud;
+import org.junit.jupiter.api.Test;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 /**
  * Verifies the optional host-placement fields ({@code host}, {@code hostSelectionMode},
@@ -97,8 +96,20 @@ class CloneTest {
 
     @Test
     void setHostSelectionCandidatesAsStringUpdatesTheCanonicalSet() throws Exception {
-        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", false, null, null, null, null, null);
+        Clone step = new Clone(
+                "linux-template",
+                "new-vm",
+                false,
+                "Resources",
+                "my-cluster",
+                "",
+                "",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         step.setHostSelectionCandidatesAsString("esx01.example.com, esx02.example.com");
 
@@ -107,8 +118,20 @@ class CloneTest {
 
     @Test
     void setHostSelectionCandidatesAsStringBlankMeansInherit() throws Exception {
-        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", false, null, null, null, null, null);
+        Clone step = new Clone(
+                "linux-template",
+                "new-vm",
+                false,
+                "Resources",
+                "my-cluster",
+                "",
+                "",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         step.setHostSelectionCandidatesAsString("");
 
@@ -117,8 +140,20 @@ class CloneTest {
 
     @Test
     void setHostSelectionCandidatesAsStringCommaExplicitlyOverridesToEmpty() throws Exception {
-        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", false, null, null, null, null, null);
+        Clone step = new Clone(
+                "linux-template",
+                "new-vm",
+                false,
+                "Resources",
+                "my-cluster",
+                "",
+                "",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         step.setHostSelectionCandidatesAsString(",");
 
@@ -130,8 +165,20 @@ class CloneTest {
     void hostSelectionModeNoneIsStoredVerbatim() throws Exception {
         // Translation of "NONE" into "no selection" happens only in
         // VSphereHostSelection.resolveMode at perform-time, not in storage.
-        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", false, null, null, null, null, null);
+        Clone step = new Clone(
+                "linux-template",
+                "new-vm",
+                false,
+                "Resources",
+                "my-cluster",
+                "",
+                "",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null);
 
         step.setHostSelectionMode("NONE");
 
@@ -140,8 +187,20 @@ class CloneTest {
 
     @Test
     void sourceCloudCanBeSetAndRetrieved() throws Exception {
-        Clone step = new Clone("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", false, null, null, null, null, null);
+        Clone step = new Clone(
+                "linux-template",
+                "new-vm",
+                false,
+                "Resources",
+                "my-cluster",
+                "",
+                "",
+                false,
+                null,
+                null,
+                null,
+                null,
+                null);
         assertThat(step.getSourceCloud(), nullValue());
 
         vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, false, null);

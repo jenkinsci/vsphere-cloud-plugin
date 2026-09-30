@@ -16,17 +16,14 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
 import hudson.tasks.BuildStepMonitor;
 import hudson.util.FormValidation;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -39,121 +36,124 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
 
 public class SuspendVm extends VSphereBuildStep implements SimpleBuildStep {
 
-	private final String vm;    
+    private final String vm;
 
-	@DataBoundConstructor
-	public SuspendVm( final String vm) throws VSphereException {
-		this.vm = vm;
-	}
+    @DataBoundConstructor
+    public SuspendVm(final String vm) throws VSphereException {
+        this.vm = vm;
+    }
 
-	public String getVm() {
-		return vm;
-	}
+    public String getVm() {
+        return vm;
+    }
 
-	@Override
-	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
-		try {
-			suspend(run, launcher, listener);
-		} catch (Exception e) {
-			throw new AbortException(e.getMessage());
-		}
-	}
+    @Override
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
+        try {
+            suspend(run, launcher, listener);
+        } catch (Exception e) {
+            throw new AbortException(e.getMessage());
+        }
+    }
 
-	@Override
-	public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
-		return false;
-	}
+    @Override
+    public boolean prebuild(AbstractBuild<?, ?> abstractBuild, BuildListener buildListener) {
+        return false;
+    }
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-		boolean retVal = false;
-		try {
-			retVal = suspend(build, launcher, listener);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return retVal;
-		//TODO throw AbortException instead of returning value
-	}
+    @Override
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
+        boolean retVal = false;
+        try {
+            retVal = suspend(build, launcher, listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return retVal;
+        // TODO throw AbortException instead of returning value
+    }
 
-	@Override
-	public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
-		return null;
-	}
+    @Override
+    public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
 
-	@Override
-	public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
-		return null;
-	}
+    @Override
+    public Collection<? extends Action> getProjectActions(AbstractProject<?, ?> abstractProject) {
+        return null;
+    }
 
-	@Override
-	public BuildStepMonitor getRequiredMonitorService() {
-		return null;
-	}
+    @Override
+    public BuildStepMonitor getRequiredMonitorService() {
+        return null;
+    }
 
-	private boolean suspend(final Run<?, ?> run, Launcher launcher, final TaskListener listener) throws VSphereException{
-		PrintStream jLogger = listener.getLogger();
-		String expandedVm = vm;
-		EnvVars env;
-		try {
-			env = run.getEnvironment(listener);
-		} catch (Exception e) {
-			throw new VSphereException(e);
-		}
-		if (run instanceof AbstractBuild) {
-			env.overrideAll(((AbstractBuild)run).getBuildVariables()); // Add in matrix axes..
-			expandedVm = env.expand(vm);
-		}
+    private boolean suspend(final Run<?, ?> run, Launcher launcher, final TaskListener listener)
+            throws VSphereException {
+        PrintStream jLogger = listener.getLogger();
+        String expandedVm = vm;
+        EnvVars env;
+        try {
+            env = run.getEnvironment(listener);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+        if (run instanceof AbstractBuild) {
+            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
+            expandedVm = env.expand(vm);
+        }
 
-		VSphereLogger.vsLogger(jLogger, "Suspending VM...");
-		vsphere.suspendVm( vsphere.getVmByName(expandedVm));
+        VSphereLogger.vsLogger(jLogger, "Suspending VM...");
+        vsphere.suspendVm(vsphere.getVmByName(expandedVm));
 
-		VSphereLogger.vsLogger(jLogger, "Successfully suspended \""+expandedVm+"\"");
+        VSphereLogger.vsLogger(jLogger, "Successfully suspended \"" + expandedVm + "\"");
 
-		return true;
-	}
+        return true;
+    }
 
-	@Extension
-	public static class SuspendVmDescriptor extends VSphereBuildStepDescriptor {
+    @Extension
+    public static class SuspendVmDescriptor extends VSphereBuildStepDescriptor {
 
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_SuspendVM();
-		}
-
-		public FormValidation doCheckVm(@QueryParameter String value) {
-
-			if (value.length() == 0)
-				return FormValidation.error(Messages.validation_required("the VM name"));
-			return FormValidation.ok();
-		}
+        @Override
+        public String getDisplayName() {
+            return Messages.vm_title_SuspendVM();
+        }
 
         @RequirePOST
-		public FormValidation doTestData(@AncestorInPath Item context,
-                @QueryParameter String serverName,
-				@QueryParameter String vm) {
+        public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
             throwUnlessUserHasPermissionToConfigureJob(context);
-			VSphere vsphere = null;
-			try {
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
+            return FormValidation.ok();
+        }
 
-				if (serverName.length() == 0 || vm.length()==0 )
-					return FormValidation.error(Messages.validation_requiredValues());
+        @RequirePOST
+        public FormValidation doTestData(
+                @AncestorInPath Item context, @QueryParameter String serverName, @QueryParameter String vm) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
+            VSphere vsphere = null;
+            try {
 
-				if (vm.indexOf('$') >= 0)
-					return FormValidation.warning(Messages.validation_buildParameter("VM"));
+                if (serverName.length() == 0 || vm.length() == 0)
+                    return FormValidation.error(Messages.validation_requiredValues());
 
-				vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
-				if (vsphere.getVmByName(vm) == null)
-					return FormValidation.error(Messages.validation_notFound("VM"));
+                if (vm.indexOf('$') >= 0) return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
-				return FormValidation.ok(Messages.validation_success());
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			} finally {
-				if (vsphere != null) {
-					vsphere.disconnect();
-				}
-			}
-		}
-	}
+                vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
+                if (vsphere.getVmByName(vm) == null) return FormValidation.error(Messages.validation_notFound("VM"));
+
+                return FormValidation.ok(Messages.validation_success());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                if (vsphere != null) {
+                    vsphere.disconnect();
+                }
+            }
+        }
+    }
 }

@@ -13,19 +13,18 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.Run;
 import hudson.model.TaskListener;
+import java.io.IOException;
+import java.io.PrintStream;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-import java.io.IOException;
-import java.io.PrintStream;
 
 public class ReconfigureAnnotation extends ReconfigureStep {
 
@@ -34,8 +33,7 @@ public class ReconfigureAnnotation extends ReconfigureStep {
 
     /** Constructor that takes all mandatory fields. */
     @DataBoundConstructor
-    public ReconfigureAnnotation() {
-    }
+    public ReconfigureAnnotation() {}
 
     @DataBoundSetter
     public void setAnnotation(String annotation) {
@@ -43,7 +41,7 @@ public class ReconfigureAnnotation extends ReconfigureStep {
     }
 
     public String getAnnotation() {
-        return annotation==null ? "" : annotation;
+        return annotation == null ? "" : annotation;
     }
 
     @DataBoundSetter
@@ -61,7 +59,12 @@ public class ReconfigureAnnotation extends ReconfigureStep {
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         try {
             reconfigureAnnotation(run, launcher, listener);
         } catch (Exception e) {
@@ -70,7 +73,7 @@ public class ReconfigureAnnotation extends ReconfigureStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
         boolean retVal = false;
         try {
             retVal = reconfigureAnnotation(build, launcher, listener);
@@ -78,23 +81,24 @@ public class ReconfigureAnnotation extends ReconfigureStep {
             e.printStackTrace();
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
+        // TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureAnnotation(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureAnnotation(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         EnvVars env = extractEnvironment(run, listener);
 
         return reconfigureAnnotation(env, listener);
     }
 
-    private boolean reconfigureAnnotation(final EnvVars env, final TaskListener listener) throws VSphereException  {
+    private boolean reconfigureAnnotation(final EnvVars env, final TaskListener listener) throws VSphereException {
         final PrintStream jLogger = listener.getLogger();
         String expandedText = env.expand(getAnnotation());
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Annotation");
         if (getAppend()) {
             final String currentTextOrNullIfEmpty = spec.getAnnotation();
-            if ( currentTextOrNullIfEmpty!=null ) {
+            if (currentTextOrNullIfEmpty != null) {
                 expandedText = currentTextOrNullIfEmpty + expandedText;
             }
         }

@@ -16,21 +16,21 @@ package org.jenkinsci.plugins.vsphere.tools;
 
 public class VSphereException extends Exception {
 
-	private static final long serialVersionUID = -6133908887091288919L;
+    private static final long serialVersionUID = -6133908887091288919L;
 
-	public VSphereException() { 
-		super(); 
-	}
+    public VSphereException() {
+        super();
+    }
 
-	public VSphereException(String message) {
-		super("vSphere Error: " + message); 
-	}
+    public VSphereException(String message) {
+        super("vSphere Error: " + message);
+    }
 
-	public VSphereException(String message, Throwable cause) {
-		super("vSphere Error: " + message, cause); 
-	}
+    public VSphereException(String message, Throwable cause) {
+        super("vSphere Error: " + message, cause);
+    }
 
-	public VSphereException(Throwable cause) {
-		super(cause);
-	}
+    public VSphereException(Throwable cause) {
+        super(cause);
+    }
 }

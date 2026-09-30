@@ -14,6 +14,9 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
@@ -21,6 +24,9 @@ import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
+import jakarta.servlet.ServletException;
+import java.io.IOException;
+import java.io.PrintStream;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
@@ -28,98 +34,96 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import edu.umd.cs.findbugs.annotations.NonNull;
-import jakarta.servlet.ServletException;
-import java.io.IOException;
-import java.io.PrintStream;
-
-import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
-
 public class ReconfigureMemory extends ReconfigureStep {
 
     private final String memorySize;
 
-	@DataBoundConstructor
-	public ReconfigureMemory(String memorySize) throws VSphereException {
-		this.memorySize = memorySize;
-	}
+    @DataBoundConstructor
+    public ReconfigureMemory(String memorySize) throws VSphereException {
+        this.memorySize = memorySize;
+    }
 
-	public String getMemorySize() {
-		return memorySize;
-	}
+    public String getMemorySize() {
+        return memorySize;
+    }
 
-	@Override
-	public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
-		reconfigureMemory(env, listener);
-	}
+    @Override
+    public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
+        reconfigureMemory(env, listener);
+    }
 
-	@Override
-	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
-		try {
-			reconfigureMemory(run, launcher, listener);
-		} catch (Exception e) {
-			throw new AbortException(e.getMessage());
-		}
-	}
+    @Override
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
+        try {
+            reconfigureMemory(run, launcher, listener);
+        } catch (Exception e) {
+            throw new AbortException(e.getMessage());
+        }
+    }
 
-	@Override
-	public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
-		boolean retVal = false;
-		try {
-			retVal = reconfigureMemory(build, launcher, listener);
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-		return retVal;
-		//TODO throw AbortException instead of returning value
-	}
+    @Override
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
+        boolean retVal = false;
+        try {
+            retVal = reconfigureMemory(build, launcher, listener);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return retVal;
+        // TODO throw AbortException instead of returning value
+    }
 
-	public boolean reconfigureMemory(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureMemory(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         EnvVars env = extractEnvironment(run, listener);
 
-		return reconfigureMemory(env, listener);
-	}
+        return reconfigureMemory(env, listener);
+    }
 
-	private boolean reconfigureMemory(final EnvVars env, final TaskListener listener) throws VSphereException  {
-		PrintStream jLogger = listener.getLogger();
-		String expandedMemorySize = env.expand(memorySize);
+    private boolean reconfigureMemory(final EnvVars env, final TaskListener listener) throws VSphereException {
+        PrintStream jLogger = listener.getLogger();
+        String expandedMemorySize = env.expand(memorySize);
 
-		VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
-		spec.setMemoryMB(Long.valueOf(expandedMemorySize));
-		VSphereLogger.vsLogger(jLogger, "Finished!");
-		return true;
-	}
+        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
+        spec.setMemoryMB(Long.valueOf(expandedMemorySize));
+        VSphereLogger.vsLogger(jLogger, "Finished!");
+        return true;
+    }
 
-	@Extension
-	public static final class ReconfigureMemoryDescriptor extends ReconfigureStepDescriptor {
+    @Extension
+    public static final class ReconfigureMemoryDescriptor extends ReconfigureStepDescriptor {
 
-		public ReconfigureMemoryDescriptor() {
-			load();
-		}
+        public ReconfigureMemoryDescriptor() {
+            load();
+        }
 
         @RequirePOST
         public FormValidation doCheckMemorySize(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
 
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("Memory Size"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("Memory Size"));
             return FormValidation.ok();
         }
 
-		@Override
-		public String getDisplayName() {
-			return Messages.vm_title_ReconfigureMemory();
-		}
+        @Override
+        public String getDisplayName() {
+            return Messages.vm_title_ReconfigureMemory();
+        }
 
-		@RequirePOST
-		public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter String memorySize) {
-			throwUnlessUserHasPermissionToConfigureJob(context);
-			try {
-				return doCheckMemorySize(context, memorySize);
-			} catch (Exception e) {
-				throw new RuntimeException(e);
-			}
-		}
-	}
+        @RequirePOST
+        public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter String memorySize) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
+            try {
+                return doCheckMemorySize(context, memorySize);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
 }

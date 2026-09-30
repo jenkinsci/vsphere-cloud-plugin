@@ -19,22 +19,20 @@ package org.jenkinsci.plugins.vsphere;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
-import hudson.model.ExecutorListener;
 import hudson.model.Descriptor;
 import hudson.model.DescriptorVisibilityFilter;
 import hudson.model.Executor;
+import hudson.model.ExecutorListener;
 import hudson.model.Queue;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import hudson.slaves.CloudRetentionStrategy;
 import hudson.slaves.EphemeralNode;
 import hudson.slaves.RetentionStrategy;
-
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.jenkinsci.Symbol;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -69,7 +67,7 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
                 LOGGER.log(
                         Level.FINE,
                         "Disconnecting {0} because it has been idle for more than {1} minutes (has been idle for {2}ms)",
-                        new Object[] { c.getName(), idleMinutes, idleMilliseconds });
+                        new Object[] {c.getName(), idleMinutes, idleMilliseconds});
                 done(c);
             }
         }
@@ -87,8 +85,7 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     }
 
     @Override
-    public void taskAccepted(final Executor executor, final Queue.Task task) {
-    }
+    public void taskAccepted(final Executor executor, final Queue.Task task) {}
 
     @Override
     public void taskCompleted(final Executor executor, final Queue.Task task, final long durationMS) {
@@ -96,8 +93,8 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     }
 
     @Override
-    public void taskCompletedWithProblems(final Executor executor, final Queue.Task task, final long durationMS,
-            final Throwable problems) {
+    public void taskCompletedWithProblems(
+            final Executor executor, final Queue.Task task, final long durationMS, final Throwable problems) {
         done(executor);
     }
 
@@ -114,7 +111,7 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
     private void done(final Executor executor) {
         final AbstractCloudComputer<?> c = (AbstractCloudComputer<?>) executor.getOwner();
         final Queue.Executable exec = executor.getCurrentExecutable();
-        LOGGER.log(Level.FINE, "terminating {0} since {1} seems to be finished", new Object[] { c.getName(), exec });
+        LOGGER.log(Level.FINE, "terminating {0} since {1} seems to be finished", new Object[] {c.getName(), exec});
         done(c);
     }
 
@@ -128,17 +125,17 @@ public class RunOnceCloudRetentionStrategy extends CloudRetentionStrategy implem
             LOGGER.log(Level.FINER, "Initiating termination of {0}.", cname);
             setBeingTerminated();
         }
-        final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._runOnceCloudRetentionStrategy_OfflineReason_BuildHasRun());
+        final VSphereOfflineCause cause =
+                new VSphereOfflineCause(Messages._runOnceCloudRetentionStrategy_OfflineReason_BuildHasRun());
         c.disconnect(cause);
         try {
             final AbstractCloudSlave node = c.getNode();
             if (node != null) {
-                LOGGER.log(Level.FINER, "Terminating {0} node {1}.", new Object[] { cname, node });
+                LOGGER.log(Level.FINER, "Terminating {0} node {1}.", new Object[] {cname, node});
                 node.terminate();
             } else {
-                LOGGER.log(Level.FINER,
-                        "Not terminating {0} as its corresponding node has already been removed.",
-                        cname);
+                LOGGER.log(
+                        Level.FINER, "Not terminating {0} as its corresponding node has already been removed.", cname);
             }
         } catch (InterruptedException e) {
             LOGGER.log(Level.WARNING, "Failed to terminate " + cname, e);

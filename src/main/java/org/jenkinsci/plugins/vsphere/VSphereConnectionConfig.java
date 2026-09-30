@@ -30,6 +30,8 @@ import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.cloudbees.plugins.credentials.domains.HostnameRequirement;
 import com.vmware.vim25.ws.ApacheHttpClient;
 import com.vmware.vim25.ws.WSClient;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
@@ -40,11 +42,7 @@ import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import java.util.Collections;
 import java.util.List;
-
-import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
-
 import org.apache.commons.lang3.StringUtils;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -59,7 +57,7 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
  * @author Oleg Nenashev &lt;o.v.nenashev@gmail.com&gt;
  */
 public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConnectionConfig> {
-    
+
     private final @CheckForNull String vsHost;
     private /*final*/ boolean allowUntrustedCertificate;
     private final @CheckForNull String credentialsId;
@@ -98,8 +96,8 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             VSphereConnectionConfig.httpClientClass = WSClient.class;
             List<vSphereCloud> clouds = vSphereCloud.findAllVsphereClouds(null);
             if (clouds.size() > 0) {
-                VSphereConnectionConfig.httpClientClass
-                        = httpClientNameToClass(clouds.get(0).getVsConnectionConfig().httpClientClassName);
+                VSphereConnectionConfig.httpClientClass =
+                        httpClientNameToClass(clouds.get(0).getVsConnectionConfig().httpClientClassName);
             }
         }
         return VSphereConnectionConfig.httpClientClass;
@@ -143,34 +141,34 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     public boolean getAllowUntrustedCertificate() {
         return allowUntrustedCertificate;
     }
- 
+
     public @CheckForNull String getCredentialsId() {
         return credentialsId;
     }
-    
+
     public @CheckForNull StandardCredentials getCredentials() {
         return DescriptorImpl.lookupCredentials(credentialsId, vsHost);
     }
-    
+
     public @CheckForNull String getPassword() {
         StandardCredentials credentials = getCredentials();
-        
+
         if (credentials instanceof StandardUsernamePasswordCredentials) {
-            final Secret password = ((StandardUsernamePasswordCredentials)credentials).getPassword();
+            final Secret password = ((StandardUsernamePasswordCredentials) credentials).getPassword();
             return Secret.toString(password);
         }
         return null;
     }
-    
+
     public @CheckForNull String getUsername() {
         StandardCredentials credentials = getCredentials();
-        
+
         if (credentials instanceof StandardUsernameCredentials) {
-            return ((StandardUsernameCredentials)credentials).getUsername();
+            return ((StandardUsernameCredentials) credentials).getUsername();
         }
         return null;
     }
-      
+
     @Extension
     public static class DescriptorImpl extends Descriptor<VSphereConnectionConfig> {
 
@@ -183,17 +181,22 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         public ListBoxModel doFillHttpClientClassNameItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
 
-            ListBoxModel items = new ListBoxModel(new ListBoxModel.Option("Use HttpURLConnection to connect to the vSphere cloud",
-                    VSphereConnectionConfig.HttpClientClassName.WSClientClass.name,
-                    VSphereConnectionConfig.HttpClientClassName.WSClientClass.name.equals(getHttpClientClassName())),
-                    new ListBoxModel.Option("Use CloseableHttpClient to connect to the vSphere cloud",
+            ListBoxModel items = new ListBoxModel(
+                    new ListBoxModel.Option(
+                            "Use HttpURLConnection to connect to the vSphere cloud",
+                            VSphereConnectionConfig.HttpClientClassName.WSClientClass.name,
+                            VSphereConnectionConfig.HttpClientClassName.WSClientClass.name.equals(
+                                    getHttpClientClassName())),
+                    new ListBoxModel.Option(
+                            "Use CloseableHttpClient to connect to the vSphere cloud",
                             VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name,
-                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name.equals(getHttpClientClassName())));
+                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name.equals(
+                                    getHttpClientClassName())));
             return items;
         }
 
         public FormValidation doCheckVsHost(@QueryParameter String value) {
-            if (value!=null && value.length() != 0) {
+            if (value != null && value.length() != 0) {
                 if (!value.startsWith("https://")) {
                     return FormValidation.error("vSphere host must start with https://");
                 }
@@ -211,17 +214,25 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return FormValidation.ok();
         }
 
-        public ListBoxModel doFillCredentialsIdItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                @QueryParameter String vsHost) {
+        @RequirePOST
+        public ListBoxModel doFillCredentialsIdItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String vsHost) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            return new StandardListBoxModel().includeEmptyValue()
-                .includeMatchingAs(ACL.SYSTEM, Jenkins.getInstance(), StandardCredentials.class,
-                    Collections.singletonList(getDomainRequirement(vsHost)), CREDENTIALS_MATCHER);
+            return new StandardListBoxModel()
+                    .includeEmptyValue()
+                    .includeMatchingAs(
+                            ACL.SYSTEM,
+                            Jenkins.getInstance(),
+                            StandardCredentials.class,
+                            Collections.singletonList(getDomainRequirement(vsHost)),
+                            CREDENTIALS_MATCHER);
         }
 
-        public FormValidation doCheckCredentialsId(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                                                   @QueryParameter String vsHost,
-                                                   @QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckCredentialsId(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String vsHost,
+                @QueryParameter String value) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
 
             value = Util.fixEmptyAndTrim(value);
@@ -250,13 +261,15 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
          * @return Result of the validation.
          */
         @RequirePOST
-        public FormValidation doTestConnection(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                                               @QueryParameter String vsHost,
-                                               @QueryParameter boolean allowUntrustedCertificate,
-                                               @QueryParameter String credentialsId) {
+        public FormValidation doTestConnection(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String vsHost,
+                @QueryParameter boolean allowUntrustedCertificate,
+                @QueryParameter String credentialsId) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
+                final VSphereConnectionConfig config =
+                        new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
                 final String effectiveUsername = config.getUsername();
                 final String effectivePassword = config.getPassword();
 
@@ -277,24 +290,23 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         }
 
         // Support on login/password authentication
-        private static final CredentialsMatcher CREDENTIALS_MATCHER = CredentialsMatchers.anyOf(
-                CredentialsMatchers.instanceOf(StandardUsernamePasswordCredentials.class)
-        );
-        
+        private static final CredentialsMatcher CREDENTIALS_MATCHER =
+                CredentialsMatchers.anyOf(CredentialsMatchers.instanceOf(StandardUsernamePasswordCredentials.class));
+
         private static @NonNull DomainRequirement getDomainRequirement(String hostname) {
             return new HostnameRequirement(hostname);
         }
-        
-        public static @CheckForNull StandardCredentials lookupCredentials
-                        (@CheckForNull String credentialsId, @NonNull String vsHost) {
-            final Jenkins instance = Jenkins.getInstance();            
+
+        public static @CheckForNull StandardCredentials lookupCredentials(
+                @CheckForNull String credentialsId, @NonNull String vsHost) {
+            final Jenkins instance = Jenkins.getInstance();
             if (instance != null && credentialsId != null) {
                 return CredentialsMatchers.firstOrNull(
-                        CredentialsProvider.lookupCredentials(StandardCredentials.class, instance, 
-                                ACL.SYSTEM, getDomainRequirement(vsHost)),
+                        CredentialsProvider.lookupCredentials(
+                                StandardCredentials.class, instance, ACL.SYSTEM, getDomainRequirement(vsHost)),
                         CredentialsMatchers.withId(credentialsId));
             }
             return null;
-        } 
+        }
     }
 }

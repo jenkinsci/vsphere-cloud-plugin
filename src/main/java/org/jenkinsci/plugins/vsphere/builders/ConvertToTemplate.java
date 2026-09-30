@@ -16,21 +16,18 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
+import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
 import hudson.model.Item;
-import hudson.model.AbstractBuild;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -60,7 +57,12 @@ public class ConvertToTemplate extends VSphereBuildStep {
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         try {
             convert(run, launcher, listener);
         } catch (Exception e) {
@@ -69,7 +71,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
         boolean retVal = false;
         try {
             retVal = convert(build, launcher, listener);
@@ -77,10 +79,11 @@ public class ConvertToTemplate extends VSphereBuildStep {
             e.printStackTrace();
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
+        // TODO throw AbortException instead of returning value
     }
 
-    private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+    private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         PrintStream jLogger = listener.getLogger();
         VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");
         String expandedVm = vm;
@@ -100,7 +103,7 @@ public class ConvertToTemplate extends VSphereBuildStep {
         }
 
         vsphere.markAsTemplate(expandedVm, df.format(date), force);
-        VSphereLogger.vsLogger(jLogger, "\""+expandedVm+"\" is now a template.");
+        VSphereLogger.vsLogger(jLogger, "\"" + expandedVm + "\" is now a template.");
 
         return true;
     }
@@ -121,31 +124,27 @@ public class ConvertToTemplate extends VSphereBuildStep {
         }
 
         public FormValidation doCheckVm(@QueryParameter String value) {
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the VM name"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }
 
         @RequirePOST
-        public FormValidation doTestData(@AncestorInPath Item context,
-                                         @QueryParameter String serverName,
-                                         @QueryParameter String vm) {
+        public FormValidation doTestData(
+                @AncestorInPath Item context, @QueryParameter String serverName, @QueryParameter String vm) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             VSphere vsphere = null;
             try {
-                if (serverName == null){
+                if (serverName == null) {
                     return FormValidation.error(Messages.validation_required("serverName"));
                 }
 
                 if (serverName.length() == 0 || vm.length() == 0)
                     return FormValidation.error(Messages.validation_requiredValues());
 
-                if (vm.indexOf('$') >= 0)
-                    return FormValidation.warning(Messages.validation_buildParameter("VM"));
+                if (vm.indexOf('$') >= 0) return FormValidation.warning(Messages.validation_buildParameter("VM"));
 
                 vsphere = getVSphereCloudByName(serverName, null).vSphereInstance();
-                if (vsphere.getVmByName(vm) == null)
-                    return FormValidation.error(Messages.validation_notFound("VM"));
+                if (vsphere.getVmByName(vm) == null) return FormValidation.error(Messages.validation_notFound("VM"));
 
                 return FormValidation.ok(Messages.validation_success());
             } catch (Exception e) {

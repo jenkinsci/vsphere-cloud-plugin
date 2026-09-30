@@ -7,13 +7,11 @@ import hudson.model.LoadStatistics;
 import hudson.slaves.Cloud;
 import hudson.slaves.CloudProvisioningListener;
 import hudson.slaves.NodeProvisioner;
-import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
-
 import java.util.Collection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.vSphereCloud;
 
 /**
  * A {@link NodeProvisioner.Strategy} that immediately provisions capacity to meet demand.
@@ -38,24 +36,29 @@ public class NoDelayNodeProvisionerStrategy extends NodeProvisioner.Strategy {
 
         LoadStatistics.LoadStatisticsSnapshot snapshot = state.getSnapshot();
 
-        int currentDemand = snapshot.getQueueLength();  // Jobs waiting for executors
+        int currentDemand = snapshot.getQueueLength(); // Jobs waiting for executors
 
-        int availableCapacity = snapshot.getAvailableExecutors()  // Idle executors
-                + snapshot.getConnectingExecutors()      // Connecting executors
-                + state.getPlannedCapacitySnapshot()     // Previously provisioned executors
-                + state.getAdditionalPlannedCapacity();  // Executors provisioned by another strategy
+        int availableCapacity = snapshot.getAvailableExecutors() // Idle executors
+                + snapshot.getConnectingExecutors() // Connecting executors
+                + state.getPlannedCapacitySnapshot() // Previously provisioned executors
+                + state.getAdditionalPlannedCapacity(); // Executors provisioned by another strategy
 
-        int excessWorkload = currentDemand - availableCapacity;  // Number of needed executors
+        int excessWorkload = currentDemand - availableCapacity; // Number of needed executors
 
         if (excessWorkload > 0) {
-            LOGGER.log(Level.FINE, "Excess workload {0,number,integer} detected. "
+            LOGGER.log(
+                    Level.FINE,
+                    "Excess workload {0,number,integer} detected. "
                             + "(demand={1,number,integer}, available={2,number,integer}, "
                             + "online={3,number,integer}, connecting={4,number,integer}, "
                             + "planned={5,number,integer})",
-                    new Object[]{
-                            excessWorkload, currentDemand, snapshot.getAvailableExecutors(),
-                            snapshot.getOnlineExecutors(), snapshot.getConnectingExecutors(),
-                            state.getPlannedCapacitySnapshot() + state.getAdditionalPlannedCapacity()
+                    new Object[] {
+                        excessWorkload,
+                        currentDemand,
+                        snapshot.getAvailableExecutors(),
+                        snapshot.getOnlineExecutors(),
+                        snapshot.getConnectingExecutors(),
+                        state.getPlannedCapacitySnapshot() + state.getAdditionalPlannedCapacity()
                     });
 
             CLOUD:
@@ -92,9 +95,11 @@ public class NoDelayNodeProvisionerStrategy extends NodeProvisioner.Strategy {
                 // Update state
                 for (NodeProvisioner.PlannedNode plannedNode : plannedNodes) {
                     excessWorkload -= plannedNode.numExecutors;
-                    LOGGER.log(Level.INFO, "Started provisioning {0} from {1} with {2,number,integer} "
+                    LOGGER.log(
+                            Level.INFO,
+                            "Started provisioning {0} from {1} with {2,number,integer} "
                                     + "executors. Remaining excess workload: {3,number,integer}",
-                            new Object[]{plannedNode.displayName, c.name, plannedNode.numExecutors, excessWorkload});
+                            new Object[] {plannedNode.displayName, c.name, plannedNode.numExecutors, excessWorkload});
                 }
                 state.recordPendingLaunches(plannedNodes);
 
@@ -113,17 +118,20 @@ public class NoDelayNodeProvisionerStrategy extends NodeProvisioner.Strategy {
         }
     }
 
-    private static void fireOnStarted(final Cloud cloud, final Label label,
-                                      final Collection<NodeProvisioner.PlannedNode> plannedNodes) {
+    private static void fireOnStarted(
+            final Cloud cloud, final Label label, final Collection<NodeProvisioner.PlannedNode> plannedNodes) {
         for (CloudProvisioningListener cl : CloudProvisioningListener.all()) {
             try {
                 cl.onStarted(cloud, label, plannedNodes);
             } catch (Error e) {
                 throw e;
             } catch (Throwable e) {
-                LOGGER.log(Level.SEVERE, "Unexpected uncaught exception encountered while "
-                        + "processing onStarted() listener call in " + cl + " for label "
-                        + label.toString(), e);
+                LOGGER.log(
+                        Level.SEVERE,
+                        "Unexpected uncaught exception encountered while "
+                                + "processing onStarted() listener call in " + cl + " for label "
+                                + label.toString(),
+                        e);
             }
         }
     }

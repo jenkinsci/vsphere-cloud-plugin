@@ -1,5 +1,11 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 import com.vmware.vim25.Description;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualE1000;
@@ -8,17 +14,10 @@ import com.vmware.vim25.VirtualSCSIController;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.junit.jupiter.api.Test;
 
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.nullValue;
-import static org.hamcrest.Matchers.sameInstance;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 class ReconfigureNetworkAdaptersTest {
 
     private static ReconfigureNetworkAdapters newStep() throws VSphereException {
-        return new ReconfigureNetworkAdapters(ReconfigureStep.DeviceAction.EDIT, "", "",
-                false, "", false, "", "");
+        return new ReconfigureNetworkAdapters(ReconfigureStep.DeviceAction.EDIT, "", "", false, "", false, "", "");
     }
 
     private static VirtualEthernetCard nic(String label) {

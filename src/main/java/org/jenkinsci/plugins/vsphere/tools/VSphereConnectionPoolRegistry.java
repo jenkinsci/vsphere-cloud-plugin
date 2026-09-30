@@ -1,7 +1,6 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -22,8 +21,7 @@ final class VSphereConnectionPoolRegistry {
 
     private static final Set<VSphereConnectionPool> LIVE_POOLS = ConcurrentHashMap.newKeySet();
 
-    private VSphereConnectionPoolRegistry() {
-    }
+    private VSphereConnectionPoolRegistry() {}
 
     static void register(VSphereConnectionPool pool) {
         LIVE_POOLS.add(pool);

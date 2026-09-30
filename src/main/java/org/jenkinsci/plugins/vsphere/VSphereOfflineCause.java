@@ -1,8 +1,7 @@
 package org.jenkinsci.plugins.vsphere;
 
-import org.jvnet.localizer.Localizable;
-
 import hudson.slaves.OfflineCause.SimpleOfflineCause;
+import org.jvnet.localizer.Localizable;
 
 /**
  * Offline because the plugin set it offline rather than anyone else.

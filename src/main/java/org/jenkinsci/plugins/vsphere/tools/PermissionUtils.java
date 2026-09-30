@@ -1,28 +1,25 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
-import org.acegisecurity.AccessDeniedException;
-import org.kohsuke.accmod.Restricted;
-import org.kohsuke.accmod.restrictions.NoExternalUse;
-
 import com.cloudbees.hudson.plugins.folder.AbstractFolder;
-
 import hudson.model.Computer;
 import hudson.model.Item;
 import hudson.model.ItemGroup;
 import hudson.security.AccessControlled;
 import hudson.security.Permission;
 import jenkins.model.Jenkins;
+import org.acegisecurity.AccessDeniedException;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 /**
  * Utility class for checking security permissions.
  */
 public class PermissionUtils {
-    private PermissionUtils() {
-    }
+    private PermissionUtils() {}
 
     /**
      * Throws unless the user has permission to update this agent.
-     * 
+     *
      * @param context
      *            The <code>@AncestorInPath</code> {@link ItemGroup} that
      *            contains the agent.
@@ -39,7 +36,7 @@ public class PermissionUtils {
      * defined within a {@link AbstractFolder}, a user must have permission to
      * configure the folder. For other (system global) clouds, the user must be
      * an administrator.
-     * 
+     *
      * @param folderContextOrNull
      *            The <code>@AncestorInPath</code> {@link AbstractFolder}
      *            containing this cloud, or null if this is a global scope
@@ -56,7 +53,7 @@ public class PermissionUtils {
      * Throws unless the user has permission to update this job. This is used to
      * police access to non-trivial build-step form validation and test methods
      * that are only used when reconfiguring a job.
-     * 
+     *
      * @param context
      *            The <code>@AncestorInPath</code> {@link Item} of this job.
      * @throws AccessDeniedException
@@ -71,7 +68,7 @@ public class PermissionUtils {
      * Throws unless the user has permission to access this job. This is used to
      * police access to non-trivial build-step form validation and test methods
      * that could be useful when viewing or using a job.
-     * 
+     *
      * @param context
      *            The <code>@AncestorInPath</code> {@link Item} of this job.
      * @throws AccessDeniedException
@@ -84,7 +81,7 @@ public class PermissionUtils {
 
     /**
      * Throws unless we have at least one of the specified permissions.
-     * 
+     *
      * @param c
      *            Our context.
      * @param allowablePermission

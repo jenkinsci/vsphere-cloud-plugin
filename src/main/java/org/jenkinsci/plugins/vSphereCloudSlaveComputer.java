@@ -1,10 +1,5 @@
 package org.jenkinsci.plugins;
 
-import java.io.PrintWriter;
-import java.io.StringWriter;
-
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
-
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineGuestSummary;
@@ -13,9 +8,11 @@ import com.vmware.vim25.VirtualMachineSummary;
 import com.vmware.vim25.VirtualMachineToolsStatus;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.VirtualMachine;
-
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import org.jenkinsci.plugins.vsphere.tools.VSphere;
 
 public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
     private final vSphereCloudSlave vSlave;

@@ -1,19 +1,18 @@
 package org.jenkinsci.plugins.vsphere.builders;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import org.jenkinsci.plugins.structs.describable.DescribableModel;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.junit.jupiter.api.Test;
-import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
-
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.jenkinsci.plugins.structs.describable.DescribableModel;
+import org.jenkinsci.plugins.vSphereCloud;
+import org.junit.jupiter.api.Test;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 /**
  * Verifies the optional host-placement fields ({@code host}, {@code hostSelectionMode},
@@ -93,8 +92,7 @@ class DeployTest {
 
     @Test
     void setHostSelectionCandidatesAsStringUpdatesTheCanonicalSet() throws Exception {
-        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", "", null, false);
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster", "", "", "", null, false);
 
         step.setHostSelectionCandidatesAsString("esx01.example.com, esx02.example.com");
 
@@ -103,8 +101,7 @@ class DeployTest {
 
     @Test
     void setHostSelectionCandidatesAsStringBlankMeansInherit() throws Exception {
-        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", "", null, false);
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster", "", "", "", null, false);
 
         step.setHostSelectionCandidatesAsString("");
 
@@ -113,8 +110,7 @@ class DeployTest {
 
     @Test
     void setHostSelectionCandidatesAsStringCommaExplicitlyOverridesToEmpty() throws Exception {
-        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", "", null, false);
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster", "", "", "", null, false);
 
         step.setHostSelectionCandidatesAsString(",");
 
@@ -124,8 +120,7 @@ class DeployTest {
 
     @Test
     void hostSelectionModeNoneIsStoredVerbatim() throws Exception {
-        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", "", null, false);
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster", "", "", "", null, false);
 
         step.setHostSelectionMode("NONE");
 
@@ -134,8 +129,7 @@ class DeployTest {
 
     @Test
     void sourceCloudCanBeSetAndRetrieved() throws Exception {
-        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster",
-                "", "", "", null, false);
+        Deploy step = new Deploy("linux-template", "new-vm", false, "Resources", "my-cluster", "", "", "", null, false);
         assertThat(step.getSourceCloud(), nullValue());
 
         vSphereCloud cloud = new vSphereCloud(null, "my-vcenter", 0, 0, false, null);

@@ -18,17 +18,23 @@ package org.jenkinsci.plugins;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 
+import com.cloudbees.hudson.plugins.folder.AbstractFolder;
+import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
+import com.vmware.vim25.OptionValue;
+import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigSpec;
+import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.Describable;
-import hudson.model.TaskListener;
 import hudson.model.Descriptor;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Label;
 import hudson.model.Node.Mode;
+import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
 import hudson.plugins.sshslaves.SSHLauncher;
 import hudson.slaves.CommandLauncher;
@@ -39,7 +45,6 @@ import hudson.slaves.NodePropertyDescriptor;
 import hudson.slaves.RetentionStrategy;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
@@ -51,15 +56,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-
+import java.util.stream.Collectors;
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
-
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -78,20 +79,14 @@ import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
-import com.cloudbees.hudson.plugins.folder.AbstractFolder;
-import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
-import com.vmware.vim25.OptionValue;
-import com.vmware.vim25.VirtualMachineConfigInfo;
-import com.vmware.vim25.mo.VirtualMachine;
-
 /**
  *
  * @author ksmith
  */
 public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveTemplate> {
     private static final Logger LOGGER = Logger.getLogger(vSphereCloudSlaveTemplate.class.getName());
-    private static final String VSPHERE_ATTR_FOR_JENKINSURL = vSphereCloudSlaveTemplate.class.getSimpleName()
-            + ".jenkinsUrl";
+    private static final String VSPHERE_ATTR_FOR_JENKINSURL =
+            vSphereCloudSlaveTemplate.class.getSimpleName() + ".jenkinsUrl";
 
     protected static final SchemeRequirement HTTP_SCHEME = new SchemeRequirement("http");
     protected static final SchemeRequirement HTTPS_SCHEME = new SchemeRequirement("https");
@@ -132,7 +127,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
      * {@link #launcher} configuration
      */
     @Deprecated()
-    private transient final String credentialsId;
+    private final transient String credentialsId;
+
     private final List<? extends NodeProperty<?>> nodeProperties;
     private final List<? extends VSphereGuestInfoProperty> guestInfoProperties;
     private ComputerLauncher launcher;
@@ -152,36 +148,37 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     protected transient vSphereCloud parent;
 
     @DataBoundConstructor
-    public vSphereCloudSlaveTemplate(final String cloneNamePrefix,
-                                     final String masterImageName,
-                                     final Boolean useSnapshot,
-                                     final String snapshotName,
-                                     final boolean linkedClone,
-                                     final String cluster,
-                                     final String resourcePool,
-                                     final String datastore,
-                                     final String folder,
-                                     final String customizationSpec,
-                                     final String templateDescription,
-                                     final int templateInstanceCap,
-                                     final int numberOfExecutors,
-                                     final String remoteFS,
-                                     final String labelString,
-                                     final Mode mode,
-                                     final boolean forceVMLaunch,
-                                     final boolean waitForVMTools,
-                                     final int launchDelay,
-                                     final int limitedRunCount,
-                                     final boolean saveFailure,
-                                     final String targetResourcePool,
-                                     final String targetHost,
-                                     final int instancesMin,
-                                     final String credentialsId /*deprecated*/,
-                                     final ComputerLauncher launcher,
-                                     final RetentionStrategy<?> retentionStrategy,
-                                     final List<? extends NodeProperty<?>> nodeProperties,
-                                     final List<? extends VSphereGuestInfoProperty> guestInfoProperties,
-                                     final List<ReconfigureStep> reconfigureSteps) {
+    public vSphereCloudSlaveTemplate(
+            final String cloneNamePrefix,
+            final String masterImageName,
+            final Boolean useSnapshot,
+            final String snapshotName,
+            final boolean linkedClone,
+            final String cluster,
+            final String resourcePool,
+            final String datastore,
+            final String folder,
+            final String customizationSpec,
+            final String templateDescription,
+            final int templateInstanceCap,
+            final int numberOfExecutors,
+            final String remoteFS,
+            final String labelString,
+            final Mode mode,
+            final boolean forceVMLaunch,
+            final boolean waitForVMTools,
+            final int launchDelay,
+            final int limitedRunCount,
+            final boolean saveFailure,
+            final String targetResourcePool,
+            final String targetHost,
+            final int instancesMin,
+            final String credentialsId /*deprecated*/,
+            final ComputerLauncher launcher,
+            final RetentionStrategy<?> retentionStrategy,
+            final List<? extends NodeProperty<?>> nodeProperties,
+            final List<? extends VSphereGuestInfoProperty> guestInfoProperties,
+            final List<ReconfigureStep> reconfigureSteps) {
         this.configVersion = CURRENT_CONFIG_VERSION;
         this.cloneNamePrefix = cloneNamePrefix;
         this.masterImageName = masterImageName;
@@ -247,7 +244,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     public String getDatastore() {
         return this.datastore;
     }
-    
+
     public String getFolder() {
         return this.folder;
     }
@@ -261,7 +258,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     public int getTemplateInstanceCap() {
-        if(this.templateInstanceCap == Integer.MAX_VALUE) {
+        if (this.templateInstanceCap == Integer.MAX_VALUE) {
             return 0;
         }
         return this.templateInstanceCap;
@@ -350,7 +347,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
      */
     @DataBoundSetter
     public void setHostSelectionCandidates(Collection<String> hostSelectionCandidates) {
-        this.hostSelectionCandidates = hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
+        this.hostSelectionCandidates =
+                hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
     /**
@@ -370,7 +368,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     /**
      * Gets the old (deprecated) credentialsId field.
-     * 
+     *
      * @return the old, deprecated, credentialsId field.
      * @deprecated credentials are now in the {@link #getLauncher()} property.
      */
@@ -409,7 +407,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     protected Object readResolve() {
         this.labelSet = Label.parse(labelString);
-        if(this.templateInstanceCap == 0) {
+        if (this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
         }
         if (this.reconfigureStartTimeoutSeconds <= 0) {
@@ -418,8 +416,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             // instantly without ever confirming power-on succeeded -- not a useful value either way.
             this.reconfigureStartTimeoutSeconds = DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS;
         }
-        if ( this.useSnapshot == null ) {
-            this.useSnapshot = Boolean.valueOf(this.snapshotName!=null);
+        if (this.useSnapshot == null) {
+            this.useSnapshot = Boolean.valueOf(this.snapshotName != null);
         }
         /*
          * If we've upgraded from an earlier version of the plugin
@@ -433,22 +431,27 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 final String oldCredentialsIdOrNull = getCredentialsId();
                 final String oldCredentialsId = oldCredentialsIdOrNull == null ? "" : oldCredentialsIdOrNull;
                 // these were the old hard-coded settings
-                this.launcher = new SSHLauncher(null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60, null);
+                this.launcher = new SSHLauncher(
+                        null, 0, oldCredentialsId, null, null, null, null, this.launchDelay, 3, 60, null);
                 LOGGER.log(Level.CONFIG, " - now configured to use {0}(..., {1}, ...)", new Object[] {
-                        this.launcher.getClass().getSimpleName(), oldCredentialsId });
+                    this.launcher.getClass().getSimpleName(), oldCredentialsId
+                });
             } catch (Exception ex) {
                 LOGGER.log(Level.CONFIG, " - Failed to reconfigure launcher", ex);
             }
         }
         if (this.retentionStrategy == null) {
-            LOGGER.log(Level.CONFIG, "{0} loaded old configuration that had hard-coded RunOnceCloudRetentionStrategy.",
+            LOGGER.log(
+                    Level.CONFIG,
+                    "{0} loaded old configuration that had hard-coded RunOnceCloudRetentionStrategy.",
                     this);
             try {
                 // these were the old hard-coded settings
                 final int oldTimeout = 2;
                 this.retentionStrategy = new RunOnceCloudRetentionStrategy(oldTimeout);
                 LOGGER.log(Level.CONFIG, " - now configured to use {0}({1})", new Object[] {
-                        this.retentionStrategy.getClass().getSimpleName(), oldTimeout });
+                    this.retentionStrategy.getClass().getSimpleName(), oldTimeout
+                });
             } catch (Exception ex) {
                 LOGGER.log(Level.CONFIG, " - Failed to reconfigure strategy", ex);
             }
@@ -457,7 +460,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         // different way but in the same kind of fields, so we need an explicit
         // versioning to know how to mutate the data.
         if (configVersion <= 0) {
-            LOGGER.log(Level.CONFIG,
+            LOGGER.log(
+                    Level.CONFIG,
                     "{0} loaded old configuration that had hard-coded underscore at the end of the cloneNamePrefix.",
                     this);
             // In version one, the underscore was removed from the code so we
@@ -469,26 +473,25 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         // Note: Subsequent changes dependent on configVersion should go above
         // this line.
         if (configVersion < CURRENT_CONFIG_VERSION) {
-            throw new IllegalStateException("Internal error: configVersion==" + configVersion
-                    + " at end of readResolve method, but the current config version should be "
-                    + CURRENT_CONFIG_VERSION
-                    + ".  Either CURRENT_CONFIG_VERSION is incorrect or the readResolve method is not setting configVersion when it upgrades the data.");
+            throw new IllegalStateException(
+                    "Internal error: configVersion==" + configVersion
+                            + " at end of readResolve method, but the current config version should be "
+                            + CURRENT_CONFIG_VERSION
+                            + ".  Either CURRENT_CONFIG_VERSION is incorrect or the readResolve method is not setting configVersion when it upgrades the data.");
         }
         if (configVersion > CURRENT_CONFIG_VERSION) {
-            LOGGER.log(Level.WARNING,
+            LOGGER.log(
+                    Level.WARNING,
                     "{0} was defined by a later version of the plugin "
                             + "(one that saved with configVersion={1}, whereas this version of the plugin is expecting {2}).  "
                             + "The code may not function as expected.",
-                    new Object[]{
-                            this,
-                            configVersion,
-                            CURRENT_CONFIG_VERSION
-                    });
+                    new Object[] {this, configVersion, CURRENT_CONFIG_VERSION});
         }
         return this;
     }
 
-    public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener) throws VSphereException, FormException, IOException, InterruptedException {
+    public vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener)
+            throws VSphereException, FormException, IOException, InterruptedException {
         final Map<String, String> resolvedExtraConfigParameters = calculateExtraConfigParameters(cloneName, listener);
         final VSphere vSphere = getParent().vSphereInstance();
         final vSphereCloudProvisionedSlave slave;
@@ -500,7 +503,12 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return slave;
     }
 
-    private vSphereCloudProvisionedSlave provision(final String cloneName, final TaskListener listener, final Map<String, String> resolvedExtraConfigParameters, final VSphere vSphere) throws VSphereException, FormException, IOException {
+    private vSphereCloudProvisionedSlave provision(
+            final String cloneName,
+            final TaskListener listener,
+            final Map<String, String> resolvedExtraConfigParameters,
+            final VSphere vSphere)
+            throws VSphereException, FormException, IOException {
         final PrintStream logger = listener.getLogger();
         final boolean useCurrentSnapshot;
         final String snapshotToUse;
@@ -519,20 +527,40 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
         final vSphereCloud sourceCloud = getParent();
         final String cloudDefaultHostSelectionMode = sourceCloud != null ? sourceCloud.getHostSelectionMode() : null;
-        final Set<String> cloudDefaultHostSelectionCandidates = sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
-        final String resolvedHostSelectionMode = VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
-        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
+        final Set<String> cloudDefaultHostSelectionCandidates =
+                sourceCloud != null ? sourceCloud.getHostSelectionCandidates() : null;
+        final String resolvedHostSelectionMode =
+                VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
+        final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
+                cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
         try {
             final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
-            vSphere.cloneOrDeployVm(cloneName, this.masterImageName, this.linkedClone, this.resourcePool, this.cluster, this.datastore, this.folder, useCurrentSnapshot, snapshotToUse, !willReconfigure, resolvedExtraConfigParameters, this.customizationSpec, this.targetHost, resolvedHostSelectionMode, resolvedHostSelectionCandidates, logger);
-            LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[]{ cloneName, this.masterImageName });
-            if(willReconfigure) {
+            vSphere.cloneOrDeployVm(
+                    cloneName,
+                    this.masterImageName,
+                    this.linkedClone,
+                    this.resourcePool,
+                    this.cluster,
+                    this.datastore,
+                    this.folder,
+                    useCurrentSnapshot,
+                    snapshotToUse,
+                    !willReconfigure,
+                    resolvedExtraConfigParameters,
+                    this.customizationSpec,
+                    this.targetHost,
+                    resolvedHostSelectionMode,
+                    resolvedHostSelectionCandidates,
+                    logger);
+            LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[] {cloneName, this.masterImageName});
+            if (willReconfigure) {
                 final VirtualMachine vm = vSphere.getVmByName(cloneName);
                 final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
                 final EnvVars env = new EnvVars();
                 for (ReconfigureStep globalStep : reconfigureSteps) {
                     // Do not mutate global steps to perform reconfiguration - use a clone
-                    ReconfigureStep actionStep = (ReconfigureStep)Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep));
+                    ReconfigureStep actionStep =
+                            (ReconfigureStep) Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep));
                     actionStep.setVsphere(vSphere);
                     actionStep.setVM(vm);
                     actionStep.setVirtualMachineConfigSpec(spec);
@@ -543,15 +571,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             }
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
-            if ( vmJenkinsUrl==null ) {
-                LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it wasn't started by this plugin.", cloneName );
+            if (vmJenkinsUrl == null) {
+                LOGGER.log(
+                        Level.SEVERE,
+                        "VM {0} name clashes with one we wanted to use, but it wasn't started by this plugin.",
+                        cloneName);
                 throw ex;
             }
             final String ourJenkinsUrl = Jenkins.getInstance().getRootUrl();
-            if ( vmJenkinsUrl.equals(ourJenkinsUrl) ) {
-                LOGGER.log(Level.INFO, "Found existing VM {0} that we started previously (and must have either lost track of it or failed to delete it).", cloneName );
+            if (vmJenkinsUrl.equals(ourJenkinsUrl)) {
+                LOGGER.log(
+                        Level.INFO,
+                        "Found existing VM {0} that we started previously (and must have either lost track of it or failed to delete it).",
+                        cloneName);
             } else {
-                LOGGER.log(Level.SEVERE, "VM {0} name clashes with one we wanted to use, but it doesn't belong to this Jenkins server: it belongs to {1}.  You MUST reconfigure one of these Jenkins servers to use a different naming strategy so that we no longer get clashes within vSphere host {2}. i.e. change the cloneNamePrefix on one/both to ensure uniqueness.", new Object[]{ cloneName, vmJenkinsUrl, this.getParent().getVsHost() } );
+                LOGGER.log(
+                        Level.SEVERE,
+                        "VM {0} name clashes with one we wanted to use, but it doesn't belong to this Jenkins server: it belongs to {1}.  You MUST reconfigure one of these Jenkins servers to use a different naming strategy so that we no longer get clashes within vSphere host {2}. i.e. change the cloneNamePrefix on one/both to ensure uniqueness.",
+                        new Object[] {cloneName, vmJenkinsUrl, this.getParent().getVsHost()});
                 throw ex;
             }
         } catch (VSphereException ex) {
@@ -559,7 +596,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             try {
                 vSphere.destroyVm(cloneName, false);
             } catch (Exception logOnly) {
-                LOGGER.log(Level.SEVERE,
+                LOGGER.log(
+                        Level.SEVERE,
                         "Unable to create and power-on new VM " + cloneName + " (cloned from image "
                                 + this.masterImageName
                                 + ") and, worse, bits of the VM may still exist as the attempt to delete the remains also failed.",
@@ -571,15 +609,29 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         try {
             final ComputerLauncher configuredLauncher = determineLauncher(vSphere, cloneName);
             final RetentionStrategy<?> configuredStrategy = determineRetention();
-            final String snapshotNameForLauncher = ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
-            slave = new vSphereCloudProvisionedSlave(cloneName, getTemplateDescription(), getRemoteFS(),
-                    String.valueOf(getNumberOfExecutors()), getMode(), getLabelString(), configuredLauncher,
-                    configuredStrategy, makeCopyOfList(getNodeProperties()), getParent().getVsDescription(), cloneName,
-                    getForceVMLaunch(), getWaitForVMTools(), snapshotNameForLauncher, String.valueOf(getLaunchDelay()),
-                    null, String.valueOf(getLimitedRunCount()));
+            final String snapshotNameForLauncher =
+                    ""; /* we don't make the launcher do anything with snapshots because our clone won't be created with any */
+            slave = new vSphereCloudProvisionedSlave(
+                    cloneName,
+                    getTemplateDescription(),
+                    getRemoteFS(),
+                    String.valueOf(getNumberOfExecutors()),
+                    getMode(),
+                    getLabelString(),
+                    configuredLauncher,
+                    configuredStrategy,
+                    makeCopyOfList(getNodeProperties()),
+                    getParent().getVsDescription(),
+                    cloneName,
+                    getForceVMLaunch(),
+                    getWaitForVMTools(),
+                    snapshotNameForLauncher,
+                    String.valueOf(getLaunchDelay()),
+                    null,
+                    String.valueOf(getLimitedRunCount()));
         } finally {
             // if anything went wrong, try to tidy up
-            if( slave==null ) {
+            if (slave == null) {
                 LOGGER.log(Level.FINER, "Creation of slave failed after cloning VM: destroying clone {0}", cloneName);
                 vSphere.destroyVm(cloneName, false);
             }
@@ -590,7 +642,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private <T> List<T> makeCopyOfList(List<? extends T> listOrNull) {
         final List<? extends T> originalList = Util.fixNull(listOrNull);
         final List<T> copyList = new ArrayList<T>(originalList.size());
-        for( final T originalElement : originalList) {
+        for (final T originalElement : originalList) {
             final T copyOfElement = makeCopy(originalElement);
             copyList.add(copyOfElement);
         }
@@ -615,12 +667,19 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final SSHLauncher sshLauncher = (SSHLauncher) launcher;
             LOGGER.log(Level.FINER, "Slave {0} uses SSHLauncher - obtaining IP address...", cloneName);
             final String ip = vSphere.getIp(vSphere.getVmByName(cloneName), 1000);
-            LOGGER.log(Level.FINER, "Slave {0} has IP address {1}", new Object[] { cloneName, ip });
-            final SSHLauncher launcherWithIPAddress = new SSHLauncher(ip, sshLauncher.getPort(),
-                    sshLauncher.getCredentialsId(), sshLauncher.getJvmOptions(), sshLauncher.getJavaPath(),
-                    sshLauncher.getPrefixStartSlaveCmd(), sshLauncher.getSuffixStartSlaveCmd(),
-                    sshLauncher.getLaunchTimeoutSeconds(), sshLauncher.getMaxNumRetries(),
-                    sshLauncher.getRetryWaitTime(), sshLauncher.getSshHostKeyVerificationStrategy());
+            LOGGER.log(Level.FINER, "Slave {0} has IP address {1}", new Object[] {cloneName, ip});
+            final SSHLauncher launcherWithIPAddress = new SSHLauncher(
+                    ip,
+                    sshLauncher.getPort(),
+                    sshLauncher.getCredentialsId(),
+                    sshLauncher.getJvmOptions(),
+                    sshLauncher.getJavaPath(),
+                    sshLauncher.getPrefixStartSlaveCmd(),
+                    sshLauncher.getSuffixStartSlaveCmd(),
+                    sshLauncher.getLaunchTimeoutSeconds(),
+                    sshLauncher.getMaxNumRetries(),
+                    sshLauncher.getRetryWaitTime(),
+                    sshLauncher.getSshHostKeyVerificationStrategy());
             return launcherWithIPAddress;
         }
         throw new IllegalStateException("Unsupported launcher (" + launcher + ") in template configuration");
@@ -629,14 +688,14 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private RetentionStrategy<?> determineRetention() {
         if (retentionStrategy instanceof RunOnceCloudRetentionStrategy) {
             final RunOnceCloudRetentionStrategy templateStrategy = (RunOnceCloudRetentionStrategy) retentionStrategy;
-            final RunOnceCloudRetentionStrategy cloneStrategy = new RunOnceCloudRetentionStrategy(
-                    templateStrategy.getIdleMinutes());
+            final RunOnceCloudRetentionStrategy cloneStrategy =
+                    new RunOnceCloudRetentionStrategy(templateStrategy.getIdleMinutes());
             return cloneStrategy;
         }
         if (retentionStrategy instanceof VSphereCloudRetentionStrategy) {
             final VSphereCloudRetentionStrategy templateStrategy = (VSphereCloudRetentionStrategy) retentionStrategy;
-            final VSphereCloudRetentionStrategy cloneStrategy = new VSphereCloudRetentionStrategy(
-                    templateStrategy.getIdleMinutes());
+            final VSphereCloudRetentionStrategy cloneStrategy =
+                    new VSphereCloudRetentionStrategy(templateStrategy.getIdleMinutes());
             cloneStrategy.setLifespanMinutes(templateStrategy.getLifespanMinutes());
             return cloneStrategy;
         }
@@ -677,7 +736,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return FormValidation.validatePositiveInteger(numberOfExecutors);
         }
 
-        public FormValidation doCheckLinkedClone(@QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot) {
+        public FormValidation doCheckLinkedClone(
+                @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot) {
             final boolean noSnapshot = !useSnapshot;
             if (linkedClone && noSnapshot) {
                 return FormValidation.warning("Linked clones are based upon a snapshot.");
@@ -699,29 +759,34 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
 
         @RequirePOST
-        public FormValidation doTestCloneParameters(@AncestorInPath AbstractFolder<?> containingFolderOrNull,
+        public FormValidation doTestCloneParameters(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String vsHost,
                 @QueryParameter boolean allowUntrustedCertificate,
-                @QueryParameter String credentialsId, @QueryParameter String masterImageName,
-                @QueryParameter boolean linkedClone, @QueryParameter boolean useSnapshot,
+                @QueryParameter String credentialsId,
+                @QueryParameter String masterImageName,
+                @QueryParameter boolean linkedClone,
+                @QueryParameter boolean useSnapshot,
                 @QueryParameter String snapshotName,
-                @QueryParameter String targetHost, @QueryParameter String hostSelectionCandidatesAsString) {
+                @QueryParameter String targetHost,
+                @QueryParameter String hostSelectionCandidatesAsString) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             try {
-                final VSphereConnectionConfig config = new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
+                final VSphereConnectionConfig config =
+                        new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
                 final VSphere vsphere = VSphere.connect(config);
                 try {
                     final VirtualMachine vm = vsphere.getVmByName(masterImageName);
                     if (vm == null) {
-                        return FormValidation.error(Messages.validation_notFound("master image \"" + masterImageName
-                                + "\""));
+                        return FormValidation.error(
+                                Messages.validation_notFound("master image \"" + masterImageName + "\""));
                     }
                     if (useSnapshot) {
                         if (snapshotName != null && !snapshotName.isEmpty()) {
                             final Object snapshot = vsphere.getSnapshotInTree(vm, snapshotName);
                             if (snapshot == null) {
-                                return FormValidation.error(Messages.validation_notFound("snapshot \"" + snapshotName
-                                        + "\""));
+                                return FormValidation.error(
+                                        Messages.validation_notFound("snapshot \"" + snapshotName + "\""));
                             }
                         } else {
                             final Object snapshot = vm.getCurrentSnapShot();
@@ -731,7 +796,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                         }
                     } else {
                         if (linkedClone) {
-                            return FormValidation.warning("vSphere doesn't like creating linked clones without a snapshot");
+                            return FormValidation.warning(
+                                    "vSphere doesn't like creating linked clones without a snapshot");
                         }
                     }
 
@@ -740,7 +806,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     }
 
                     if (hostSelectionCandidatesAsString != null && !hostSelectionCandidatesAsString.isEmpty()) {
-                        for (String candidateHost : VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
+                        for (String candidateHost :
+                                VSphereHostSelection.parseAllowList(hostSelectionCandidatesAsString)) {
                             if (!vsphere.hostExists(candidateHost)) {
                                 return FormValidation.error("Candidate host \"" + candidateHost + "\" was not found.");
                             }
@@ -758,14 +825,12 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
         public static List<Descriptor<ComputerLauncher>> getLauncherDescriptors() {
             final List<String> supportedLaunchers = Arrays.asList(
-                    SSHLauncher.class.getName(),
-                    CommandLauncher.class.getName(),
-                    JNLPLauncher.class.getName()
-            );
-            final List<Descriptor<ComputerLauncher>> knownLaunchers = Jenkins.getInstance().getDescriptorList(ComputerLauncher.class);
+                    SSHLauncher.class.getName(), CommandLauncher.class.getName(), JNLPLauncher.class.getName());
+            final List<Descriptor<ComputerLauncher>> knownLaunchers =
+                    Jenkins.getInstance().getDescriptorList(ComputerLauncher.class);
             final List<Descriptor<ComputerLauncher>> result = new ArrayList<>(knownLaunchers.size());
             for (final Descriptor<ComputerLauncher> knownLauncher : knownLaunchers) {
-                if(supportedLaunchers.contains(knownLauncher.getId())) {
+                if (supportedLaunchers.contains(knownLauncher.getId())) {
                     result.add(knownLauncher);
                 }
             }
@@ -805,18 +870,25 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         try {
             vm = vSphere.getVmByName(cloneName);
         } catch (VSphereException e) {
-            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getVmByName.", e );
+            LOGGER.log(
+                    Level.WARNING,
+                    "findWhichJenkinsThisVMBelongsTo(vSphere,\"" + cloneName + "\") failed to getVmByName.",
+                    e);
             return null;
         }
         final VirtualMachineConfigInfo config = vm.getConfig();
         if (config == null) {
             // TODO: If this happens, it causes JENKINS-54521
-            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getConfig." );
+            LOGGER.log(
+                    Level.WARNING,
+                    "findWhichJenkinsThisVMBelongsTo(vSphere,\"" + cloneName + "\") failed to getConfig.");
             return null;
         }
         final OptionValue[] extraConfigs = config.getExtraConfig();
         if (extraConfigs == null) {
-            LOGGER.log(Level.WARNING, "findWhichJenkinsThisVMBelongsTo(vSphere,\""+cloneName+"\") failed to getExtraConfig." );
+            LOGGER.log(
+                    Level.WARNING,
+                    "findWhichJenkinsThisVMBelongsTo(vSphere,\"" + cloneName + "\") failed to getExtraConfig.");
             return null;
         }
         String vmJenkinsUrl = null;
@@ -869,7 +941,12 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         addEnvVars(knownVariables, listener, Jenkins.getInstance().getGlobalNodeProperties());
         addEnvVars(knownVariables, listener, this.nodeProperties);
         addEnvVar(knownVariables, "NODE_NAME", cloneName);
-        addEnvVar(knownVariables, "NODE_LABELS", getLabelSet() == null ? null : getLabelSet().stream().map(Object::toString).collect(Collectors.joining(" ")));
+        addEnvVar(
+                knownVariables,
+                "NODE_LABELS",
+                getLabelSet() == null
+                        ? null
+                        : getLabelSet().stream().map(Object::toString).collect(Collectors.joining(" ")));
         addEnvVar(knownVariables, "cluster", this.cluster);
         addEnvVar(knownVariables, "datastore", this.datastore);
         addEnvVar(knownVariables, "folder", this.folder);
@@ -883,15 +960,17 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return knownVariables;
     }
 
-    private static void addEnvVars(final EnvVars vars, final TaskListener listener, final Iterable<? extends NodeProperty<?>> nodeProperties) throws IOException, InterruptedException {
-        if( nodeProperties!=null ) {
-            for (final NodeProperty<?> nodeProperty: nodeProperties) {
-                nodeProperty.buildEnvVars(vars , listener);
+    private static void addEnvVars(
+            final EnvVars vars, final TaskListener listener, final Iterable<? extends NodeProperty<?>> nodeProperties)
+            throws IOException, InterruptedException {
+        if (nodeProperties != null) {
+            for (final NodeProperty<?> nodeProperty : nodeProperties) {
+                nodeProperty.buildEnvVars(vars, listener);
             }
         }
     }
 
     private static void addEnvVar(final EnvVars vars, final String name, final Object valueOrNull) {
-        vars.put(name, valueOrNull==null?"":valueOrNull.toString());
+        vars.put(name, valueOrNull == null ? "" : valueOrNull.toString());
     }
 }

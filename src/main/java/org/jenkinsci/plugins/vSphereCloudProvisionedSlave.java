@@ -4,35 +4,15 @@
  */
 package org.jenkinsci.plugins;
 
-import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
-
-import edu.umd.cs.findbugs.annotations.CheckForNull;
-import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.AbortException;
 import hudson.Extension;
-import hudson.model.DescriptorVisibilityFilter;
-import hudson.model.TaskListener;
 import hudson.model.Computer;
-import hudson.model.Descriptor;
-import hudson.model.ItemGroup;
 import hudson.model.Descriptor.FormException;
+import hudson.model.TaskListener;
 import hudson.slaves.*;
-import hudson.util.FormValidation;
-
 import java.io.IOException;
-
-import org.kohsuke.stapler.AncestorInPath;
-import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.QueryParameter;
-import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import com.vmware.vim25.mo.VirtualMachine;
-import com.vmware.vim25.mo.VirtualMachineSnapshot;
-
-import java.util.ArrayList;
 import java.util.List;
-
-import jenkins.model.Jenkins;
+import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
  *
@@ -40,25 +20,43 @@ import jenkins.model.Jenkins;
  */
 public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     @DataBoundConstructor
-    public vSphereCloudProvisionedSlave(String name, String nodeDescription,
-            String remoteFS, String numExecutors, Mode mode,
-            String labelString, ComputerLauncher delegateLauncher,
+    public vSphereCloudProvisionedSlave(
+            String name,
+            String nodeDescription,
+            String remoteFS,
+            String numExecutors,
+            Mode mode,
+            String labelString,
+            ComputerLauncher delegateLauncher,
             RetentionStrategy retentionStrategy,
             List<? extends NodeProperty<?>> nodeProperties,
-            String vsDescription, String vmName,
-            boolean launchSupportForced, boolean waitForVMTools,
-            String snapName, String launchDelay, String idleOption,
+            String vsDescription,
+            String vmName,
+            boolean launchSupportForced,
+            boolean waitForVMTools,
+            String snapName,
+            String launchDelay,
+            String idleOption,
             String LimitedTestRunCount)
             throws FormException, IOException {
-        super(name, nodeDescription,
-              remoteFS, numExecutors,
-              mode, labelString,
-              delegateLauncher, retentionStrategy,
-              nodeProperties, vsDescription,
-              vmName, launchSupportForced,
-              waitForVMTools, snapName,
-              launchDelay, idleOption,
-              LimitedTestRunCount);
+        super(
+                name,
+                nodeDescription,
+                remoteFS,
+                numExecutors,
+                mode,
+                labelString,
+                delegateLauncher,
+                retentionStrategy,
+                nodeProperties,
+                vsDescription,
+                vmName,
+                launchSupportForced,
+                waitForVMTools,
+                snapName,
+                launchDelay,
+                idleOption,
+                LimitedTestRunCount);
     }
 
     @Override
@@ -71,12 +69,20 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
                 final String cloneName = this.getComputer().getName();
                 cloud.provisionedSlaveHasTerminated(cloneName);
             } else {
-                vSphereCloud.Log(listener, "%1s._terminate for vmName %2s failed as getLauncher() returned %3s",
-                        getClass().getSimpleName(), getVmName(), l);
+                vSphereCloud.Log(
+                        listener,
+                        "%1s._terminate for vmName %2s failed as getLauncher() returned %3s",
+                        getClass().getSimpleName(),
+                        getVmName(),
+                        l);
             }
         } catch (RuntimeException ex) {
-            vSphereCloud.Log(listener, ex, "%1s._terminate for vmName %2s failed",
-                    getClass().getSimpleName(), getVmName());
+            vSphereCloud.Log(
+                    listener,
+                    ex,
+                    "%1s._terminate for vmName %2s failed",
+                    getClass().getSimpleName(),
+                    getVmName());
         }
     }
 
@@ -103,7 +109,7 @@ public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
     public static final class DescriptorImpl extends vSphereCloudSlave.DescriptorImpl {
         @Override
         public String getDisplayName() {
-            return super.getDisplayName()+", auto-provisioned by Jenkins from cloud template";
+            return super.getDisplayName() + ", auto-provisioned by Jenkins from cloud template";
         }
 
         @Override

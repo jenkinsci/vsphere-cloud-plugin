@@ -9,6 +9,7 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.slaves.Cloud;
 import hudson.util.ListBoxModel;
+import java.util.Map;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
@@ -21,8 +22,6 @@ import org.jenkinsci.plugins.workflow.steps.StepContextParameter;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
-
-import java.util.Map;
 
 /**
  * The vSphere invocation step for the Jenkins workflow plugin.
@@ -42,8 +41,7 @@ public class vSphereStep extends AbstractStepImpl {
     }
 
     @DataBoundConstructor
-    public vSphereStep() {
-    }
+    public vSphereStep() {}
 
     @DataBoundSetter
     public void setBuildStep(VSphereBuildStep buildStep) {
@@ -122,18 +120,18 @@ public class vSphereStep extends AbstractStepImpl {
 
             vSphereBSC = new VSphereBuildStepContainer(step.getBuildStep(), step.getServerName());
             vSphereBSC.perform(run, filePath, launcher, listener);
-            if (step.getBuildStep().getClass().toString().contains("PowerOn") ||
-                    step.getBuildStep().getClass().toString().contains("Deploy") ||
-                    step.getBuildStep().getClass().toString().contains("Clone") ||
-                    step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
+            if (step.getBuildStep().getClass().toString().contains("PowerOn")
+                    || step.getBuildStep().getClass().toString().contains("Deploy")
+                    || step.getBuildStep().getClass().toString().contains("Clone")
+                    || step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
                 IP = step.getBuildStep().getIP();
                 if (IP != null) {
                     envVars.put("VSPHERE_IP", IP);
                 }
 
                 if (step.getBuildStep().getClass().toString().contains("ExposeGuestInfo")) {
-                    Map<String, String> envVars = ((ExposeGuestInfo)step.getBuildStep()).getVars();
-                    for (Map.Entry<String, String> envVar: envVars.entrySet()) {
+                    Map<String, String> envVars = ((ExposeGuestInfo) step.getBuildStep()).getVars();
+                    for (Map.Entry<String, String> envVar : envVars.entrySet()) {
                         envVars.put(envVar.getKey(), envVar.getValue());
                     }
                 }

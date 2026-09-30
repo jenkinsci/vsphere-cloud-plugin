@@ -1,17 +1,17 @@
 package org.jenkinsci.plugins.vsphere.tools;
+
+import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.hamcrest.CoreMatchers.*;
+
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
-
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-
 import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -106,8 +106,8 @@ class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord capOf2 = createInstance(2, 0, 0);
         final CloudProvisioningRecord capOf5 = createInstance(5, 0, 0);
-        final List<CloudProvisioningRecord> records = forwards ? Arrays.asList(capOf2, capOf5) : Arrays.asList(capOf5,
-                capOf2);
+        final List<CloudProvisioningRecord> records =
+                forwards ? Arrays.asList(capOf2, capOf5) : Arrays.asList(capOf5, capOf2);
 
         // When/Then
         testScenario(records, capOf5, capOf2, capOf5, capOf5, capOf2, capOf5, capOf5, null);
@@ -128,14 +128,15 @@ class CloudProvisioningAlgorithmTest {
         // Given
         final CloudProvisioningRecord capOf2 = createInstance(2, 0, 0);
         final CloudProvisioningRecord uncapped = createInstance(0, 0, 0);
-        final List<CloudProvisioningRecord> records = forwards ? Arrays.asList(capOf2, uncapped) : Arrays.asList(
-                uncapped, capOf2);
+        final List<CloudProvisioningRecord> records =
+                forwards ? Arrays.asList(capOf2, uncapped) : Arrays.asList(uncapped, capOf2);
 
         // When/Then
         testScenario(records, uncapped, capOf2, uncapped, capOf2, uncapped, uncapped, uncapped);
     }
 
-    private static void testScenario(List<CloudProvisioningRecord> records, CloudProvisioningRecord... expectedRecords) {
+    private static void testScenario(
+            List<CloudProvisioningRecord> records, CloudProvisioningRecord... expectedRecords) {
         // Given records and expected return values
         int i = 0;
         for (final CloudProvisioningRecord expected : expectedRecords) {
@@ -247,7 +248,8 @@ class CloudProvisioningAlgorithmTest {
         record.addCurrentlyActive(active);
         record.addCurrentlyPlanned(planned);
         final List<CloudProvisioningRecord> records = List.of(record);
-        final CloudProvisioningRecord shouldBeNull = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(records);
+        final CloudProvisioningRecord shouldBeNull =
+                CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(records);
         assertThat(shouldBeNull, nullValue());
 
         // When
@@ -302,11 +304,13 @@ class CloudProvisioningAlgorithmTest {
         int planned = 2;
         final CloudProvisioningRecord record = createInstance(10, provisioned, planned);
 
-        // When 
+        // When
         int instanceMin = record.getTemplate().getInstancesMin();
 
         // Then
-        assertThat(CloudProvisioningAlgorithm.shouldPreProvisionNodes(record), equalTo(instanceMin - (provisioned + planned))); 
+        assertThat(
+                CloudProvisioningAlgorithm.shouldPreProvisionNodes(record),
+                equalTo(instanceMin - (provisioned + planned)));
     }
 
     private CloudProvisioningRecord createInstance(int capacity, int provisioned, int planned) {
@@ -325,9 +329,37 @@ class CloudProvisioningAlgorithmTest {
     }
 
     private static vSphereCloudSlaveTemplate stubTemplate(String prefix, int templateInstanceCap) {
-        return new vSphereCloudSlaveTemplate(prefix, "", null, null, false, null, null, null, null, null, null, templateInstanceCap, 1,
-                null, null, null, false, false, 0, 0, false, null, null, 2, null, new JNLPLauncher(),
-                RetentionStrategy.NOOP, null, null, null);
+        return new vSphereCloudSlaveTemplate(
+                prefix,
+                "",
+                null,
+                null,
+                false,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                templateInstanceCap,
+                1,
+                null,
+                null,
+                null,
+                false,
+                false,
+                0,
+                0,
+                false,
+                null,
+                null,
+                2,
+                null,
+                new JNLPLauncher(),
+                RetentionStrategy.NOOP,
+                null,
+                null,
+                null);
     }
 
     private static String toHexString(byte[] bytes) {

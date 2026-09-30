@@ -1,14 +1,13 @@
 package org.jenkinsci.plugins.vsphere;
 
-import hudson.model.Descriptor;
-import org.junit.jupiter.api.Test;
-
-import java.util.concurrent.TimeUnit;
-
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
+
+import hudson.model.Descriptor;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.Test;
 
 /**
  * Unit tests for the pure decision logic and configuration plumbing of
@@ -115,7 +114,8 @@ class VSphereCloudRetentionStrategyTest {
 
     @Test
     void descriptorHasADistinctDisplayName() {
-        assertThat(VSphereCloudRetentionStrategy.DESCRIPTOR.getDisplayName(),
+        assertThat(
+                VSphereCloudRetentionStrategy.DESCRIPTOR.getDisplayName(),
                 is("vSphere Keep-Until-Idle Retention Strategy"));
     }
 

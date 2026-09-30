@@ -14,10 +14,13 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
+
 import com.vmware.vim25.*;
 import com.vmware.vim25.mo.DistributedVirtualPortgroup;
 import com.vmware.vim25.mo.DistributedVirtualSwitch;
 import com.vmware.vim25.mo.Network;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.Extension;
 import hudson.model.AbstractBuild;
@@ -26,6 +29,10 @@ import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.util.FormValidation;
+import jakarta.servlet.ServletException;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Arrays;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
@@ -33,14 +40,6 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
-
-import edu.umd.cs.findbugs.annotations.NonNull;
-import jakarta.servlet.ServletException;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.Arrays;
-
-import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
@@ -55,9 +54,16 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     private final String distributedPortId;
 
     @DataBoundConstructor
-    public ReconfigureNetworkAdapters(DeviceAction deviceAction, String deviceLabel, String macAddress,
-            boolean standardSwitch,String portGroup, boolean distributedSwitch,
-            String distributedPortGroup, String distributedPortId) throws VSphereException {
+    public ReconfigureNetworkAdapters(
+            DeviceAction deviceAction,
+            String deviceLabel,
+            String macAddress,
+            boolean standardSwitch,
+            String portGroup,
+            boolean distributedSwitch,
+            String distributedPortGroup,
+            String distributedPortId)
+            throws VSphereException {
         this.deviceAction = deviceAction;
         this.deviceLabel = deviceLabel;
         this.macAddress = macAddress;
@@ -115,7 +121,12 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     @Override
-    public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
+    public void perform(
+            @NonNull Run<?, ?> run,
+            @NonNull FilePath filePath,
+            @NonNull Launcher launcher,
+            @NonNull TaskListener listener)
+            throws InterruptedException, IOException {
         try {
             reconfigureNetwork(run, launcher, listener);
         } catch (Exception e) {
@@ -124,7 +135,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)  {
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
         boolean retVal = false;
         try {
             retVal = reconfigureNetwork(build, launcher, listener);
@@ -132,16 +143,17 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             e.printStackTrace();
         }
         return retVal;
-        //TODO throw AbortException instead of returning value
+        // TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
+            throws VSphereException {
         EnvVars env = extractEnvironment(run, listener);
 
         return reconfigureNetwork(env, listener);
     }
 
-    private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException  {
+    private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException {
         PrintStream jLogger = listener.getLogger();
         String expandedDeviceLabel = env.expand(deviceLabel);
         String expandedDeviceNumber = deviceNumber == null ? null : env.expand(deviceNumber);
@@ -156,12 +168,15 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             throw new VSphereException("Specify either deviceLabel or deviceNumber, not both");
         }
 
-        VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: "+ deviceAction.getLabel() +" Network Adapter " +
-                (hasNumber ? ("#" + expandedDeviceNumber) : ("\"" + expandedDeviceLabel + "\"")));
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Preparing reconfigure: " + deviceAction.getLabel() + " Network Adapter "
+                        + (hasNumber ? ("#" + expandedDeviceNumber) : ("\"" + expandedDeviceLabel + "\"")));
         VirtualEthernetCard vEth = null;
         if (deviceAction == DeviceAction.ADD) {
             if (hasNumber) {
-                throw new VSphereException("deviceNumber is not supported for the Add action; use deviceLabel to name the new adapter");
+                throw new VSphereException(
+                        "deviceNumber is not supported for the Add action; use deviceLabel to name the new adapter");
             }
             vEth = new VirtualE1000();
             vEth.setBacking(new VirtualEthernetCardNetworkBackingInfo());
@@ -172,7 +187,8 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             description.setLabel(expandedDeviceLabel);
             vEth.setDeviceInfo(description);
         } else if (hasNumber) {
-            vEth = findNetworkDeviceByIndex(vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
+            vEth = findNetworkDeviceByIndex(
+                    vm.getConfig().getHardware().getDevice(), Integer.parseInt(expandedDeviceNumber));
         } else {
             vEth = findNetworkDeviceByLabel(vm.getConfig().getHardware().getDevice(), expandedDeviceLabel);
         }
@@ -195,56 +211,62 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             VSphereLogger.vsLogger(jLogger, "Reconfiguring Network Port Group -> " + expandedPortGroup);
 
             if (virtualDeviceBackingInfo instanceof VirtualEthernetCardNetworkBackingInfo) {
-                VirtualEthernetCardNetworkBackingInfo backing = (VirtualEthernetCardNetworkBackingInfo) virtualDeviceBackingInfo;
-    
+                VirtualEthernetCardNetworkBackingInfo backing =
+                        (VirtualEthernetCardNetworkBackingInfo) virtualDeviceBackingInfo;
+
                 Network networkPortGroup = getVsphere().getNetworkPortGroupByName(getVM(), expandedPortGroup);
                 if (networkPortGroup != null) {
                     backing.deviceName = expandedPortGroup;
-                }
-                else {
+                } else {
                     VSphereLogger.vsLogger(jLogger, "Failed to find Network for Port Group -> " + expandedPortGroup);
                 }
-            }
-            else {
+            } else {
                 VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't standard switch");
             }
         }
         // change out distributed switch port group
         else if (distributedSwitch && !expandedDistributedPortGroup.isEmpty()) {
-        VSphereLogger.vsLogger(jLogger, "Reconfiguring Distributed Switch Port Group -> " + expandedDistributedPortGroup +
-                   " Port Id -> " + expandedDistributedPortId);
+            VSphereLogger.vsLogger(
+                    jLogger,
+                    "Reconfiguring Distributed Switch Port Group -> " + expandedDistributedPortGroup + " Port Id -> "
+                            + expandedDistributedPortId);
 
             if (virtualDeviceBackingInfo instanceof VirtualEthernetCardDistributedVirtualPortBackingInfo) {
-          
-                VirtualEthernetCardDistributedVirtualPortBackingInfo virtualEthernetCardDistributedVirtualPortBackingInfo =
-                        (VirtualEthernetCardDistributedVirtualPortBackingInfo) virtualDeviceBackingInfo;
-          
+
+                VirtualEthernetCardDistributedVirtualPortBackingInfo
+                        virtualEthernetCardDistributedVirtualPortBackingInfo =
+                                (VirtualEthernetCardDistributedVirtualPortBackingInfo) virtualDeviceBackingInfo;
+
                 DistributedVirtualPortgroup distributedVirtualPortgroup =
                         getVsphere().getDistributedVirtualPortGroupByName(getVM(), expandedDistributedPortGroup);
-          
+
                 if (distributedVirtualPortgroup != null) {
                     DistributedVirtualSwitch distributedVirtualSwitch =
                             getVsphere().getDistributedVirtualSwitchByPortGroup(distributedVirtualPortgroup);
-          
+
                     DistributedVirtualSwitchPortConnection distributedVirtualSwitchPortConnection =
                             new DistributedVirtualSwitchPortConnection();
-          
+
                     distributedVirtualSwitchPortConnection.setSwitchUuid(distributedVirtualSwitch.getUuid());
                     distributedVirtualSwitchPortConnection.setPortgroupKey(distributedVirtualPortgroup.getKey());
                     distributedVirtualSwitchPortConnection.setPortKey(expandedDistributedPortId);
-          
-                    virtualEthernetCardDistributedVirtualPortBackingInfo.setPort(distributedVirtualSwitchPortConnection);
-          
-                    VSphereLogger.vsLogger(jLogger, "Distributed Switch Port Group -> " + expandedDistributedPortGroup +
-                            "Port Id -> " + expandedDistributedPortId + " successfully configured!");
+
+                    virtualEthernetCardDistributedVirtualPortBackingInfo.setPort(
+                            distributedVirtualSwitchPortConnection);
+
+                    VSphereLogger.vsLogger(
+                            jLogger,
+                            "Distributed Switch Port Group -> " + expandedDistributedPortGroup + "Port Id -> "
+                                    + expandedDistributedPortId + " successfully configured!");
+                } else {
+                    VSphereLogger.vsLogger(
+                            jLogger,
+                            "Failed to find Distributed Virtual Portgroup for Port Group -> "
+                                    + expandedDistributedPortGroup);
                 }
-                else {
-                    VSphereLogger.vsLogger(jLogger, "Failed to find Distributed Virtual Portgroup for Port Group -> " +
-                       expandedDistributedPortGroup);
-                }
-            }
-            else {
-                VSphereLogger.vsLogger(jLogger, "Network Device -> " + expandedDeviceLabel + " isn't distributed switch");
+            } else {
+                VSphereLogger.vsLogger(
+                        jLogger, "Network Device -> " + expandedDeviceLabel + " isn't distributed switch");
             }
         }
 
@@ -264,7 +286,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         } else {
             deviceConfigSpecs = Arrays.copyOf(deviceConfigSpecs, deviceConfigSpecs.length + 1);
         }
-        deviceConfigSpecs[deviceConfigSpecs.length-1] = vdspec;
+        deviceConfigSpecs[deviceConfigSpecs.length - 1] = vdspec;
         spec.setDeviceChange(deviceConfigSpecs);
 
         VSphereLogger.vsLogger(jLogger, "Finished!");
@@ -273,7 +295,8 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
 
     VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
         for (VirtualDevice vd : devices) {
-            if (vd instanceof VirtualEthernetCard && (label.isEmpty() || vd.getDeviceInfo().getLabel().contentEquals(label))) {
+            if (vd instanceof VirtualEthernetCard
+                    && (label.isEmpty() || vd.getDeviceInfo().getLabel().contentEquals(label))) {
                 return (VirtualEthernetCard) vd;
             }
         }
@@ -300,7 +323,8 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             }
         }
         throw new VSphereException(String.format(
-                "VM has %d network adapters; no adapter with deviceNumber %d (deviceNumber is one-based)", count, number));
+                "VM has %d network adapters; no adapter with deviceNumber %d (deviceNumber is one-based)",
+                count, number));
     }
 
     @Extension
@@ -309,13 +333,12 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         public ReconfigureNetworkAdaptersDescriptor() {
             load();
         }
-    
+
         @RequirePOST
         public FormValidation doCheckMacAddress(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
-            if (value.length() == 0)
-                return FormValidation.error(Messages.validation_required("the MAC Address"));
+            if (value.length() == 0) return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
         }
 
@@ -342,10 +365,17 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         }
 
         @RequirePOST
-        public FormValidation doTestData(@AncestorInPath Item context, @QueryParameter DeviceAction deviceAction,
-                @QueryParameter String deviceLabel, @QueryParameter String deviceNumber, @QueryParameter String macAddress,
-                @QueryParameter boolean standardSwitch, @QueryParameter String portGroup, @QueryParameter boolean distributedSwitch,
-                @QueryParameter String distributedPortGroup, @QueryParameter String distributedPortId) {
+        public FormValidation doTestData(
+                @AncestorInPath Item context,
+                @QueryParameter DeviceAction deviceAction,
+                @QueryParameter String deviceLabel,
+                @QueryParameter String deviceNumber,
+                @QueryParameter String macAddress,
+                @QueryParameter boolean standardSwitch,
+                @QueryParameter String portGroup,
+                @QueryParameter boolean distributedSwitch,
+                @QueryParameter String distributedPortGroup,
+                @QueryParameter String distributedPortId) {
             throwUnlessUserHasPermissionToConfigureJob(context);
             try {
                 if (standardSwitch && distributedSwitch) {
