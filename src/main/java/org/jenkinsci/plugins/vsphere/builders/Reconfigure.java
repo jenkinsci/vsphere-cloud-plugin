@@ -148,7 +148,8 @@ public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep{
             return ReconfigureStep.all();
         }
 
-		public FormValidation doCheckVm(@QueryParameter String value) {
+		public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
+			throwUnlessUserHasPermissionToConfigureJob(context);
 			if (value.length() == 0)
 				return FormValidation.error(Messages.validation_required("the VM name"));
 			return FormValidation.ok();

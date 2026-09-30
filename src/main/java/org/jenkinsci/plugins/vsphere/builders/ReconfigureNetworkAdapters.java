@@ -260,8 +260,9 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
             load();
         }
     
-        public FormValidation doCheckMacAddress(@QueryParameter String value)
+        public FormValidation doCheckMacAddress(@AncestorInPath Item context, @QueryParameter String value)
                 throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("the MAC Address"));
             return FormValidation.ok();
@@ -280,7 +281,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 if (standardSwitch && distributedSwitch) {
                     return FormValidation.error(Messages.validation_wrongSwitchSelection());
                 }
-                return doCheckMacAddress(macAddress);
+                return doCheckMacAddress(context, macAddress);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
