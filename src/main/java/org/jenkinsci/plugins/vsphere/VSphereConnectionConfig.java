@@ -22,12 +22,17 @@ import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.plugins.credentials.CredentialsMatcher;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
+import com.cloudbees.plugins.credentials.CredentialsScope;
+import com.cloudbees.plugins.credentials.CredentialsStore;
+import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardCredentials;
 import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
+import com.cloudbees.plugins.credentials.domains.Domain;
 import com.cloudbees.plugins.credentials.domains.DomainRequirement;
 import com.cloudbees.plugins.credentials.domains.HostnameRequirement;
+import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import com.vmware.vim25.ws.ApacheHttpClient;
 import com.vmware.vim25.ws.WSClient;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
@@ -40,6 +45,7 @@ import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import jenkins.model.Jenkins;
@@ -167,6 +173,63 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return ((StandardUsernameCredentials) credentials).getUsername();
         }
         return null;
+    }
+
+    /**
+     * One-time migration for {@link vSphereCloud} instances still persisted in the legacy XML format
+     * (plain {@code vsHost}/{@code username}/{@code password} elements predating this class), so they
+     * keep working without the admin having to manually create a credential. Creates - or reuses, if
+     * this already ran on a previous load - a {@link UsernamePasswordCredentialsImpl} in the
+     * Jenkins-global credentials store and returns its id; returns {@code null} (leaving
+     * {@code credentialsId} unset) if there is no legacy username to migrate or no credentials store
+     * is available yet.
+     */
+    public static @CheckForNull String migrateLegacyCredentials(
+            @CheckForNull String vsHost, @CheckForNull String username, @CheckForNull String password) {
+        username = Util.fixEmptyAndTrim(username);
+        if (username == null) {
+            return null;
+        }
+        Jenkins jenkins = Jenkins.getInstanceOrNull();
+        if (jenkins == null) {
+            return null;
+        }
+
+        String effectiveVsHost = Util.fixNull(vsHost);
+        String credentialsId = "vsphere-cloud-migrated-" + Util.getDigestOf(effectiveVsHost + ":" + username);
+
+        if (DescriptorImpl.lookupCredentials(credentialsId, effectiveVsHost) != null) {
+            // Already migrated on a previous load (config.xml may not have been re-saved since).
+            return credentialsId;
+        }
+
+        CredentialsStore store = null;
+        for (CredentialsStore candidate : CredentialsProvider.lookupStores(jenkins)) {
+            if (candidate.getProvider() instanceof SystemCredentialsProvider.ProviderImpl) {
+                store = candidate;
+                break;
+            }
+        }
+        if (store == null) {
+            return null;
+        }
+
+        try {
+            store.addCredentials(
+                    Domain.global(),
+                    new UsernamePasswordCredentialsImpl(
+                            CredentialsScope.SYSTEM,
+                            credentialsId,
+                            "Migrated from vSphereCloud legacy username/password"
+                                    + (effectiveVsHost.isEmpty() ? "" : " (" + effectiveVsHost + ")"),
+                            username,
+                            Util.fixNull(password)));
+            return credentialsId;
+        } catch (Descriptor.FormException | IOException e) {
+            vSphereCloud.Log(
+                    e, "Failed to migrate legacy vSphereCloud username/password credentials into a Jenkins credential");
+            return null;
+        }
     }
 
     @Extension
