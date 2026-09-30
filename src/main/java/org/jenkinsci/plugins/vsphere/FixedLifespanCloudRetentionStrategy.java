@@ -42,12 +42,16 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
         final String cname = c.getName();
         if (!isAtEndOfLife() && ageMillis > TimeUnit.MINUTES.toMillis(lifespanMinutes)) {
             LOGGER.log(Level.FINE, "Will terminate {0} once idle - lifespan of {1} minutes reached.", new Object[] { cname, lifespanMinutes });
-            setAtEndOfLife();
             final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._fixedLifespanCloudRetentionStrategy_OfflineReason_LifespanReached(String.valueOf(lifespanMinutes)));
             try {
                 c.disconnect(cause).get();
+                // Only latch atEndOfLife once the disconnect has actually gone through -- otherwise
+                // a transient failure here would permanently prevent any further disconnect attempts
+                // (isAcceptingTasks() would keep reporting "not accepting tasks" forever, but nothing
+                // would actually work towards terminating the agent).
+                setAtEndOfLife();
             } catch (InterruptedException | ExecutionException e) {
-                LOGGER.log(WARNING, "Failed to disconnect " + cname, e);
+                LOGGER.log(WARNING, "Failed to disconnect " + cname + "; will retry next check", e);
             }
         }
         if (isAtEndOfLife() && c.isIdle()) {
