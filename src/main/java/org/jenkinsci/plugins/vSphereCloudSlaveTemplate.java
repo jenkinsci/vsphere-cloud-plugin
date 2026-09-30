@@ -98,6 +98,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
     private int configVersion;
     private static final int CURRENT_CONFIG_VERSION = 1;
+    private static final int DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS = 120;
     private String cloneNamePrefix; // almost final
     private final String masterImageName;
     private Boolean useSnapshot; // almost final
@@ -136,6 +137,15 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private ComputerLauncher launcher;
     private RetentionStrategy<?> retentionStrategy;
     private final List<ReconfigureStep> reconfigureSteps;
+    /**
+     * How long (in seconds) to wait for vCenter's own power-on task to report completion when
+     * starting a clone back up after applying {@link #reconfigureSteps} to it. This is a wait for
+     * the vSphere-level power-on operation itself, e.g. for DRS to decide where in the cluster
+     * to place the newly created VM instance, not for the guest OS/agent to become reachable
+     * (that's {@link #launchDelay}/waitForVMTools, handled separately once the agent's launcher
+     * runs). Defaults to the same value this was hard-coded to before it became configurable.
+     */
+    private int reconfigureStartTimeoutSeconds = DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS;
 
     private transient Set<LabelAtom> labelSet;
     protected transient vSphereCloud parent;
@@ -307,6 +317,16 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.hostSelectionMode = hostSelectionMode;
     }
 
+    /** @see #reconfigureStartTimeoutSeconds */
+    public int getReconfigureStartTimeoutSeconds() {
+        return this.reconfigureStartTimeoutSeconds;
+    }
+
+    @DataBoundSetter
+    public void setReconfigureStartTimeoutSeconds(int reconfigureStartTimeoutSeconds) {
+        this.reconfigureStartTimeoutSeconds = reconfigureStartTimeoutSeconds;
+    }
+
     /** Canonical form, for pipeline/API/JCasC consumers. */
     public Set<String> getHostSelectionCandidates() {
         return this.hostSelectionCandidates;
@@ -384,6 +404,12 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.labelSet = Label.parse(labelString);
         if(this.templateInstanceCap == 0) {
             this.templateInstanceCap = Integer.MAX_VALUE;
+        }
+        if (this.reconfigureStartTimeoutSeconds <= 0) {
+            // Either loaded from before this field existed (XStream doesn't run field
+            // initializers), or someone set 0/negative, which would make startVm() return
+            // instantly without ever confirming power-on succeeded -- not a useful value either way.
+            this.reconfigureStartTimeoutSeconds = DEFAULT_RECONFIGURE_START_TIMEOUT_SECONDS;
         }
         if ( this.useSnapshot == null ) {
             this.useSnapshot = Boolean.valueOf(this.snapshotName!=null);
@@ -506,7 +532,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     actionStep.perform(env, listener);
                 }
                 vSphere.reconfigureVm(cloneName, spec);
-                vSphere.startVm(cloneName, 120);
+                vSphere.startVm(cloneName, reconfigureStartTimeoutSeconds);
             }
         } catch (VSphereDuplicateException ex) {
             final String vmJenkinsUrl = findWhichJenkinsThisVMBelongsTo(vSphere, cloneName);
