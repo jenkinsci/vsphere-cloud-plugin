@@ -40,7 +40,14 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
         final long creationTimeMillis = c.getAction(CloudComputerCreatedOnInvisibleAction.class).getCreationTimeMillis();
         final long ageMillis = System.currentTimeMillis() - creationTimeMillis;
         final String cname = c.getName();
-        if (!isAtEndOfLife() && ageMillis > TimeUnit.MINUTES.toMillis(lifespanMinutes)) {
+
+        if (!isAtEndOfLife()) {
+            final long lifespanMillis = TimeUnit.MINUTES.toMillis(lifespanMinutes);
+            if (ageMillis <= lifespanMillis) {
+                // Not yet at end of life: no point polling every minute, just wait until the
+                // deadline is actually due.
+                return Math.max(1, TimeUnit.MILLISECONDS.toMinutes(lifespanMillis - ageMillis));
+            }
             LOGGER.log(Level.FINE, "Will terminate {0} once idle - lifespan of {1} minutes reached.", new Object[] { cname, lifespanMinutes });
             final VSphereOfflineCause cause = new VSphereOfflineCause(Messages._fixedLifespanCloudRetentionStrategy_OfflineReason_LifespanReached(String.valueOf(lifespanMinutes)));
             try {
@@ -65,7 +72,7 @@ public final class FixedLifespanCloudRetentionStrategy extends RetentionStrategy
                 }
             }
         }
-        return 1; // re-check in 1 minute
+        return 1; // at or past end of life: check frequently so we notice idleness promptly
     }
 
     @Override
