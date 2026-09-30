@@ -347,7 +347,8 @@ buildStep: [$class: 'Reconfigure',
             reconfigureSteps: [
                 [$class: 'ReconfigureCpu',
                  cpuCores: '4',
-                 coresPerSocket: '2'],
+                 coresPerSocket: '2',
+                 cpuLimitMHz: '2000'], // optional CPU reservation in MHz; omit for no reservation
                 [$class: 'ReconfigureMemory',
                  memorySize: '8192'],        // megabytes
                 [$class: 'ReconfigureDisk',
