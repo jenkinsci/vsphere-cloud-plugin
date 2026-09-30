@@ -24,6 +24,8 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
@@ -609,6 +611,7 @@ public class vSphereCloud extends Cloud {
      *
      * @param template
      */
+    @Restricted(NoExternalUse.class)
     public void preProvisionNodes(vSphereCloudSlaveTemplate template) {
         final String methodCallDescription = "preProvisionNodesForTemplate(" + template.getLabelString() + ")";
         try {
