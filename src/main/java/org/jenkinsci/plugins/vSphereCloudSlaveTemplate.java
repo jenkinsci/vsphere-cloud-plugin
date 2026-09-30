@@ -59,7 +59,6 @@ import edu.umd.cs.findbugs.annotations.NonNull;
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
 
-import org.jenkinsci.plugins.vsphere.FixedLifespanCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -581,12 +580,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final VSphereCloudRetentionStrategy templateStrategy = (VSphereCloudRetentionStrategy) retentionStrategy;
             final VSphereCloudRetentionStrategy cloneStrategy = new VSphereCloudRetentionStrategy(
                     templateStrategy.getIdleMinutes());
-            return cloneStrategy;
-        }
-        if (retentionStrategy instanceof FixedLifespanCloudRetentionStrategy) {
-            final FixedLifespanCloudRetentionStrategy templateStrategy = (FixedLifespanCloudRetentionStrategy) retentionStrategy;
-            final FixedLifespanCloudRetentionStrategy cloneStrategy = new FixedLifespanCloudRetentionStrategy(
-                    templateStrategy.getLifespanMinutes());
+            cloneStrategy.setLifespanMinutes(templateStrategy.getLifespanMinutes());
             return cloneStrategy;
         }
         throw new IllegalStateException(
@@ -721,7 +715,6 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             final List<Descriptor<RetentionStrategy<?>>> result = new ArrayList<>();
             result.add(RunOnceCloudRetentionStrategy.DESCRIPTOR);
             result.add(VSphereCloudRetentionStrategy.DESCRIPTOR);
-            result.add(FixedLifespanCloudRetentionStrategy.DESCRIPTOR);
             return result;
         }
 
