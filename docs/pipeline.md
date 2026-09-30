@@ -338,8 +338,8 @@ Multiple reconfiguration sub-steps can be combined in a single call.
 
 Some operations which act on physical instances of a resource (network adapters, disks) accept a `deviceLabel` or `deviceNumber` option to disambiguate the request, and a `deviceAction` (`ADD`, `REMOVE`, `EDIT`) option. Operations which just change the amount of identical resource units (memory, processors) or metadata (annotations) just accept named options with corresponding new values to be set.
 
-* For Network Adapters, the `deviceLabel` can be also seen in vCenter UI, e.g. "Network adapter 1" for the first attached NIC. It is not known at this time whether these labels can be assigned by the sysadmin in any manner. The `deviceNumber` allows to pass the (best-effort, zero-based) position of that NIC in the list of network adapters vCenter itself returns for the VM -- not a raw PCI slot number, which is shared with unrelated devices (storage/USB/video controllers etc.) and so would not correspond to "the Nth NIC". For any operations dealing with a specific NIC, inside or outside the VM, it is recommended to use the MAC address rather than device number or name.
-* For Disks, the `deviceLabel` is typically derived from the disk image file name, e.g. `[LUN1] kube15/kube15_1.vmdk` can use the label `kube15_1`. This may be in fact clumsy, as file name suffixes may depend on amount of disks and their snapshot history, or assigned by the sysadmin (`boot-disk.vmdk` via vCenter UI or other means). The `deviceLabel` can also match a vCenter-assigned UI label like "Hard disk 1", or a controller moniker exactly as vSphere itself displays it, e.g. `SCSI(0:2)` or `IDE(1:0)` (controller bus number : unit number) -- useful to target a disk on IDE, or on a specific one of several SCSI controllers, without depending on file naming at all. The `deviceNumber` alternative is simpler still: it is the zero-based position of the disk in the list of disks vCenter itself returns for the VM (not an address on any particular controller), so `deviceNumber: '0'` always means "the first disk", `'1'` the second, and so on, regardless of which controller(s) they are attached to.
+* For Network Adapters, the `deviceLabel` can be also seen in vCenter UI, e.g. "Network adapter 1" for the first attached NIC. It is not known at this time whether these labels can be assigned by the sysadmin in any manner. The `deviceNumber` allows to pass the (best-effort) position of that NIC in the list of network adapters vCenter itself returns for the VM -- not a raw PCI slot number, which is shared with unrelated devices (storage/USB/video controllers etc.) and so that would not correspond to "the Nth NIC". The `deviceNumber` is **one-based** (`'1'` is the first NIC), likely matching how vSphere itself numbers things in UI labels like "Network adapter 1" -- it is NOT a zero-based array index. For any operations dealing with a specific NIC, inside or outside the VM, it is recommended to use the MAC address rather than device number or name.
+* For Disks, the `deviceLabel` is typically derived from the disk image file name, e.g. `[LUN1] kube15/kube15_1.vmdk` can use the label `kube15_1`. This may be in fact clumsy, as file name suffixes may depend on amount of disks and their snapshot history, or assigned by the sysadmin (`boot-disk.vmdk` via vCenter UI or other means). The `deviceLabel` can also match a vCenter-assigned UI label like "Hard disk 1", or a controller moniker exactly as vSphere itself displays it, e.g. `SCSI(0:2)` or `IDE(1:0)` (controller bus number : unit number, both zero-based -- this is vSphere's own hardware addressing, unrelated to `deviceNumber` below) -- useful to target a disk on IDE, or on a specific one of several SCSI controllers, without depending on file naming at all. The `deviceNumber` alternative is simpler still: it is the position of the disk in the list of disks vCenter itself returns for the VM (not an address on any particular controller). The `deviceNumber` is **one-based**, likely matching how vSphere itself numbers things in UI labels like "Hard disk 1" -- so `deviceNumber: '1'` always means "the first disk", `'2'` the second, and so on, regardless of which controller(s) they are attached to.
 
 ```groovy
 buildStep: [$class: 'Reconfigure',
@@ -368,7 +368,8 @@ buildStep: [$class: 'Reconfigure',
                  diskSize: '200'],           // gigabytes; must be >= the disk's current size
                 [$class: 'ReconfigureDisk',
                  deviceAction: 'EDIT',
-                 deviceNumber: '0',          // alternative to deviceLabel (mutually exclusive); zero-based
+                 deviceNumber: '1',          // alternative to deviceLabel (mutually exclusive); ONE-based
+                                             // ('1' = first disk, likely matching "Hard disk 1" in the UI)
                                              // position in vCenter's own list of the VM's disks (not an
                                              // address on any particular controller)
                  diskSize: '200'],
@@ -384,7 +385,8 @@ buildStep: [$class: 'Reconfigure',
                 [$class: 'ReconfigureNetworkAdapters',
                  deviceAction: 'EDIT',       // ADD, EDIT, or REMOVE
                  deviceLabel: 'Network adapter 1',
-                 // deviceNumber: '0',       // alternative to deviceLabel (mutually exclusive); zero-based
+                 // deviceNumber: '1',       // alternative to deviceLabel (mutually exclusive); ONE-based
+                                             // ('1' = first NIC, likely matching "Network adapter 1" in the UI)
                                              // index among the VM's network adapters only (not a raw
                                              // PCI slot number); only valid for EDIT/REMOVE, not ADD
                  macAddress: '',

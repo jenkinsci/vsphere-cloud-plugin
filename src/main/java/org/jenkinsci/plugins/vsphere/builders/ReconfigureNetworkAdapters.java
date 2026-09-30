@@ -282,24 +282,26 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     /**
-     * Finds the Nth network adapter (zero-based), counting only VirtualEthernetCard entries in the
-     * same order vCenter itself returns them via VirtualHardware.device -- no re-sorting or address
-     * scheme of our own (raw PCI unit number is shared with unrelated PCI-bus devices like storage/USB/
-     * video controllers, so it doesn't correspond to "the Nth NIC"), just vCenter's own list order.
+     * Finds the Nth network adapter, ONE-based (so deviceNumber=1 is the first adapter, matching how
+     * vSphere itself numbers things in its UI, e.g. "Network adapter 1"), counting only
+     * VirtualEthernetCard entries in the same order vCenter itself returns them via
+     * VirtualHardware.device -- no re-sorting or address scheme of our own (raw PCI unit number is
+     * shared with unrelated PCI-bus devices like storage/USB/video controllers, so it doesn't
+     * correspond to "the Nth NIC"), just vCenter's own list order.
      */
-    private VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int index) throws VSphereException {
+    private VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int number) throws VSphereException {
         int count = 0;
         for (VirtualDevice vd : devices) {
             if (!(vd instanceof VirtualEthernetCard)) {
                 continue;
             }
-            if (count == index) {
+            count++;
+            if (count == number) {
                 return (VirtualEthernetCard) vd;
             }
-            count++;
         }
         throw new VSphereException(String.format(
-                "VM has %d network adapters; no adapter with deviceNumber %d", count, index));
+                "VM has %d network adapters; no adapter with deviceNumber %d (deviceNumber is one-based)", count, number));
     }
 
     @Extension
@@ -322,7 +324,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 return FormValidation.ok();
             }
             try {
-                if (Integer.parseInt(value) < 0) {
+                if (Integer.parseInt(value) < 1) {
                     return FormValidation.error(Messages.validation_positiveInteger(value));
                 }
             } catch (NumberFormatException e) {

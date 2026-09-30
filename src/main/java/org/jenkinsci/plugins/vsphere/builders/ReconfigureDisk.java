@@ -395,23 +395,24 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	/**
-	 * Finds the Nth disk (zero-based), counting only VirtualDisk entries in the same order vCenter
-	 * itself returns them via VirtualHardware.device -- no re-sorting or address scheme of our own,
-	 * just vCenter's own list order.
+	 * Finds the Nth disk, ONE-based (so deviceNumber=1 is the first disk, matching how vSphere itself
+	 * numbers things in its UI, e.g. "Hard disk 1"), counting only VirtualDisk entries in the same
+	 * order vCenter itself returns them via VirtualHardware.device -- no re-sorting or address scheme
+	 * of our own, just vCenter's own list order.
 	 */
-	private VirtualDisk findDiskByIndex(VirtualMachine vm, int index) throws VSphereException {
+	private VirtualDisk findDiskByIndex(VirtualMachine vm, int number) throws VSphereException {
 		int count = 0;
 		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
 			if (!(vmDevice instanceof VirtualDisk)) {
 				continue;
 			}
-			if (count == index) {
+			count++;
+			if (count == number) {
 				return (VirtualDisk) vmDevice;
 			}
-			count++;
 		}
 		throw new VSphereException(String.format(
-				"VM has %d disks attached; no disk with deviceNumber %d", count, index));
+				"VM has %d disks attached; no disk with deviceNumber %d (deviceNumber is one-based)", count, number));
 	}
 
 	private String diskBaseName(VirtualDisk disk) {
@@ -539,7 +540,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 				return FormValidation.ok();
 			}
 			try {
-				if (Integer.parseInt(value) < 0) {
+				if (Integer.parseInt(value) < 1) {
 					return FormValidation.error(Messages.validation_positiveInteger(value));
 				}
 			} catch (NumberFormatException e) {
