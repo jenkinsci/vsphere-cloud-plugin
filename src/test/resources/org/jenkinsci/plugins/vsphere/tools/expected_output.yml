@@ -10,6 +10,7 @@
       guestInfoProperties:
       - name: "JENKINS_URL"
         value: "^${JENKINS_URL}"
+      instancesMin: 3
       labelString: "windows vsphere"
       launchDelay: 60
       launcher:

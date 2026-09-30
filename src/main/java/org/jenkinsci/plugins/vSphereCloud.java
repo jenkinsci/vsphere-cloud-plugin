@@ -24,6 +24,8 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
@@ -216,6 +218,16 @@ public class vSphereCloud extends Cloud {
             }
         }
         return this;
+    }
+
+    /**
+     * Test-only accessor for the lazily-created, per-cloud provisioning state that
+     * {@link #preProvisionNodes} and {@link #provision} operate on internally, so tests can set up
+     * "already active/planned" records on the exact same instance rather than a disconnected one.
+     */
+    CloudProvisioningState getTemplateState() {
+        ensureLists();
+        return templateState;
     }
 
     private void ensureLists() {
@@ -566,8 +578,7 @@ public class vSphereCloud extends Cloud {
             final List<PlannedNode> plannedNodes = new ArrayList<PlannedNode>();
             synchronized (templateState) {
                 templateState.pruneUnwantedRecords();
-                Integer maxSlavesToProvisionBeforeCloudCapHit = calculateMaxAdditionalSlavesPermitted();
-                if (maxSlavesToProvisionBeforeCloudCapHit != null && maxSlavesToProvisionBeforeCloudCapHit <= 0) {
+                if (!cloudHasCapacity()) {
                     return Collections.emptySet(); // no capacity due to cloud instance cap
                 }
                 final List<vSphereCloudSlaveTemplate> templates = getTemplates(label);
@@ -575,13 +586,7 @@ public class vSphereCloud extends Cloud {
                 VSLOG.log(Level.INFO, methodCallDescription + ": " + numberOfvSphereCloudSlaves + " existing slaves (="
                         + numberOfvSphereCloudSlaveExecutors + " executors), templates available are " + whatWeCouldUse);
                 while (excessWorkloadSoFar > 0) {
-                    if (maxSlavesToProvisionBeforeCloudCapHit != null) {
-                        final int intValue = maxSlavesToProvisionBeforeCloudCapHit.intValue();
-                        if (intValue <= 0) {
-                            break; // out of capacity due to cloud instance cap
-                        }
-                        maxSlavesToProvisionBeforeCloudCapHit = Integer.valueOf(intValue - 1);
-                    }
+                    if (!cloudHasCapacity()) break;
                     final CloudProvisioningRecord whatWeShouldSpinUp = CloudProvisioningAlgorithm.findTemplateWithMostFreeCapacity(whatWeCouldUse);
                     if (whatWeShouldSpinUp == null) {
                         break; // out of capacity due to template instance cap
@@ -599,6 +604,48 @@ public class vSphereCloud extends Cloud {
             VSLOG.log(Level.WARNING, methodCallDescription + ": Failed.", ex);
             return Collections.emptySet();
         }
+    }
+
+    /**
+     * Pre-provisions nodes per template to save time on a VM boot.
+     *
+     * @param template
+     */
+    @Restricted(NoExternalUse.class)
+    public void preProvisionNodes(vSphereCloudSlaveTemplate template) {
+        final String methodCallDescription = "preProvisionNodesForTemplate(" + template.getLabelString() + ")";
+        try {
+            synchronized (this) {
+                ensureLists();
+            }
+            retryVMdeletionIfNecessary(template.getInstancesMin());
+            synchronized (templateState) {
+                templateState.pruneUnwantedRecords();
+                final CloudProvisioningRecord provisionable = templateState.getOrCreateRecord(template);
+                int nodesToProvision = CloudProvisioningAlgorithm.shouldPreProvisionNodes(provisionable);
+                VSLOG.log(Level.INFO, methodCallDescription + ": should pre-provision " + nodesToProvision + " nodes");
+                while (nodesToProvision > 0) {
+                    if (!cloudHasCapacity()) break;
+                    final String nodeName = CloudProvisioningAlgorithm.findUnusedName(provisionable);
+                    VSpherePlannedNode.createInstance(templateState, nodeName, provisionable);
+                    nodesToProvision -= 1;
+                }
+            }
+        } catch (Exception ex) {
+            VSLOG.log(Level.WARNING, methodCallDescription + ": Failed.", ex);
+        }
+    }
+
+    /**
+     * Check if at least one additional node can be provisioned.
+     */
+    private boolean cloudHasCapacity(){
+        Integer maxSlavesToProvisionBeforeCloudCapHit = calculateMaxAdditionalSlavesPermitted();
+        if (maxSlavesToProvisionBeforeCloudCapHit != null && maxSlavesToProvisionBeforeCloudCapHit <= 0) {
+            VSLOG.info("The cloud is at max capacity. Can not provison more nodes.");
+            return false;
+        }
+        return true;
     }
 
     /**

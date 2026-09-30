@@ -81,6 +81,23 @@ public final class CloudProvisioningAlgorithm {
                 + ", even after " + maxAttempts + " attempts.");
     }
 
+    /**
+     * Compares sum of provisioned and planned nodes for the template.
+     *
+     * If the sum is less than instanceMin template value we should provision more nodes,
+     * otherwise the value is satisfied and we should not add any more nodes yet.
+     *
+     * @param record
+     *            Our record regarding the template the agent will be created
+     *            from.
+     * @return A number of nodes to be provisioned.
+     */
+    public static int shouldPreProvisionNodes(CloudProvisioningRecord record) {
+        int provisionedNodes = record.getCurrentlyProvisioned().size() + record.getCurrentlyPlanned().size();
+        int requiredPreProvisionedNodes = record.getTemplate().getInstancesMin();
+        return requiredPreProvisionedNodes - provisionedNodes;
+    }
+
     private static String calcSequentialSuffix(final int attempt) {
         final int slaveNumber = attempt + 1;
         final String suffix = Integer.toString(slaveNumber);
