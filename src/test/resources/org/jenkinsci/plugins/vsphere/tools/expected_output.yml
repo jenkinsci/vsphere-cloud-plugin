@@ -31,5 +31,6 @@
       waitForVMTools: true
     useNoDelayProvisioner: true
     vsConnectionConfig:
+      httpClientClassName: "WSClient"
       vsHost: "https://company-vsphere"
     vsDescription: "Company vSphere"
