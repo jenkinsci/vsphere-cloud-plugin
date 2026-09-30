@@ -110,6 +110,11 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
     }
 
     @Override
+    public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
+        reconfigureNetwork(env, listener);
+    }
+
+    @Override
     public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
         try {
             reconfigureNetwork(run, launcher, listener);
@@ -130,31 +135,20 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         //TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException {
+        EnvVars env = extractEnvironment(run, listener);
+
+        return reconfigureNetwork(env, listener);
+    }
+
+    private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
-        String expandedDeviceLabel = deviceLabel;
-        String expandedDeviceNumber = deviceNumber;
-        String expandedMacAddress = macAddress;
-        String expandedPortGroup = portGroup;
-        String expandedDistributedPortGroup = distributedPortGroup;
-        String expandedDistributedPortId = distributedPortId;
-        EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-        if (run instanceof AbstractBuild) {
-            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-            expandedDeviceLabel = env.expand(deviceLabel);
-            if (deviceNumber != null) {
-                expandedDeviceNumber = env.expand(deviceNumber);
-            }
-            expandedMacAddress = env.expand(macAddress);
-            expandedPortGroup = env.expand(portGroup);
-            expandedDistributedPortGroup = env.expand(distributedPortGroup);
-            expandedDistributedPortId = env.expand(distributedPortId);
-        }
+        String expandedDeviceLabel = env.expand(deviceLabel);
+        String expandedDeviceNumber = deviceNumber == null ? null : env.expand(deviceNumber);
+        String expandedMacAddress = env.expand(macAddress);
+        String expandedPortGroup = env.expand(portGroup);
+        String expandedDistributedPortGroup = env.expand(distributedPortGroup);
+        String expandedDistributedPortId = env.expand(distributedPortId);
 
         boolean hasLabel = expandedDeviceLabel != null && !expandedDeviceLabel.isEmpty();
         boolean hasNumber = expandedDeviceNumber != null && !expandedDeviceNumber.isEmpty();

@@ -218,6 +218,16 @@ public class vSphereCloud extends Cloud {
         return this;
     }
 
+    /**
+     * Test-only accessor for the lazily-created, per-cloud provisioning state that
+     * {@link #preProvisionNodes} and {@link #provision} operate on internally, so tests can set up
+     * "already active/planned" records on the exact same instance rather than a disconnected one.
+     */
+    CloudProvisioningState getTemplateState() {
+        ensureLists();
+        return templateState;
+    }
+
     private void ensureLists() {
         if (currentOnline == null)
             currentOnline = new ConcurrentHashMap<String, String>();

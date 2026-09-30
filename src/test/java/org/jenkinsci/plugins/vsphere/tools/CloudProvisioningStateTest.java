@@ -488,7 +488,7 @@ class CloudProvisioningStateTest {
                 null, "snapshotName", false, "cluster", "resourcePool", "datastore", "folder", "customizationSpec", "templateDescription", 0, 1, "remoteFS",
                 "", Mode.NORMAL, false, false, 0, 0, false, "targetResourcePool", "targetHost", 0, null,
                 new JNLPLauncher(), RetentionStrategy.NOOP, Collections.emptyList(),
-                Collections.emptyList());
+                Collections.emptyList(), Collections.emptyList());
         stubVSphereCloudTemplates.add(template);
         final List<vSphereCloudSlaveTemplate> templates = new ArrayList<>();
         templates.add(template);

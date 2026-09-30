@@ -141,6 +141,15 @@
                 <f:repeatableHeteroProperty field="nodeProperties" oneEach="true" hasHeader="true"
                                             addCaption="Add Node Property" deleteCaption="Delete Node Property"/>
             </f:entry>
+
+            <f:entry title="Reconfigure VM" help="${descriptor.getHelpFile('reconfigureSteps')}">
+                <f:repeatableHeteroProperty field="reconfigureSteps" oneEach="true" hasHeader="true"
+                                            addCaption="Add Modification" deleteCaption="Delete Modification"/>
+            </f:entry>
+
+            <f:entry title="${%Reconfigure Start Timeout}" field="reconfigureStartTimeoutSeconds">
+                <f:number default="120"/>
+            </f:entry>
         </f:advanced>
 
         <f:entry title="">

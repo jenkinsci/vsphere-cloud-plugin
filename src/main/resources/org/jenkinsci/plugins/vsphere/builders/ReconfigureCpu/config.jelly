@@ -22,4 +22,7 @@ limitations under the License.
     <f:entry title="${%Number Cores per Socket}" field="coresPerSocket">
         <f:number clazz="required positive-number" />
     </f:entry>
+    <f:entry title="${%CPU Reservation in MHz}" field="cpuLimitMHz">
+        <f:number clazz="positive-number" />
+    </f:entry>
 </j:jelly>

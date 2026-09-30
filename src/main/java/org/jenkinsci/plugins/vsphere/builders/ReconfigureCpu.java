@@ -25,8 +25,11 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
+
+import com.vmware.vim25.ResourceAllocationInfo;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import jakarta.servlet.ServletException;
@@ -39,6 +42,7 @@ public class ReconfigureCpu extends ReconfigureStep {
 
     private final String cpuCores;
     private final String coresPerSocket;
+    /* almost final */ private String cpuLimitMHz;
 
 	@DataBoundConstructor
 	public ReconfigureCpu(String cpuCores, String coresPerSocket) throws VSphereException {
@@ -52,6 +56,21 @@ public class ReconfigureCpu extends ReconfigureStep {
 
     public String getCoresPerSocket() {
         return coresPerSocket;
+    }
+
+    public String getCpuLimitMHz() {
+        return cpuLimitMHz;
+    }
+
+    /** Optional CPU MHz reservation; leave unset to preserve the previous default (no reservation). */
+    @DataBoundSetter
+    public void setCpuLimitMHz(String cpuLimitMHz) {
+        this.cpuLimitMHz = cpuLimitMHz;
+    }
+
+    @Override
+    public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
+        reconfigureCPU(env, listener);
     }
 
     @Override
@@ -75,32 +94,33 @@ public class ReconfigureCpu extends ReconfigureStep {
         //TODO throw AbortException instead of returning value
     }
 
-    public boolean reconfigureCPU (final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+    public boolean reconfigureCPU(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+        EnvVars env = extractEnvironment(run, listener);
 
+        return reconfigureCPU(env, listener);
+    }
+
+    private boolean reconfigureCPU(final EnvVars env, final TaskListener listener) throws VSphereException  {
         PrintStream jLogger = listener.getLogger();
-        String expandedCPUCores = cpuCores;
-        String expandedCoresPerSocket = coresPerSocket;
-        EnvVars env;
-        try {
-            env = run.getEnvironment(listener);
-        } catch (Exception e) {
-            throw new VSphereException(e);
-        }
-
-        if (run instanceof AbstractBuild) {
-            env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-            expandedCPUCores = env.expand(cpuCores);
-            expandedCoresPerSocket = env.expand(coresPerSocket);
-        }
+        String expandedCPUCores = env.expand(cpuCores);
+        String expandedCoresPerSocket = env.expand(coresPerSocket);
+        String expandedCpuLimitMHz = cpuLimitMHz == null ? null : env.expand(cpuLimitMHz);
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: CPU");
         spec.setNumCPUs(Integer.valueOf(expandedCPUCores));
         spec.setNumCoresPerSocket(Integer.valueOf(expandedCoresPerSocket));
 
+        // Only set an allocation at all if the user actually asked for a reservation --
+        // otherwise preserve the previous default behavior (no CPU reservation/limit).
+        if (expandedCpuLimitMHz != null && !expandedCpuLimitMHz.isEmpty()) {
+            ResourceAllocationInfo resAllInfo = new ResourceAllocationInfo();
+            resAllInfo.setReservation((long) Integer.parseInt(expandedCpuLimitMHz));
+            spec.setCpuAllocation(resAllInfo);
+        }
+
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
-	}
-
+    }
 
 	@Extension
 	public static final class ReconfigureCpuDescriptor extends ReconfigureStepDescriptor {
@@ -126,6 +146,25 @@ public class ReconfigureCpu extends ReconfigureStep {
 
             if (value.length() == 0)
                 return FormValidation.error(Messages.validation_required("Cores per socket"));
+            return FormValidation.ok();
+        }
+
+        @RequirePOST
+        public FormValidation doCheckCpuLimitMHz(@AncestorInPath Item context, @QueryParameter String value)
+                throws IOException, ServletException {
+            throwUnlessUserHasPermissionToConfigureJob(context);
+
+            // Optional field: a blank value just means "no CPU reservation", which is fine.
+            if (value == null || value.isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                if (Integer.parseInt(value) < 0) {
+                    return FormValidation.error(Messages.validation_positiveInteger(value));
+                }
+            } catch (NumberFormatException e) {
+                return FormValidation.error(Messages.validation_positiveInteger(value));
+            }
             return FormValidation.ok();
         }
 

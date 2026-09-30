@@ -103,6 +103,11 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	@Override
+	public void perform(@NonNull EnvVars env, @NonNull TaskListener listener) throws VSphereException {
+		reconfigureDisk(env, listener);
+	}
+
+	@Override
 	public void perform(@NonNull Run<?, ?> run, @NonNull FilePath filePath, @NonNull Launcher launcher, @NonNull TaskListener listener) throws InterruptedException, IOException {
 		try {
 			reconfigureDisk(run, launcher, listener);
@@ -124,28 +129,18 @@ public class ReconfigureDisk extends ReconfigureStep {
 	}
 
 	public boolean reconfigureDisk(final Run<?, ?> run, final Launcher launcher, final TaskListener listener) throws VSphereException  {
+		EnvVars env = extractEnvironment(run, listener);
 
+		return reconfigureDisk(env, listener);
+	}
+
+	private boolean reconfigureDisk(final EnvVars env, final TaskListener listener) throws VSphereException  {
 		PrintStream jLogger = listener.getLogger();
-		String expandedDiskSize = this.diskSize;
-		String expandedDeviceLabel = deviceLabel;
-		String expandedDeviceNumber = deviceNumber;
-		EnvVars env;
+		String expandedDiskSize = env.expand(this.diskSize);
+		String expandedDeviceLabel = deviceLabel == null ? null : env.expand(deviceLabel);
+		String expandedDeviceNumber = deviceNumber == null ? null : env.expand(deviceNumber);
 
 		try {
-			env = run.getEnvironment(listener);
-			if (run instanceof AbstractBuild) {
-				env.overrideAll(((AbstractBuild) run).getBuildVariables()); // Add in matrix axes..
-				if (this.diskSize != null) {
-					expandedDiskSize = env.expand(this.diskSize);
-				}
-				if (deviceLabel != null) {
-					expandedDeviceLabel = env.expand(deviceLabel);
-				}
-				if (deviceNumber != null) {
-					expandedDeviceNumber = env.expand(deviceNumber);
-				}
-			}
-
 			boolean hasLabel = expandedDeviceLabel != null && !expandedDeviceLabel.isEmpty();
 			boolean hasNumber = expandedDeviceNumber != null && !expandedDeviceNumber.isEmpty();
 			if (hasLabel && hasNumber) {
@@ -167,7 +162,6 @@ public class ReconfigureDisk extends ReconfigureStep {
 					break;
 			}
 			VirtualDeviceConfigSpec [] vdiskSpecArray = {vdiskSpec};
-
 			spec.setDeviceChange(vdiskSpecArray);
 			VSphereLogger.vsLogger(jLogger, "Configuration done");
 		} catch (Exception e) {
