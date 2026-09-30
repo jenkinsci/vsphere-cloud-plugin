@@ -160,7 +160,9 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckOldName(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckOldName(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM snapshot name"));
             return FormValidation.ok();
         }

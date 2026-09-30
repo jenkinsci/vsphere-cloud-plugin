@@ -147,12 +147,16 @@ public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep 
             return Messages.vm_title_DeleteSnapshot();
         }
 
-        public FormValidation doCheckVm(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckSnapshotName(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckSnapshotName(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the snapshot name"));
             return FormValidation.ok();
         }

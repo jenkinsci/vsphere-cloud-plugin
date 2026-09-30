@@ -171,7 +171,9 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
             return Messages.vm_title_PowerOff();
         }
 
-        public FormValidation doCheckVm(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }

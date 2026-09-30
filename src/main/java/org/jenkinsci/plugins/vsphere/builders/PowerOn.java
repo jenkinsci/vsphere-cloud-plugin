@@ -139,7 +139,9 @@ public class PowerOn extends VSphereBuildStep {
             return Messages.vm_title_PowerOn();
         }
 
-        public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckTimeoutInSeconds(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("Timeout"));
 
             if (!value.matches("\\d+")) return FormValidation.error(Messages.validation_positiveInteger("Timeout"));
@@ -149,7 +151,9 @@ public class PowerOn extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckVm(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckVm(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }

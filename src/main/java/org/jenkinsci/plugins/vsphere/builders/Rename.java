@@ -133,7 +133,9 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
             load();
         }
 
-        public FormValidation doCheckOldName(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckOldName(@AncestorInPath Item context, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the VM name"));
             return FormValidation.ok();
         }

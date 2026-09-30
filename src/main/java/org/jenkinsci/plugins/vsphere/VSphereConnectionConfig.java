@@ -214,6 +214,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return FormValidation.ok();
         }
 
+        @RequirePOST
         public ListBoxModel doFillCredentialsIdItems(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String vsHost) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
@@ -227,6 +228,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                             CREDENTIALS_MATCHER);
         }
 
+        @RequirePOST
         public FormValidation doCheckCredentialsId(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String vsHost,
