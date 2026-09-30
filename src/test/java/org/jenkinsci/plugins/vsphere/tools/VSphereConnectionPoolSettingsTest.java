@@ -166,7 +166,7 @@ class VSphereConnectionPoolSettingsTest {
     // -----------------------------------------------------------------------
 
     private static vSphereCloud makeCloud() {
-        return new vSphereCloud(makeConnectionConfig(), "test-cloud", 0, 0, null);
+        return new vSphereCloud(makeConnectionConfig(), "test-cloud", 0, 0, false, null);
     }
 
     private static VSphereConnectionConfig makeConnectionConfig() {
