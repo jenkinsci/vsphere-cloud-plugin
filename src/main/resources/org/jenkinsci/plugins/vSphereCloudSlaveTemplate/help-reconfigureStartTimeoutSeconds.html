@@ -1,0 +1,9 @@
+<div>
+  Only relevant if "Reconfigure VM" modifications are configured above. How long, in seconds, to
+  wait for vCenter's own power-on task to report completion when starting a clone back up after
+  applying those modifications to it. This is a wait for the vSphere-level power-on operation
+  itself, e.g. for DRS to decide where in the cluster to place the newly created VM instance,
+  not for the guest OS or Jenkins agent to become reachable (that's controlled separately, by
+  Launch Delay / Wait for VMTools). Defaults to 120 seconds; increase it if your environment's
+  DRS placement or storage is slow enough that power-on tasks routinely take longer than that.
+</div>

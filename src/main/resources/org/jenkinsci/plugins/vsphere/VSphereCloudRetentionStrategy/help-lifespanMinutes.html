@@ -1,0 +1,9 @@
+<div>
+  Optional. If set to a positive number, a computer is retired once it has existed for this many
+  minutes, even if it is still busy or has never gone idle -- whichever of "idle" or "lifespan"
+  happens first wins. New work stops being assigned to it as soon as its lifespan is reached; any
+  build already running is allowed to finish, and the computer is then terminated once it goes idle.
+  <p/>
+  Leave at 0 to disable this and keep the original behaviour: retire purely based on the Idle Timeout
+  above, with no maximum age.
+</div>

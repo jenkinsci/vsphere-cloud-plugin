@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
+import com.vmware.vim25.ws.ClientCreator;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 
@@ -90,6 +91,7 @@ public class VSphere {
 
     private VSphere(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw) throws VSphereException {
         try {
+            ClientCreator.clientClass = VSphereConnectionConfig.setupGlobalHttpClientClass();
             this.url = new URL(url);
             final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
             final ServerConnection serverConnection = serviceInstance.getServerConnection();
