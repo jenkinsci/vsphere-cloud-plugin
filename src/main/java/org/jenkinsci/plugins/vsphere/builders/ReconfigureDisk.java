@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -216,26 +217,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			}
 		}
 
-		String diskName;
-		if (deviceNumber != null) {
-			diskName = String.format("%s_%d", vm.getName(), deviceNumber);
-			if (diskNames.containsKey(String.format("%s/%s.vmdk", vm.getName(), diskName))) {
-				throw new VSphereException("A disk named " + diskName + " already exists");
-			}
-		} else if (label != null && !label.isEmpty()) {
-			if (diskNames.containsKey(String.format("%s/%s.vmdk", vm.getName(), label))) {
-				throw new VSphereException("A disk named " + label + " already exists");
-			}
-			diskName = label;
-		} else {
-			diskName = null;
-			for (int i = 1; ; ++i) {
-				if (!diskNames.containsKey(String.format("%s/%s_%d.vmdk", vm.getName(), vm.getName(), i))) {
-					diskName = String.format("%s_%d", vm.getName(), i);
-					break;
-				}
-			}
-		}
+		String diskName = chooseDiskName(vm.getName(), diskNames, label, deviceNumber);
 
 		VSphereLogger.vsLogger(jLogger, String.format("Preparing to add disk %s of %dGB", diskName, diskSize));
 
@@ -276,12 +258,40 @@ public class ReconfigureDisk extends ReconfigureStep {
 		return diskSpec;
 	}
 
+	/**
+	 * Decides the file name for a newly added disk: an explicit {@code deviceNumber} names it
+	 * "&lt;vm&gt;_&lt;N&gt;" (the same convention used when nothing is given, just pinned to a specific
+	 * N), an explicit {@code label} is used verbatim, and otherwise the next free "&lt;vm&gt;_&lt;N&gt;"
+	 * (1-based) is auto-picked. Either explicit form fails if a disk by that name already exists.
+	 */
+	String chooseDiskName(String vmName, Map<String, Boolean> diskNames, String label, Integer deviceNumber) throws VSphereException {
+		if (deviceNumber != null) {
+			String diskName = String.format("%s_%d", vmName, deviceNumber);
+			if (diskNames.containsKey(String.format("%s/%s.vmdk", vmName, diskName))) {
+				throw new VSphereException("A disk named " + diskName + " already exists");
+			}
+			return diskName;
+		}
+		if (label != null && !label.isEmpty()) {
+			if (diskNames.containsKey(String.format("%s/%s.vmdk", vmName, label))) {
+				throw new VSphereException("A disk named " + label + " already exists");
+			}
+			return label;
+		}
+		for (int i = 1; ; ++i) {
+			if (!diskNames.containsKey(String.format("%s/%s_%d.vmdk", vmName, vmName, i))) {
+				return String.format("%s_%d", vmName, i);
+			}
+		}
+	}
+
 	private VirtualDeviceConfigSpec createEditDiskConfigSpec(
 			VirtualMachine vm, int diskSize, String label, Integer deviceNumber, PrintStream jLogger) throws VSphereException
 	{
+		VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
 		VirtualDisk disk = (deviceNumber != null)
-				? findDiskByIndex(vm, deviceNumber)
-				: findDiskByLabel(vm, label, true);
+				? findDiskByIndex(devices, deviceNumber)
+				: findDiskByLabel(devices, vm.getName(), label, true);
 
 		long diskSizeInKB = (long) diskSize * 1024 * 1024;
 		long currentSizeInKB = disk.getCapacityInKB();
@@ -308,9 +318,10 @@ public class ReconfigureDisk extends ReconfigureStep {
 	{
 		// Unlike EDIT, a lone disk is never auto-selected here: removing the wrong disk is destructive
 		// and unrecoverable, so an explicit deviceLabel or deviceNumber is always required.
+		VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
 		VirtualDisk disk = (deviceNumber != null)
-				? findDiskByIndex(vm, deviceNumber)
-				: findDiskByLabel(vm, label, false);
+				? findDiskByIndex(devices, deviceNumber)
+				: findDiskByLabel(devices, vm.getName(), label, false);
 
 		VSphereLogger.vsLogger(jLogger, String.format(
 				"Removing disk %s (%dGB) and deleting its backing file", diskBaseName(disk), disk.getCapacityInKB() / 1024 / 1024));
@@ -330,7 +341,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 	 * or "IDE(1:0)" (controller bus number : unit number). If no label is given, {@code allowAutoSelectSingleDisk}
 	 * controls whether a VM with exactly one disk may use it without a label.
 	 */
-	private VirtualDisk findDiskByLabel(VirtualMachine vm, String label, boolean allowAutoSelectSingleDisk) throws VSphereException {
+	VirtualDisk findDiskByLabel(VirtualDevice[] devices, String vmName, String label, boolean allowAutoSelectSingleDisk) throws VSphereException {
 		VirtualDisk match = null;
 		VirtualDisk onlyDisk = null;
 		int diskCount = 0;
@@ -338,7 +349,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 		Matcher monikerMatcher = (label != null) ? controllerMonikerPattern.matcher(label) : null;
 		boolean isMoniker = monikerMatcher != null && monikerMatcher.matches();
 
-		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+		for (VirtualDevice vmDevice : devices) {
 			if (!(vmDevice instanceof VirtualDisk)) {
 				continue;
 			}
@@ -351,7 +362,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 			}
 
 			if (isMoniker) {
-				if (matchesControllerMoniker(vm, disk, monikerMatcher.group(1),
+				if (matchesControllerMoniker(devices, disk, monikerMatcher.group(1),
 						Integer.parseInt(monikerMatcher.group(2)), Integer.parseInt(monikerMatcher.group(3)))) {
 					match = disk;
 				}
@@ -370,7 +381,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 				return onlyDisk;
 			}
 			throw new VSphereException(String.format(
-					"VM %s has %d disks attached; deviceLabel is required to select which one to use", vm.getName(), diskCount));
+					"VM %s has %d disks attached; deviceLabel is required to select which one to use", vmName, diskCount));
 		}
 
 		if (match == null) {
@@ -380,11 +391,11 @@ public class ReconfigureDisk extends ReconfigureStep {
 		return match;
 	}
 
-	private boolean matchesControllerMoniker(VirtualMachine vm, VirtualDisk disk, String controllerType, int busNumber, int unitNumber) {
+	boolean matchesControllerMoniker(VirtualDevice[] devices, VirtualDisk disk, String controllerType, int busNumber, int unitNumber) {
 		if (disk.getUnitNumber() == null || disk.getUnitNumber() != unitNumber || disk.getControllerKey() == null) {
 			return false;
 		}
-		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+		for (VirtualDevice vmDevice : devices) {
 			if (!(vmDevice instanceof VirtualController) || vmDevice.getKey() != disk.getControllerKey()) {
 				continue;
 			}
@@ -405,9 +416,9 @@ public class ReconfigureDisk extends ReconfigureStep {
 	 * order vCenter itself returns them via VirtualHardware.device -- no re-sorting or address scheme
 	 * of our own, just vCenter's own list order.
 	 */
-	private VirtualDisk findDiskByIndex(VirtualMachine vm, int number) throws VSphereException {
+	VirtualDisk findDiskByIndex(VirtualDevice[] devices, int number) throws VSphereException {
 		int count = 0;
-		for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+		for (VirtualDevice vmDevice : devices) {
 			if (!(vmDevice instanceof VirtualDisk)) {
 				continue;
 			}
@@ -420,7 +431,7 @@ public class ReconfigureDisk extends ReconfigureStep {
 				"VM has %d disks attached; no disk with deviceNumber %d (deviceNumber is one-based)", count, number));
 	}
 
-	private String diskBaseName(VirtualDisk disk) {
+	String diskBaseName(VirtualDisk disk) {
 		if (!(disk.getBacking() instanceof VirtualDeviceFileBackingInfo)) {
 			return null;
 		}

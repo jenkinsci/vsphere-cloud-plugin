@@ -277,7 +277,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         return true;
     }
 
-    private VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
+    VirtualEthernetCard findNetworkDeviceByLabel(VirtualDevice[] devices, String label) {
         for (VirtualDevice vd : devices) {
             if (vd instanceof VirtualEthernetCard && (label.isEmpty() || vd.getDeviceInfo().getLabel().contentEquals(label))) {
                 return (VirtualEthernetCard) vd;
@@ -294,7 +294,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
      * shared with unrelated PCI-bus devices like storage/USB/video controllers, so it doesn't
      * correspond to "the Nth NIC"), just vCenter's own list order.
      */
-    private VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int number) throws VSphereException {
+    VirtualEthernetCard findNetworkDeviceByIndex(VirtualDevice[] devices, int number) throws VSphereException {
         int count = 0;
         for (VirtualDevice vd : devices) {
             if (!(vd instanceof VirtualEthernetCard)) {
