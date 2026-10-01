@@ -66,10 +66,17 @@
   </scm>
 
   <properties>
-    <!-- Releases up to 2.28 were manually issued; 3.x are automated with CD
-             following https://www.jenkins.io/doc/developer/publishing/releasing-cd/
-          -->
-    <revision>4</revision>
+    <!-- Release lines:
+	  * up to 2.28 were manually issued
+	  * 3.x are automated with CD following
+	    https://www.jenkins.io/doc/developer/publishing/releasing-cd/
+	  * 4.x are named since formally requiring JDK21+ (deprecating JDK17)
+	    and significantly newer yavijava dependency
+	  * 5.x after PR- and spotbugs-induced API changes (returning empty
+	    objects instead of nulls, supporting envvar expansion in more
+	    contexts, etc.), should have been bumped a couple of tags earlier.
+      -->
+    <revision>5</revision>
     <changelist>999999-SNAPSHOT</changelist>
     <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
     <jenkins.baseline>2.555</jenkins.baseline>
