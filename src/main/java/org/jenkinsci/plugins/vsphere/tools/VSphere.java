@@ -1142,11 +1142,13 @@ public class VSphere {
         final VirtualHardware sourceHardware = sourceConfig == null ? null : sourceConfig.getHardware();
         // A size announced by the caller (e.g. a template whose reconfigure steps resize the
         // clone right after creation) beats the source VM's, which is only what we clone from.
-        final Integer vmCpus = opts.getVmCpus() != null
-                ? opts.getVmCpus()
+        final Integer announcedCpus = opts.getVmCpus();
+        final Integer vmCpus = announcedCpus != null
+                ? announcedCpus
                 : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()));
-        final Integer vmMemoryMB = opts.getVmMemoryMB() != null
-                ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, opts.getVmMemoryMB()))
+        final Long announcedMemoryMB = opts.getVmMemoryMB();
+        final Integer vmMemoryMB = announcedMemoryMB != null
+                ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, announcedMemoryMB.longValue()))
                 : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getMemoryMB()));
         if ((opts.isRequireCores() && vmCpus == null)
                 || ((opts.isRequireMemory() || opts.isRequireAvailableMemory()) && vmMemoryMB == null)) {
