@@ -5,8 +5,10 @@ import hudson.init.Initializer;
 import hudson.slaves.Cloud;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -43,23 +45,27 @@ public final class DuplicateCloudNameFixer {
                 everyName.add(cloud.name);
             }
         }
-        Set<String> seen = new HashSet<>();
+        Map<String, Cloud> owners = new HashMap<>();
         List<String> renames = new ArrayList<>();
         for (Cloud cloud : jenkins.clouds) {
             if (cloud instanceof vSphereCloud) {
                 String oldName = cloud.name;
-                if (oldName == null || oldName.isEmpty() || seen.contains(oldName)) {
+                if (oldName == null || oldName.isEmpty() || owners.containsKey(oldName)) {
                     String newName = vSphereCloud.deriveCloudName(((vSphereCloud) cloud).getVsDescription(), everyName);
                     cloud.name = newName;
                     everyName.add(newName);
+                    Cloud owner = owners.get(oldName);
                     String message = String.format(
-                            "vSphere cloud '%s' shared its name '%s' with another cloud; renamed to '%s'.",
-                            ((vSphereCloud) cloud).getVsDescription(), oldName, newName);
+                            "vSphere cloud with description '%s' had the same internal name '%s' as %s; its name is now '%s'.",
+                            ((vSphereCloud) cloud).getVsDescription(),
+                            oldName,
+                            owner == null ? "an earlier cloud" : "'" + owner.getDisplayName() + "', which keeps it",
+                            newName);
                     LOGGER.log(Level.WARNING, message);
                     renames.add(message);
                 }
             }
-            seen.add(cloud.name);
+            owners.putIfAbsent(cloud.name, cloud);
         }
         if (!renames.isEmpty()) {
             jenkins.save();
