@@ -247,6 +247,16 @@ Three independent, optional mechanisms are available, in order of precedence:
    tri-state: left on *inherit* (`null`/unset in a pipeline or YAML) they use the cloud's
    default, while an explicit *Yes* (`true`) or *No* (`false`) overrides it for that call
    site, in either direction.
+   Which size is compared:
+   * For a **template** with `Reconfigure CPU` / `Reconfigure Memory` steps, the size
+     those steps will set (they run right after the clone is created). If a value cannot be
+     worked out ahead of time, such as one using a variable that only exists at build time,
+     the master image's size is assumed for that component.
+   * For the **Clone and Deploy build steps**, the size of the source VM or template. They
+     do **not** know about `Reconfigure*` steps that you run *after* cloning, because host
+     placement has already happened by then - if those steps make the VM bigger or smaller
+     than its source, the checks compare against the wrong size. Keep the source VM at
+     (or above) the size you actually need, or leave the checks off for such steps.
 
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise

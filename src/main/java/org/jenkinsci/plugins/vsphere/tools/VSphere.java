@@ -951,12 +951,18 @@ public class VSphere {
 
         final VirtualMachineConfigInfo sourceConfig = sourceVm.getConfig();
         final VirtualHardware sourceHardware = sourceConfig == null ? null : sourceConfig.getHardware();
-        final Integer vmCpus = sourceHardware == null ? null : sourceHardware.getNumCPU();
-        final Integer vmMemoryMB = sourceHardware == null ? null : sourceHardware.getMemoryMB();
+        // A size announced by the caller (e.g. a template whose reconfigure steps resize the
+        // clone right after creation) beats the source VM's, which is only what we clone from.
+        final Integer vmCpus = opts.getVmCpus() != null
+                ? opts.getVmCpus()
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()));
+        final Integer vmMemoryMB = opts.getVmMemoryMB() != null
+                ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, opts.getVmMemoryMB()))
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getMemoryMB()));
         if ((opts.isRequireCores() && vmCpus == null) || (opts.isRequireMemory() && vmMemoryMB == null)) {
             logMessage(
                     jLogger,
-                    "Could not determine the CPU/memory size of the source VM; skipping the corresponding host size check.");
+                    "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
         }
         final List<HostCandidate> filtered = VSphereHostSelection.filterByVmSize(
                 usable, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), vmMemoryMB);

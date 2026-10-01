@@ -24,6 +24,7 @@ import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
@@ -66,6 +67,8 @@ import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -535,6 +538,47 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             vSphere.disconnect();
         }
         return slave;
+    }
+
+    /**
+     * The vCPU count that {@link #reconfigureSteps} will set on a clone, or null if none of them
+     * sets one or its value cannot be worked out ahead of time (e.g. it uses a variable that only
+     * exists at build time) - in which case the master image's size is assumed.
+     */
+    @CheckForNull
+    Integer reconfiguredCpuCores() {
+        Integer result = null;
+        for (ReconfigureStep step : Util.fixNull(reconfigureSteps)) {
+            if (step instanceof ReconfigureCpu) {
+                result = parsePositive(((ReconfigureCpu) step).getCpuCores());
+            }
+        }
+        return result;
+    }
+
+    /** The memory size (MB) that {@link #reconfigureSteps} will set on a clone; see {@link #reconfiguredCpuCores()}. */
+    @CheckForNull
+    Long reconfiguredMemoryMB() {
+        Long result = null;
+        for (ReconfigureStep step : Util.fixNull(reconfigureSteps)) {
+            if (step instanceof ReconfigureMemory) {
+                Integer parsed = parsePositive(((ReconfigureMemory) step).getMemorySize());
+                result = parsed == null ? null : Long.valueOf(parsed);
+            }
+        }
+        return result;
+    }
+
+    private static @CheckForNull Integer parsePositive(@CheckForNull String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(new EnvVars().expand(value).trim());
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private vSphereCloudProvisionedSlave provision(

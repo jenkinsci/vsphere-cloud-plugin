@@ -15,10 +15,38 @@ public final class HostSelectionOptions {
 
     private final boolean requireCores;
     private final boolean requireMemory;
+    private final @CheckForNull Integer vmCpus;
+    private final @CheckForNull Long vmMemoryMB;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
+        this(requireCores, requireMemory, null, null);
+    }
+
+    private HostSelectionOptions(
+            boolean requireCores, boolean requireMemory, @CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
+        this.vmCpus = vmCpus;
+        this.vmMemoryMB = vmMemoryMB;
+    }
+
+    /**
+     * Same options, but telling the host size checks to compare against this vCPU count and
+     * memory size ({@code null}: unknown, use the source VM's) instead of the source VM's own
+     * - for VMs that are known to be resized right after being cloned.
+     */
+    public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
+        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB);
+    }
+
+    /** vCPU count the VM will end up with, if known ahead of cloning; else null. */
+    public @CheckForNull Integer getVmCpus() {
+        return vmCpus;
+    }
+
+    /** Memory size in MB the VM will end up with, if known ahead of cloning; else null. */
+    public @CheckForNull Long getVmMemoryMB() {
+        return vmMemoryMB;
     }
 
     /** Only consider hosts with at least as many physical cores as the VM has vCPUs. */
