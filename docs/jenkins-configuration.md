@@ -261,6 +261,40 @@ Three independent, optional mechanisms are available, in order of precedence:
      size. Prefer the `numCpus`/`memoryMB` fields, or leave the checks off for such steps.
      (The source's cores-per-socket setting is kept, so `numCpus` must be a multiple of it.)
 
+5. **Host weights** (on the vSphere Cloud only) - what "most available host" means for
+   `LEAST_LOADED` (and for the fallback when DRS gives no answer). Four whole-number weights,
+   `hostWeightFreeCpuMhz`, `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB` and
+   `hostWeightFreeMemoryPercent`, for the host's free CPU in MHz, free CPU as a percentage of
+   its capacity, free memory in MB and free memory as a percentage of its memory. Each host
+   gets a score between 0 and 1, the weighted average of the four, and the highest score
+   wins. Only the proportions matter (`1,1,1,1` is the same as `50,50,50,50`) and `0` ignores a
+   measure. The two *absolute* measures are compared with the best of the candidate hosts (the
+   host with the most free MHz scores 1 for that measure); the two *percentage* measures use
+   each host's own capacity. Use the absolute ones to prefer bigger hosts with more to give,
+   the percentage ones to prefer whichever host is least busy whatever its size.
+   * all four **zero** (the default) - the original ranking: the host whose busier resource,
+     CPU or memory, is the least used by percentage.
+   * Whole numbers only: a decimal value from Configuration-as-Code would be silently read as
+     zero.
+
+#### Seeing why a host was chosen
+
+With a host selection mode set, the build console log (and the template's provisioning log)
+lists the cluster's hosts, each with the reason it was ruled out (not connected, in
+maintenance mode, not in the candidate list, too few cores, too little RAM, no usage
+statistics), then every remaining candidate with its score and free CPU/memory, best first,
+and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
+scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
+
+#### Settings for the classic UI, pipeline and YAML
+
+On templates and build steps, the *Require enough ...* settings are drop-downs in the classic UI,
+which store an unset ("inherit") value as an empty string - bound through
+`hostSelectionRequireCoresAsString` and `hostSelectionRequireMemoryAsString`. In a pipeline or
+Configuration-as-Code YAML, use the real booleans `hostSelectionRequireCores` and
+`hostSelectionRequireMemory` (or the string forms `'true'`/`'false'`/`''`), whichever is more
+convenient; use one of the two per template/step.
+
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise
 Plus (or similar) and want placement to follow the same DRS policy as the rest of the

@@ -73,7 +73,7 @@ limitations under the License.
       <f:textbox/>
     </f:entry>
 
-    <f:entry title="${%Memory (MB)}" field="memoryMB">
+    <f:entry title="${%Memory in MB}" field="memoryMB">
       <f:textbox/>
     </f:entry>
 
@@ -85,11 +85,11 @@ limitations under the License.
       <f:textbox/>
     </f:entry>
 
-    <f:entry title="${%Require enough CPU cores}" field="hostSelectionRequireCores">
+    <f:entry title="${%Require enough CPU cores}" field="hostSelectionRequireCoresAsString">
       <f:select/>
     </f:entry>
 
-    <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemory">
+    <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemoryAsString">
       <f:select/>
     </f:entry>
   </f:advanced>

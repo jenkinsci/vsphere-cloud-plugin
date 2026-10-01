@@ -17,13 +17,19 @@ public final class HostSelectionOptions {
     private final boolean requireMemory;
     private final @CheckForNull Integer vmCpus;
     private final @CheckForNull Long vmMemoryMB;
+    private final HostWeights weights;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
-        this(requireCores, requireMemory, null, null);
+        this(requireCores, requireMemory, null, null, HostWeights.DEFAULT);
     }
 
     private HostSelectionOptions(
-            boolean requireCores, boolean requireMemory, @CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
+            boolean requireCores,
+            boolean requireMemory,
+            @CheckForNull Integer vmCpus,
+            @CheckForNull Long vmMemoryMB,
+            HostWeights weights) {
+        this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
         this.vmCpus = vmCpus;
@@ -36,7 +42,17 @@ public final class HostSelectionOptions {
      * - for VMs that are known to be resized right after being cloned.
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
-        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB);
+        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB, weights);
+    }
+
+    /** Same options, ranking the candidate hosts with these weights. */
+    public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
+        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB, weights);
+    }
+
+    /** What "most available host" means; {@link HostWeights#DEFAULT} for the original ranking. */
+    public HostWeights getWeights() {
+        return weights;
     }
 
     /** vCPU count the VM will end up with, if known ahead of cloning; else null. */
@@ -66,6 +82,30 @@ public final class HostSelectionOptions {
      */
     public static boolean resolve(boolean cloudDefault, @CheckForNull Boolean override) {
         return override != null ? override : cloudDefault;
+    }
+
+    /**
+     * The form representation of a tri-state setting: "" for unset (inherit), else "true"/"false".
+     * Needed because Stapler binds an empty form value to an explicit {@code false} for a {@code
+     * Boolean} property, which would silently override the cloud's default instead of inheriting it.
+     */
+    public static String triStateToString(@CheckForNull Boolean value) {
+        return value == null ? "" : value.toString();
+    }
+
+    /** Inverse of {@link #triStateToString}: blank or anything unrecognised means unset (inherit). */
+    public static @CheckForNull Boolean triStateFromString(@CheckForNull String value) {
+        if (value == null) {
+            return null;
+        }
+        switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "true":
+                return Boolean.TRUE;
+            case "false":
+                return Boolean.FALSE;
+            default:
+                return null;
+        }
     }
 
     /** Drop-down for a tri-state call-site setting: inherit the cloud's default, or force yes/no. */

@@ -1116,7 +1116,19 @@ public class VSphere {
 
         final HostSelectionOptions opts =
                 hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
-        final List<HostCandidate> usable = VSphereHostSelection.filterCandidates(candidates, hostSelectionCandidates);
+        logMessage(
+                jLogger,
+                "Host selection (" + hostSelectionMode + ") in cluster \"" + clusterResource.getName() + "\": "
+                        + candidates.size() + " host(s) found.");
+        final List<HostCandidate> usable = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String excluded = VSphereHostSelection.excludedBecause(candidate, hostSelectionCandidates);
+            if (excluded == null) {
+                usable.add(candidate);
+            } else {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + excluded + ".");
+            }
+        }
         if (usable.isEmpty()) {
             logMessage(
                     jLogger,
@@ -1141,8 +1153,16 @@ public class VSphere {
                     jLogger,
                     "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
         }
-        final List<HostCandidate> filtered = VSphereHostSelection.filterByVmSize(
-                usable, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), vmMemoryMB);
+        final List<HostCandidate> filtered = new ArrayList<>();
+        for (HostCandidate candidate : usable) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), vmMemoryMB);
+            if (shortfall == null) {
+                filtered.add(candidate);
+            } else {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
         if (filtered.isEmpty()) {
             logMessage(
                     jLogger,
@@ -1158,6 +1178,10 @@ public class VSphere {
             HostSystem recommended = recommendHostViaDrs(
                     jLogger, clusterResource, sourceVm, cloneName, cloneSpec, rel, hostSystems, filtered);
             if (recommended != null) {
+                logMessage(
+                        jLogger,
+                        "  DRS recommended host \"" + recommended.getName() + "\" out of the " + filtered.size()
+                                + " candidate host(s) above that passed the filters.");
                 return recommended;
             }
             logMessage(
@@ -1165,7 +1189,36 @@ public class VSphere {
                     "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
         }
 
-        final HostCandidate winner = VSphereHostSelection.pickLeastLoaded(filtered);
+        final HostWeights weights = opts.getWeights();
+        logMessage(
+                jLogger,
+                "Ranking " + filtered.size() + " candidate host(s) by "
+                        + (weights.isDefault()
+                                ? "the lower of free CPU and free memory (percentage), no weights configured"
+                                : weights.toString())
+                        + ":");
+        final List<VSphereHostSelection.ScoredHost> ranking = VSphereHostSelection.rank(filtered, weights);
+        for (HostCandidate candidate : filtered) {
+            if (candidate.loadFraction() == null) {
+                logMessage(
+                        jLogger,
+                        "  Host \"" + candidate.getName() + "\" ruled out: no CPU/memory usage statistics available.");
+            }
+        }
+        for (VSphereHostSelection.ScoredHost scored : ranking) {
+            final HostCandidate c = scored.getHost();
+            logMessage(
+                    jLogger,
+                    String.format(
+                            "  Host \"%s\": score %.3f (free CPU %.0f MHz = %.0f%%, free memory %.0f MB = %.0f%%)",
+                            c.getName(),
+                            scored.getScore(),
+                            c.freeCpuMhz(),
+                            c.freeCpuFraction() * 100,
+                            c.freeMemMB(),
+                            c.freeMemFraction() * 100));
+        }
+        final HostCandidate winner = ranking.isEmpty() ? null : ranking.get(0).getHost();
         if (winner == null) {
             logMessage(
                     jLogger,

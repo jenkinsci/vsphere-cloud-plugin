@@ -68,6 +68,22 @@
         <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemory">
           <f:checkbox/>
         </f:entry>
+
+        <f:entry title="${%Host weight: free CPU in MHz}" field="hostWeightFreeCpuMhz">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host weight: free CPU as percent of the host}" field="hostWeightFreeCpuPercent">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host weight: free RAM in MB}" field="hostWeightFreeMemoryMB">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host weight: free RAM as percent of the host}" field="hostWeightFreeMemoryPercent">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
     </f:advanced>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">

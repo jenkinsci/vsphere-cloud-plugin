@@ -49,6 +49,32 @@ class HostSelectionOptionsTest {
     }
 
     @Test
+    void triStateStringFormKeepsUnsetDistinctFromFalse() {
+        assertThat(HostSelectionOptions.triStateToString(null), is(""));
+        assertThat(HostSelectionOptions.triStateToString(true), is("true"));
+        assertThat(HostSelectionOptions.triStateToString(false), is("false"));
+        assertThat(HostSelectionOptions.triStateFromString(""), is((Boolean) null));
+        assertThat(HostSelectionOptions.triStateFromString(null), is((Boolean) null));
+        assertThat(HostSelectionOptions.triStateFromString("nonsense"), is((Boolean) null));
+        assertThat(HostSelectionOptions.triStateFromString("TRUE"), is(true));
+        assertThat(HostSelectionOptions.triStateFromString(" false "), is(false));
+    }
+
+    @Test
+    void cloudWeightsReachTheOptions() {
+        vSphereCloud cloud = cloud(false, false);
+        cloud.setHostWeightFreeCpuMhz(5);
+        cloud.setHostWeightFreeMemoryPercent(7);
+        HostWeights weights =
+                vSphereCloud.hostSelectionOptions(cloud, null, null).getWeights();
+        assertThat(weights.getFreeCpuMhz(), is(5d));
+        assertThat(weights.getFreeMemoryPercent(), is(7d));
+        assertThat(weights.getFreeCpuPercent(), is(0d));
+        assertThat(
+                vSphereCloud.hostSelectionOptions(null, null, null).getWeights().isDefault(), is(true));
+    }
+
+    @Test
     void triStateItemsStartWithInherit() {
         ListBoxModel items = HostSelectionOptions.triStateItems();
         assertThat(items.get(0).value, is(""));

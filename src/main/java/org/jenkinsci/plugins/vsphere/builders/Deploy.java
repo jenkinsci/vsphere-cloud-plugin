@@ -238,6 +238,19 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireCores}.
+     */
+    public String getHostSelectionRequireCoresAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireCores);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCoresAsString(String hostSelectionRequireCoresAsString) {
+        this.hostSelectionRequireCores = HostSelectionOptions.triStateFromString(hostSelectionRequireCoresAsString);
+    }
+
+    /**
      * Opt-in override of the cloud's default: only consider hosts with at least as much
      * physical RAM as the VM is configured with. {@code null} (the default) inherits the
      * cloud's setting; {@code true}/{@code false} override it for this call site.
@@ -249,6 +262,19 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     @DataBoundSetter
     public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
         this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireMemory}.
+     */
+    public String getHostSelectionRequireMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemoryAsString(String hostSelectionRequireMemoryAsString) {
+        this.hostSelectionRequireMemory = HostSelectionOptions.triStateFromString(hostSelectionRequireMemoryAsString);
     }
 
     @Override
@@ -461,11 +487,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             return items;
         }
 
-        public ListBoxModel doFillHostSelectionRequireCoresItems() {
+        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems() {
             return HostSelectionOptions.triStateItems();
         }
 
-        public ListBoxModel doFillHostSelectionRequireMemoryItems() {
+        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems() {
             return HostSelectionOptions.triStateItems();
         }
 

@@ -103,6 +103,10 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getHostSelectionCandidates(), is(Set.of("esx01.company.example", "esx02.company.example")));
         assertThat(cloud.isHostSelectionRequireCores(), is(true));
         assertThat(cloud.isHostSelectionRequireMemory(), is(true));
+        assertThat(cloud.getHostWeightFreeCpuMhz(), is(1));
+        assertThat(cloud.getHostWeightFreeCpuPercent(), is(2));
+        assertThat(cloud.getHostWeightFreeMemoryMB(), is(3));
+        assertThat(cloud.getHostWeightFreeMemoryPercent(), is(4));
     }
 
     @Test
@@ -111,6 +115,7 @@ class ConfigurationAsCodeTest {
         vSphereCloud cloud = (vSphereCloud) r.jenkins.clouds.get(0);
         assertThat(cloud.isHostSelectionRequireCores(), is(false));
         assertThat(cloud.isHostSelectionRequireMemory(), is(false));
+        assertThat(cloud.hostWeights().isDefault(), is(true));
     }
 
     @Test

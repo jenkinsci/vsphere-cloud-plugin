@@ -7,6 +7,10 @@ jenkins:
         hostSelectionMode: "LEAST_LOADED"
         hostSelectionRequireCores: true
         hostSelectionRequireMemory: true
+        hostWeightFreeCpuMhz: 1
+        hostWeightFreeCpuPercent: 2
+        hostWeightFreeMemoryMB: 3
+        hostWeightFreeMemoryPercent: 4
         hostSelectionCandidatesAsString: "esx01.company.example, esx02.company.example"
         vsConnectionConfig:
           vsHost: "https://company-vsphere"

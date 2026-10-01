@@ -1,0 +1,20 @@
+<div>
+  (Optional, a whole number) How much a host's free CPU in MHz (absolute) counts when automatic host selection looks for the
+  "most available" host. Weights are relative to each other: only their proportions matter, so
+  <tt>1</tt> and <tt>1</tt> mean the same as <tt>50</tt> and <tt>50</tt>. Zero ignores the measure.
+  <p>
+  Every host gets a score between 0 (nothing free) and 1, the weighted average of four measures:
+  free CPU in MHz, free CPU as a percentage of that host's capacity, free memory in MB, and free
+  memory as a percentage of that host's memory. The host with the highest score wins. The two
+  absolute (MHz, MB) measures are compared with the best of the candidate hosts, so the host with
+  the most free MHz gets 1 for that measure; the percentage ones use each host's own capacity.
+  </p>
+  <p>
+  Raise this to favour hosts with more spare CPU in absolute terms, e.g. a large host that is as busy, percentage-wise, as a small one.
+  </p>
+  <p>
+  If <b>all four weights are zero</b> (the default), the original ranking applies: the host whose
+  busier resource, CPU or memory, is the least used by percentage. The build console log lists
+  every host considered with its score, and why any host was ruled out.
+  </p>
+</div>
