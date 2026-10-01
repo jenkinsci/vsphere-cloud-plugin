@@ -3,6 +3,12 @@
     <f:entry title="${%Name of this Cloud}" field="vsDescription">
         <f:textbox/>
     </f:entry>
+    <j:if test="${instance != null}">
+        <f:entry title="${%Cloud ID}" field="name"
+                 description="${%Internal identifier of this cloud, used in URLs and config.xml. Generated automatically; not editable here.}">
+            <f:textbox readonly="true"/>
+        </f:entry>
+    </j:if>
     <f:entry>
         <f:property field="vsConnectionConfig"/>
     </f:entry>

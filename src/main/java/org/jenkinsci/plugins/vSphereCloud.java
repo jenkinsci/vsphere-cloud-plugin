@@ -199,7 +199,7 @@ public class vSphereCloud extends Cloud {
             int instanceCap,
             boolean useNoDelayProvisioner,
             List<? extends vSphereCloudSlaveTemplate> templates) {
-        super("vSphereCloud");
+        super(deriveCloudName(vsDescription, namesInUse()));
         this.vsDescription = vsDescription;
         this.maxOnlineSlaves = maxOnlineSlaves;
         this.vsConnectionConfig = vsConnectionConfig;
@@ -221,6 +221,62 @@ public class vSphereCloud extends Cloud {
             // do nothing;
         }
         Log("STARTING VSPHERE CLOUD");
+    }
+
+    /** Name used by every cloud of this type before names were made unique, and the fallback when no usable description exists. */
+    public static final String DEFAULT_CLOUD_NAME = "vSphereCloud";
+
+    /** Human-readable cloud type, used by the descriptor and as the prefix of {@link #getDisplayName()}. */
+    private static final String TYPE_LABEL = "vSphere Cloud";
+
+    /** Names of all clouds currently registered in Jenkins (empty outside a running Jenkins). */
+    private static Set<String> namesInUse() {
+        Set<String> names = new LinkedHashSet<>();
+        Jenkins jenkins = Jenkins.getInstanceOrNull();
+        if (jenkins != null) {
+            for (Cloud c : jenkins.clouds) {
+                names.add(c.name);
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Derives a URL/ID-safe {@link Cloud#name} from a cloud's description, unique among {@code taken}
+     * (the result is not added to it): unsafe characters become '-', and "-2", "-3", ... is appended
+     * on collision. Falls back to {@link #DEFAULT_CLOUD_NAME} for an empty description.
+     */
+    public static String deriveCloudName(@CheckForNull String description, Set<String> taken) {
+        String base = description == null
+                ? ""
+                : description.trim().replaceAll("[^A-Za-z0-9._]+", "-").replaceAll("^-+|-+$", "");
+        if (base.isEmpty()) {
+            base = DEFAULT_CLOUD_NAME;
+        }
+        String candidate = base;
+        for (int i = 2; taken.contains(candidate); i++) {
+            candidate = base + "-" + i;
+        }
+        return candidate;
+    }
+
+    /**
+     * Sets the Jenkins-level cloud ID (the {@code name} in {@code config.xml} and in
+     * {@code /manage/cloud/<name>/}). This is an implementation detail: the config form shows it
+     * read-only and only submits it back so that reconfiguring a cloud keeps its identity. Blank
+     * values are ignored, leaving the name derived from the description.
+     */
+    @DataBoundSetter
+    public void setName(@CheckForNull String name) {
+        if (name != null && !name.trim().isEmpty()) {
+            this.name = name.trim();
+        }
+    }
+
+    /** Shown in the list of clouds: the type, then the user-chosen name of this cloud. */
+    @Override
+    public String getDisplayName() {
+        return TYPE_LABEL + ": " + vsDescription;
     }
 
     public Object readResolve() throws IOException {
@@ -951,7 +1007,7 @@ public class vSphereCloud extends Cloud {
 
         @Override
         public String getDisplayName() {
-            return "vSphere Cloud";
+            return TYPE_LABEL;
         }
 
         public FormValidation doCheckVsDescription(@QueryParameter String value) {
