@@ -101,7 +101,9 @@ buildStep: [$class: 'Clone',
             extraConfigParameters: [:],    // extra VMX key-value pairs to set on the new VM (optional)
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
-            hostSelectionCandidates: []             // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionRequireCores: false,       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with fewer physical cores than the VM has vCPUs
+            hostSelectionRequireMemory: false       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
            ]
 ```
 
@@ -165,7 +167,9 @@ buildStep: [$class: 'Deploy',
             customizationSpec: '',
             host: '',                    // (optional) same meaning as on the Clone step
             hostSelectionMode: '',        // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED'
-            hostSelectionCandidates: []            // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string
+            hostSelectionCandidates: [],           // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string
+            hostSelectionRequireCores: false,      // (optional) same meaning as on the Clone step
+            hostSelectionRequireMemory: false      // (optional) same meaning as on the Clone step
            ]
 ```
 

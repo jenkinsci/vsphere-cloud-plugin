@@ -1,0 +1,20 @@
+<div>
+  (Optional, off by default) When automatic host selection is in use (a "Host Selection
+  Mode" is set and no explicit host is given), only consider candidate hosts that are
+  physically large enough in terms of CPU cores: the number of vCPUs the VM is configured with (taken from the source VM or template) must not exceed the host's number of physical CPU cores.
+  <p>
+  This compares the VM against each host's <b>total capacity</b>, not what is currently
+  free, and applies in addition to the candidate list and to both "Least loaded" and "DRS"
+  modes. Leave it off if your site deliberately oversubscribes (swap, hyperthreads, ...),
+  so that a VM larger than a single host's physical resources is still allowed to be placed.
+  </p>
+  <p>
+  If no candidate host satisfies it, a message is logged and placement is left to vCenter,
+  as when no usable candidate host exists at all. It has no effect when an explicit host is
+  given.
+  </p>
+  <p>
+  This is the default for every template and build step using this cloud; each of them can
+  override it either way ("Yes"/"No"), or leave it on "inherit".
+  </p>
+</div>

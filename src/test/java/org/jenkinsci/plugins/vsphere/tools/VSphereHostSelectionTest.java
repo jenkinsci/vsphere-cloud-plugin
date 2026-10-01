@@ -200,6 +200,56 @@ class VSphereHostSelectionTest {
         assertThat(VSphereHostSelection.pickLeastLoaded(List.of()), nullValue());
     }
 
+    @Test
+    void filterByVmSizeDoesNothingWhenBothChecksAreOff() {
+        List<HostCandidate> hosts = List.of(sized("small", 4, 8192), sized("big", 32, 262144));
+        assertThat(VSphereHostSelection.filterByVmSize(hosts, false, 64, false, 999999), is(hosts));
+    }
+
+    @Test
+    void filterByVmSizeCanRequireCoresOnly() {
+        HostCandidate small = sized("small", 4, 262144);
+        HostCandidate big = sized("big", 32, 8192);
+        List<HostCandidate> kept = VSphereHostSelection.filterByVmSize(List.of(small, big), true, 8, false, 100000);
+        assertThat(kept, contains(big));
+    }
+
+    @Test
+    void filterByVmSizeCanRequireMemoryOnly() {
+        HostCandidate small = sized("small", 32, 8192);
+        HostCandidate big = sized("big", 4, 262144);
+        List<HostCandidate> kept = VSphereHostSelection.filterByVmSize(List.of(small, big), false, 64, true, 16384);
+        assertThat(kept, contains(big));
+    }
+
+    @Test
+    void filterByVmSizeRequiringBothNeedsBoth() {
+        HostCandidate fewCores = sized("fewCores", 4, 262144);
+        HostCandidate littleRam = sized("littleRam", 32, 8192);
+        HostCandidate fits = sized("fits", 16, 65536);
+        HostCandidate exactFit = sized("exactFit", 8, 16384);
+        List<HostCandidate> kept =
+                VSphereHostSelection.filterByVmSize(List.of(fewCores, littleRam, fits, exactFit), true, 8, true, 16384);
+        assertThat(kept, contains(fits, exactFit));
+    }
+
+    @Test
+    void filterByVmSizeTreatsUnknownHostCapacityAsNotSatisfyingAnEnabledCheck() {
+        HostCandidate unknown = sized("unknown", 0, 0);
+        assertThat(VSphereHostSelection.filterByVmSize(List.of(unknown), true, 2, false, null), is(empty()));
+        assertThat(VSphereHostSelection.filterByVmSize(List.of(unknown), false, null, true, 1024), is(empty()));
+    }
+
+    @Test
+    void filterByVmSizeSkipsACheckWhoseVmSizeIsUnknown() {
+        HostCandidate small = sized("small", 2, 2048);
+        assertThat(VSphereHostSelection.filterByVmSize(List.of(small), true, null, true, null), contains(small));
+    }
+
+    private static HostCandidate sized(String name, int cores, long memMB) {
+        return new HostCandidate(name, true, false, 100, 1000, 100, memMB, cores);
+    }
+
     private static HostCandidate candidate(
             String name,
             boolean connected,

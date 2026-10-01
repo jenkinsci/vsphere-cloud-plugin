@@ -37,6 +37,7 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -101,6 +102,11 @@ public class vSphereCloud extends Cloud {
      * override). Null means no default - every host is a candidate unless overridden.
      */
     private Set<String> hostSelectionCandidates;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private boolean hostSelectionRequireMemory;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
@@ -428,6 +434,17 @@ public class vSphereCloud extends Cloud {
                 hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
+    /**
+     * Resolves the host selection refinements for one call site: the cloud's own defaults (or
+     * none, if there is no {@code cloud}), overridden by whatever the call site set explicitly.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud, @CheckForNull Boolean requireCores, @CheckForNull Boolean requireMemory) {
+        return new HostSelectionOptions(
+                HostSelectionOptions.resolve(cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
+                HostSelectionOptions.resolve(cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory));
+    }
+
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
     public String getHostSelectionCandidatesAsString() {
         return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
@@ -436,6 +453,32 @@ public class vSphereCloud extends Cloud {
     @DataBoundSetter
     public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
+    }
+
+    /**
+     * Opt-in: only consider hosts with at least as many physical CPU cores as the VM has
+     * vCPUs. Off by default (oversubscribed sites). Default for every template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * Opt-in: only consider hosts with at least as much physical RAM as the VM is configured
+     * with. Off by default (oversubscribed sites). Default for every template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
     }
 
     /** Shuts down any running pool and clears the reference so it is recreated on next use. */

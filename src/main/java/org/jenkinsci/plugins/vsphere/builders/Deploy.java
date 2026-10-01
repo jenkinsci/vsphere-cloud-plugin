@@ -34,6 +34,7 @@ import java.util.Set;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
@@ -68,6 +69,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private Boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private Boolean hostSelectionRequireMemory;
 
     @DataBoundConstructor
     public Deploy(
@@ -191,6 +197,34 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as many
+     * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
+     * setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(Boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as much
+     * physical RAM as the VM is configured with. {@code null} (the default) inherits the
+     * cloud's setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -296,6 +330,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final HostSelectionOptions hostSelectionOptions =
+                vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
 
         vsphere.deployVm(
                 expandedClone,
@@ -310,6 +346,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 expandedHost,
                 resolvedHostSelectionMode,
                 resolvedHostSelectionCandidates,
+                hostSelectionOptions,
                 jLogger);
         VSphereLogger.vsLogger(jLogger, "\"" + expandedClone + "\" successfully deployed!");
         if (!powerOn) {
@@ -390,6 +427,14 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
+        }
+
+        public ListBoxModel doFillHostSelectionRequireCoresItems() {
+            return HostSelectionOptions.triStateItems();
+        }
+
+        public ListBoxModel doFillHostSelectionRequireMemoryItems() {
+            return HostSelectionOptions.triStateItems();
         }
 
         @RequirePOST

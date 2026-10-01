@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
@@ -81,6 +82,11 @@ public class Clone extends VSphereBuildStep {
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private Boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private Boolean hostSelectionRequireMemory;
 
     @DataBoundConstructor
     public Clone(
@@ -246,6 +252,34 @@ public class Clone extends VSphereBuildStep {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as many
+     * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
+     * setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(Boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as much
+     * physical RAM as the VM is configured with. {@code null} (the default) inherits the
+     * cloud's setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
     @Override
     public void perform(
             @NonNull Run<?, ?> run,
@@ -353,6 +387,8 @@ public class Clone extends VSphereBuildStep {
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final HostSelectionOptions hostSelectionOptions =
+                vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
 
         vsphere.cloneOrDeployVm(
                 expandedClone,
@@ -370,6 +406,7 @@ public class Clone extends VSphereBuildStep {
                 expandedHost,
                 resolvedHostSelectionMode,
                 resolvedHostSelectionCandidates,
+                hostSelectionOptions,
                 jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
@@ -460,6 +497,14 @@ public class Clone extends VSphereBuildStep {
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
+        }
+
+        public ListBoxModel doFillHostSelectionRequireCoresItems() {
+            return HostSelectionOptions.triStateItems();
+        }
+
+        public ListBoxModel doFillHostSelectionRequireMemoryItems() {
+            return HostSelectionOptions.triStateItems();
         }
 
         public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {

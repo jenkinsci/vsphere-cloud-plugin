@@ -60,6 +60,14 @@
         <f:entry title="${%Default Host Selection Candidates}" field="hostSelectionCandidatesAsString">
             <f:textbox/>
         </f:entry>
+
+        <f:entry title="${%Require enough CPU cores}" field="hostSelectionRequireCores">
+          <f:checkbox/>
+        </f:entry>
+
+        <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemory">
+          <f:checkbox/>
+        </f:entry>
     </f:advanced>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">

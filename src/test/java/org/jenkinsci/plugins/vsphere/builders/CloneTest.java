@@ -48,6 +48,20 @@ class CloneTest {
     }
 
     @Test
+    void hostSizeRequirementsAreTriStateAndInheritWhenOmitted() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getHostSelectionRequireCores(), nullValue());
+        assertThat(omitted.getHostSelectionRequireMemory(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("hostSelectionRequireCores", false);
+        args.put("hostSelectionRequireMemory", true);
+        Clone explicit = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(explicit.getHostSelectionRequireCores(), is(false));
+        assertThat(explicit.getHostSelectionRequireMemory(), is(true));
+    }
+
+    @Test
     void hostPlacementFieldsDefaultToNullWhenOmitted() throws Exception {
         // Backward compatibility: existing jobs/pipelines that don't mention these
         // fields must behave exactly as before (no host restriction of any kind).

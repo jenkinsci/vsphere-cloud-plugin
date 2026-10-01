@@ -5,6 +5,8 @@ jenkins:
         instanceCap: 0
         maxOnlineSlaves: 0
         hostSelectionMode: "LEAST_LOADED"
+        hostSelectionRequireCores: true
+        hostSelectionRequireMemory: true
         hostSelectionCandidatesAsString: "esx01.company.example, esx02.company.example"
         vsConnectionConfig:
           vsHost: "https://company-vsphere"

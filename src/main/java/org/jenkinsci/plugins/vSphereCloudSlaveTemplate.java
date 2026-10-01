@@ -67,6 +67,7 @@ import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -122,6 +123,11 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private Boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private Boolean hostSelectionRequireMemory;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -367,6 +373,34 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as many
+     * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
+     * setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(Boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as much
+     * physical RAM as the VM is configured with. {@code null} (the default) inherits the
+     * cloud's setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
      * Gets the old (deprecated) credentialsId field.
      *
      * @return the old, deprecated, credentialsId field.
@@ -533,6 +567,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
+        final HostSelectionOptions hostSelectionOptions =
+                vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
         try {
             final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
             vSphere.cloneOrDeployVm(
@@ -551,6 +587,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     this.targetHost,
                     resolvedHostSelectionMode,
                     resolvedHostSelectionCandidates,
+                    hostSelectionOptions,
                     logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[] {cloneName, this.masterImageName});
             if (willReconfigure) {
@@ -756,6 +793,14 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
+        }
+
+        public ListBoxModel doFillHostSelectionRequireCoresItems() {
+            return HostSelectionOptions.triStateItems();
+        }
+
+        public ListBoxModel doFillHostSelectionRequireMemoryItems() {
+            return HostSelectionOptions.triStateItems();
         }
 
         @RequirePOST

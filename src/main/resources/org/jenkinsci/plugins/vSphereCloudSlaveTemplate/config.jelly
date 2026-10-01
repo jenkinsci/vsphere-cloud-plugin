@@ -54,6 +54,14 @@
                 <f:textbox/>
             </f:entry>
 
+            <f:entry title="${%Require enough CPU cores}" field="hostSelectionRequireCores">
+              <f:select/>
+            </f:entry>
+
+            <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemory">
+              <f:select/>
+            </f:entry>
+
             <f:entry title="${%Customization Specification}" field="customizationSpec">
                 <f:textbox/>
             </f:entry>

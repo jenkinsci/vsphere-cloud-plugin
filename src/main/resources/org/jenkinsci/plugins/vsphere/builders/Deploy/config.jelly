@@ -62,6 +62,14 @@ limitations under the License.
     <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
       <f:textbox/>
     </f:entry>
+
+    <f:entry title="${%Require enough CPU cores}" field="hostSelectionRequireCores">
+      <f:select/>
+    </f:entry>
+
+    <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemory">
+      <f:select/>
+    </f:entry>
   </f:advanced>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>

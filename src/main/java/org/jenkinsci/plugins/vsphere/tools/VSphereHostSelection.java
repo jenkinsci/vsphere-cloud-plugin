@@ -37,6 +37,7 @@ public final class VSphereHostSelection {
         private final int cpuCapacityMhz;
         private final Integer memUsageMB;
         private final long memCapacityMB;
+        private final int cpuCores;
 
         public HostCandidate(
                 String name,
@@ -46,6 +47,19 @@ public final class VSphereHostSelection {
                 int cpuCapacityMhz,
                 Integer memUsageMB,
                 long memCapacityMB) {
+            this(name, connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB, 0);
+        }
+
+        public HostCandidate(
+                String name,
+                boolean connected,
+                boolean inMaintenanceMode,
+                Integer cpuUsageMhz,
+                int cpuCapacityMhz,
+                Integer memUsageMB,
+                long memCapacityMB,
+                int cpuCores) {
+            this.cpuCores = cpuCores;
             this.name = name;
             this.connected = connected;
             this.inMaintenanceMode = inMaintenanceMode;
@@ -81,6 +95,11 @@ public final class VSphereHostSelection {
 
         public long getMemCapacityMB() {
             return memCapacityMB;
+        }
+
+        /** Number of physical CPU cores on the host; 0 if unknown. */
+        public int getCpuCores() {
+            return cpuCores;
         }
 
         /**
@@ -210,6 +229,39 @@ public final class VSphereHostSelection {
                 continue;
             }
             if (allowList != null && !allowList.isEmpty() && !allowList.contains(candidate.getName())) {
+                continue;
+            }
+            result.add(candidate);
+        }
+        return result;
+    }
+
+    /**
+     * Optionally drops candidates that are physically too small for the VM about to be
+     * created: with {@code requireCores}, hosts with fewer physical CPU cores than {@code
+     * vmCpus}; with {@code requireMemory}, hosts with less total physical RAM than {@code
+     * vmMemoryMB}. Compares absolute capacity, not current free resources, so sites that
+     * oversubscribe (swap, hyperthreads, ...) can simply leave both off. A host whose
+     * relevant capacity is unknown (0) does not satisfy a requirement that is switched
+     * on, and a VM size that is unknown (null) disables the corresponding check.
+     */
+    public static List<HostCandidate> filterByVmSize(
+            List<HostCandidate> candidates,
+            boolean requireCores,
+            Integer vmCpus,
+            boolean requireMemory,
+            Integer vmMemoryMB) {
+        final boolean checkCores = requireCores && vmCpus != null;
+        final boolean checkMemory = requireMemory && vmMemoryMB != null;
+        if (!checkCores && !checkMemory) {
+            return candidates;
+        }
+        List<HostCandidate> result = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            if (checkCores && candidate.getCpuCores() < vmCpus) {
+                continue;
+            }
+            if (checkMemory && candidate.getMemCapacityMB() < vmMemoryMB) {
                 continue;
             }
             result.add(candidate);

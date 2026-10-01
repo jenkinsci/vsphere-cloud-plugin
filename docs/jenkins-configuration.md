@@ -233,6 +233,21 @@ Three independent, optional mechanisms are available, in order of precedence:
      blank, so it's treated as a deliberate override rather than "inherit", even though
      it also parses to zero host names.
 
+4. **Require enough CPU cores** / **Require enough RAM** - two independent, opt-in
+   checkboxes (`hostSelectionRequireCores`, `hostSelectionRequireMemory`; both **off by
+   default**). When on, automatic selection (both `LEAST_LOADED` and `DRS_RECOMMENDED`)
+   only considers candidate hosts whose total *physical* CPU core count, respectively
+   RAM, is at least what the VM being created is configured with (read from the source
+   VM or template). This compares absolute capacity, not what is currently free, so
+   sites that deliberately oversubscribe (swap, hyperthreads, ...) can simply leave them
+   off. If no candidate satisfies them, a message is logged and placement is left to
+   vCenter, as when no usable candidate exists at all. They have no effect when an
+   explicit "Host" is given. On the vSphere Cloud they are plain checkboxes that set the
+   default for everything using that cloud. On a template or build step they are
+   tri-state: left on *inherit* (`null`/unset in a pipeline or YAML) they use the cloud's
+   default, while an explicit *Yes* (`true`) or *No* (`false`) overrides it for that call
+   site, in either direction.
+
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise
 Plus (or similar) and want placement to follow the same DRS policy as the rest of the
