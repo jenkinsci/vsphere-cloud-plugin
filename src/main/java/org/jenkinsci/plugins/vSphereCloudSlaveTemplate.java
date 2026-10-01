@@ -131,6 +131,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private Boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
     private Boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private Boolean hostSelectionRequireAvailableMemory;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -430,6 +432,35 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     /**
+     * Opt-in override of the cloud's default: only consider hosts that currently have at least as
+     * much memory free as the VM is configured with, so it is not swapped by the hypervisor.
+     * {@code null} (the default) inherits the cloud's setting; {@code true}/{@code false} override
+     * it for this call site.
+     */
+    public Boolean getHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(Boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireAvailableMemory}.
+     */
+    public String getHostSelectionRequireAvailableMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireAvailableMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemoryAsString(String hostSelectionRequireAvailableMemoryAsString) {
+        this.hostSelectionRequireAvailableMemory =
+                HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
+    }
+
+    /**
      * Gets the old (deprecated) credentialsId field.
      *
      * @return the old, deprecated, credentialsId field.
@@ -637,8 +668,11 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
-        final HostSelectionOptions hostSelectionOptions =
-                vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
+        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
+                sourceCloud,
+                hostSelectionRequireCores,
+                hostSelectionRequireMemory,
+                hostSelectionRequireAvailableMemory);
         try {
             final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
             vSphere.cloneOrDeployVm(
@@ -870,6 +904,10 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
 
         public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems() {
+            return HostSelectionOptions.triStateItems();
+        }
+
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems() {
             return HostSelectionOptions.triStateItems();
         }
 

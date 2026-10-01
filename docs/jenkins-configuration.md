@@ -261,6 +261,14 @@ Three independent, optional mechanisms are available, in order of precedence:
      size. Prefer the `numCpus`/`memoryMB` fields, or leave the checks off for such steps.
      (The source's cores-per-socket setting is kept, so `numCpus` must be a multiple of it.)
 
+   A third, separate check, **Require enough free RAM** (`hostSelectionRequireAvailableMemory`,
+   also off by default), only considers hosts that have at least the VM's memory size *free
+   right now*, so the hypervisor does not have to swap to make room for the new VM. Where "Require
+   enough RAM" looks at the memory installed, this one looks at current usage as reported by
+   vCenter: it changes by the minute, lags slightly, and several VMs created at the same moment
+   can still pick the same host. A host whose memory usage is unknown does not qualify. It
+   inherits and overrides exactly like the other two.
+
 5. **Host weights** (on the vSphere Cloud only) - what "most available host" means for
    `LEAST_LOADED` (and for the fallback when DRS gives no answer). Four whole-number weights,
    `hostWeightFreeCpuMhz`, `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB` and

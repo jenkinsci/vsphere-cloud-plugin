@@ -120,6 +120,8 @@ public class vSphereCloud extends Cloud {
     private boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
     private boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private boolean hostSelectionRequireAvailableMemory;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
@@ -453,11 +455,22 @@ public class vSphereCloud extends Cloud {
      */
     public static HostSelectionOptions hostSelectionOptions(
             @CheckForNull vSphereCloud cloud, @CheckForNull Boolean requireCores, @CheckForNull Boolean requireMemory) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, null);
+    }
+
+    /** As above, also for the "enough memory free right now" requirement. */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
                         HostSelectionOptions.resolve(
-                                cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory))
+                                cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
+                        HostSelectionOptions.resolve(
+                                cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
                 .withWeights(cloud == null ? null : cloud.hostWeights());
     }
 
@@ -541,6 +554,20 @@ public class vSphereCloud extends Cloud {
     @DataBoundSetter
     public void setHostSelectionRequireMemory(boolean hostSelectionRequireMemory) {
         this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
+     * Opt-in: only consider hosts that currently have at least as much memory free as the VM is
+     * configured with, so the new VM does not get swapped by the hypervisor. Default for every
+     * template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
     }
 
     /** Shuts down any running pool and clears the reference so it is recreated on next use. */

@@ -42,6 +42,20 @@ class HostSelectionOptionsTest {
     }
 
     @Test
+    void availableMemoryRequirementInheritsAndOverridesLikeTheOthers() {
+        vSphereCloud on = cloud(false, false);
+        on.setHostSelectionRequireAvailableMemory(true);
+        assertThat(vSphereCloud.hostSelectionOptions(on, null, null, null).isRequireAvailableMemory(), is(true));
+        assertThat(vSphereCloud.hostSelectionOptions(on, null, null, false).isRequireAvailableMemory(), is(false));
+        vSphereCloud off = cloud(false, false);
+        assertThat(vSphereCloud.hostSelectionOptions(off, null, null, null).isRequireAvailableMemory(), is(false));
+        assertThat(vSphereCloud.hostSelectionOptions(off, null, null, true).isRequireAvailableMemory(), is(true));
+        assertThat(vSphereCloud.hostSelectionOptions(null, null, null, true).isRequireAvailableMemory(), is(true));
+        // the older three-argument form leaves it to the cloud's default
+        assertThat(vSphereCloud.hostSelectionOptions(on, null, null).isRequireAvailableMemory(), is(true));
+    }
+
+    @Test
     void withoutACloudOnlyTheCallSiteCounts() {
         HostSelectionOptions options = vSphereCloud.hostSelectionOptions(null, true, null);
         assertThat(options.isRequireCores(), is(true));

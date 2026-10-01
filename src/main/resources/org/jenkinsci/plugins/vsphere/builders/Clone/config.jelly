@@ -92,6 +92,10 @@ limitations under the License.
     <f:entry title="${%Require enough RAM}" field="hostSelectionRequireMemoryAsString">
       <f:select/>
     </f:entry>
+
+    <f:entry title="${%Require enough free RAM}" field="hostSelectionRequireAvailableMemoryAsString">
+      <f:select/>
+    </f:entry>
   </f:advanced>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,sourceName,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>

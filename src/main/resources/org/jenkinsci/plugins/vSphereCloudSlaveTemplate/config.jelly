@@ -62,6 +62,10 @@
               <f:select/>
             </f:entry>
 
+            <f:entry title="${%Require enough free RAM}" field="hostSelectionRequireAvailableMemoryAsString">
+              <f:select/>
+            </f:entry>
+
             <f:entry title="${%Customization Specification}" field="customizationSpec">
                 <f:textbox/>
             </f:entry>

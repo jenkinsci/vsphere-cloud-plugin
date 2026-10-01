@@ -105,7 +105,8 @@ buildStep: [$class: 'Clone',
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
             hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
             hostSelectionRequireCores: false,       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with fewer physical cores than the VM has vCPUs
-            hostSelectionRequireMemory: false       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
+            hostSelectionRequireMemory: false,      // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
+            hostSelectionRequireAvailableMemory: false  // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts without the VM's memory size free right now
            ]
 ```
 

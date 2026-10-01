@@ -80,6 +80,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
     private Boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private Boolean hostSelectionRequireAvailableMemory;
 
     @DataBoundConstructor
     public Deploy(
@@ -277,6 +279,35 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionRequireMemory = HostSelectionOptions.triStateFromString(hostSelectionRequireMemoryAsString);
     }
 
+    /**
+     * Opt-in override of the cloud's default: only consider hosts that currently have at least as
+     * much memory free as the VM is configured with, so it is not swapped by the hypervisor.
+     * {@code null} (the default) inherits the cloud's setting; {@code true}/{@code false} override
+     * it for this call site.
+     */
+    public Boolean getHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(Boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireAvailableMemory}.
+     */
+    public String getHostSelectionRequireAvailableMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireAvailableMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemoryAsString(String hostSelectionRequireAvailableMemoryAsString) {
+        this.hostSelectionRequireAvailableMemory =
+                HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -382,8 +413,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
-        final HostSelectionOptions hostSelectionOptions =
-                vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
+        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
+                sourceCloud,
+                hostSelectionRequireCores,
+                hostSelectionRequireMemory,
+                hostSelectionRequireAvailableMemory);
         final Integer expandedNumCpus =
                 VmSize.parseOptionalPositive("numCpus", numCpus == null ? null : env.expand(numCpus));
         final Integer expandedMemoryMB =
@@ -492,6 +526,10 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems() {
+            return HostSelectionOptions.triStateItems();
+        }
+
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems() {
             return HostSelectionOptions.triStateItems();
         }
 

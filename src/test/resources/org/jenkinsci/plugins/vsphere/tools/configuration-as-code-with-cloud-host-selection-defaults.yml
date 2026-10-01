@@ -7,6 +7,7 @@ jenkins:
         hostSelectionMode: "LEAST_LOADED"
         hostSelectionRequireCores: true
         hostSelectionRequireMemory: true
+        hostSelectionRequireAvailableMemory: true
         hostWeightFreeCpuMhz: 1
         hostWeightFreeCpuPercent: 2
         hostWeightFreeMemoryMB: 3

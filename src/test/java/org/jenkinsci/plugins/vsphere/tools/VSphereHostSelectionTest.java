@@ -362,6 +362,30 @@ class VSphereHostSelectionTest {
         assertThat(VSphereHostSelection.sizeShortfall(host, false, 64, false, 999999), nullValue());
     }
 
+    @Test
+    void availableMemoryCheckLooksAtWhatIsFreeNotWhatIsInstalled() {
+        // 64 GB installed, but only 4 GB free: enough RAM sticks, not enough room right now.
+        HostCandidate crowded = loaded("crowded", 100, 1000, 61440, 65536);
+        HostCandidate roomy = loaded("roomy", 100, 1000, 8192, 65536);
+        assertThat(VSphereHostSelection.sizeShortfall(crowded, false, null, true, false, 16384), nullValue());
+        assertThat(
+                VSphereHostSelection.sizeShortfall(crowded, false, null, false, true, 16384),
+                containsString("only 4096 MB of free RAM"));
+        assertThat(VSphereHostSelection.sizeShortfall(roomy, false, null, false, true, 16384), nullValue());
+    }
+
+    @Test
+    void availableMemoryCheckAcceptsAnExactFitAndRejectsUnknownUsage() {
+        HostCandidate exact = loaded("exact", 100, 1000, 49152, 65536); // exactly 16384 free
+        HostCandidate unknown = candidate("unknown", true, false, 100, 1000, null, 65536);
+        assertThat(VSphereHostSelection.sizeShortfall(exact, false, null, false, true, 16384), nullValue());
+        assertThat(
+                VSphereHostSelection.sizeShortfall(unknown, false, null, false, true, 16384),
+                containsString("usage is unknown"));
+        // unknown VM size disables the check, as for the other size checks
+        assertThat(VSphereHostSelection.sizeShortfall(unknown, false, null, false, true, null), nullValue());
+    }
+
     /** A host with the given CPU use/capacity (MHz) and memory use/capacity (MB). */
     private static HostCandidate loaded(String name, int cpuUsed, int cpuCap, int memUsed, long memCap) {
         return new HostCandidate(name, true, false, cpuUsed, cpuCap, memUsed, memCap);

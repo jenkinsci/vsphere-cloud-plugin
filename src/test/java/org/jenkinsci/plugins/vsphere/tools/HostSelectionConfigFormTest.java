@@ -26,6 +26,7 @@ class HostSelectionConfigFormTest {
                 new VSphereConnectionConfig("vcenter.example.com", "creds", null), "roundtrip", 0, 0, false, List.of());
         cloud.setHostSelectionMode("LEAST_LOADED");
         cloud.setHostSelectionRequireCores(true);
+        cloud.setHostSelectionRequireAvailableMemory(true);
         cloud.setHostWeightFreeCpuMhz(1);
         cloud.setHostWeightFreeCpuPercent(2);
         cloud.setHostWeightFreeMemoryMB(3);
@@ -42,6 +43,7 @@ class HostSelectionConfigFormTest {
         assertThat(saved.getHostSelectionMode(), is("LEAST_LOADED"));
         assertThat(saved.isHostSelectionRequireCores(), is(true));
         assertThat(saved.isHostSelectionRequireMemory(), is(false));
+        assertThat(saved.isHostSelectionRequireAvailableMemory(), is(true));
         assertThat(saved.getHostWeightFreeCpuMhz(), is(1));
         assertThat(saved.getHostWeightFreeCpuPercent(), is(2));
         assertThat(saved.getHostWeightFreeMemoryMB(), is(3));
@@ -82,6 +84,7 @@ class HostSelectionConfigFormTest {
                 null,
                 null);
         template.setHostSelectionRequireMemory(Boolean.FALSE);
+        template.setHostSelectionRequireAvailableMemory(Boolean.FALSE);
         vSphereCloud cloud = new vSphereCloud(
                 new VSphereConnectionConfig("vcenter.example.com", "creds", null),
                 "roundtrip-template",
@@ -90,6 +93,7 @@ class HostSelectionConfigFormTest {
                 false,
                 List.of(template));
         cloud.setHostSelectionRequireMemory(true);
+        cloud.setHostSelectionRequireAvailableMemory(true);
         r.jenkins.clouds.add(cloud);
 
         try (JenkinsRule.WebClient wc = r.createWebClient()) {
@@ -102,6 +106,7 @@ class HostSelectionConfigFormTest {
         vSphereCloudSlaveTemplate savedTemplate = saved.getTemplates().get(0);
         // Explicit "No" must stay an override of the cloud's "yes" ...
         assertThat(savedTemplate.getHostSelectionRequireMemory(), is(false));
+        assertThat(savedTemplate.getHostSelectionRequireAvailableMemory(), is(false));
         // ... and a setting left on "inherit" must not turn into an explicit value.
         assertThat(savedTemplate.getHostSelectionRequireCores() == null, is(true));
     }

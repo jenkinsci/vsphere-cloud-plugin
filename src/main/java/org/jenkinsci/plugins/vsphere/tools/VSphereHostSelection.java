@@ -304,12 +304,37 @@ public final class VSphereHostSelection {
      */
     public static String sizeShortfall(
             HostCandidate candidate, boolean requireCores, Integer vmCpus, boolean requireMemory, Integer vmMemoryMB) {
+        return sizeShortfall(candidate, requireCores, vmCpus, requireMemory, false, vmMemoryMB);
+    }
+
+    /**
+     * As above, and with {@code requireAvailableMemory} also drops hosts that do not have at least
+     * {@code vmMemoryMB} of memory free right now (so the new VM would not be swapped by the
+     * hypervisor), or whose memory usage is unknown. Unlike {@code requireMemory}, which compares
+     * the RAM installed, this looks at the host's current usage, which changes by the minute.
+     */
+    public static String sizeShortfall(
+            HostCandidate candidate,
+            boolean requireCores,
+            Integer vmCpus,
+            boolean requireMemory,
+            boolean requireAvailableMemory,
+            Integer vmMemoryMB) {
         if (requireCores && vmCpus != null && candidate.getCpuCores() < vmCpus) {
             return "has " + candidate.getCpuCores() + " physical core(s), fewer than the " + vmCpus
                     + " vCPU(s) of the VM";
         }
         if (requireMemory && vmMemoryMB != null && candidate.getMemCapacityMB() < vmMemoryMB) {
             return "has " + candidate.getMemCapacityMB() + " MB of RAM, less than the " + vmMemoryMB + " MB of the VM";
+        }
+        if (requireAvailableMemory && vmMemoryMB != null) {
+            if (candidate.getMemUsageMB() == null) {
+                return "its memory usage is unknown, so it cannot be told whether " + vmMemoryMB + " MB are free";
+            }
+            if (candidate.freeMemMB() < vmMemoryMB) {
+                return "has only " + (long) candidate.freeMemMB() + " MB of free RAM right now, less than the "
+                        + vmMemoryMB + " MB of the VM";
+            }
         }
         return null;
     }

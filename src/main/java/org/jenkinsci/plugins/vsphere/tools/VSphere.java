@@ -1148,7 +1148,8 @@ public class VSphere {
         final Integer vmMemoryMB = opts.getVmMemoryMB() != null
                 ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, opts.getVmMemoryMB()))
                 : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getMemoryMB()));
-        if ((opts.isRequireCores() && vmCpus == null) || (opts.isRequireMemory() && vmMemoryMB == null)) {
+        if ((opts.isRequireCores() && vmCpus == null)
+                || ((opts.isRequireMemory() || opts.isRequireAvailableMemory()) && vmMemoryMB == null)) {
             logMessage(
                     jLogger,
                     "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
@@ -1156,7 +1157,12 @@ public class VSphere {
         final List<HostCandidate> filtered = new ArrayList<>();
         for (HostCandidate candidate : usable) {
             final String shortfall = VSphereHostSelection.sizeShortfall(
-                    candidate, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), vmMemoryMB);
+                    candidate,
+                    opts.isRequireCores(),
+                    vmCpus,
+                    opts.isRequireMemory(),
+                    opts.isRequireAvailableMemory(),
+                    vmMemoryMB);
             if (shortfall == null) {
                 filtered.add(candidate);
             } else {
@@ -1168,8 +1174,12 @@ public class VSphere {
                     jLogger,
                     "No candidate host in cluster \"" + clusterResource.getName() + "\" satisfies the requested"
                             + (opts.isRequireCores() ? " core count (>= " + vmCpus + ")" : "")
-                            + (opts.isRequireCores() && opts.isRequireMemory() ? " and" : "")
+                            + (opts.isRequireCores() && (opts.isRequireMemory() || opts.isRequireAvailableMemory())
+                                    ? " and"
+                                    : "")
                             + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
+                            + (opts.isRequireMemory() && opts.isRequireAvailableMemory() ? " and" : "")
+                            + (opts.isRequireAvailableMemory() ? " free RAM (>= " + vmMemoryMB + " MB)" : "")
                             + " of the VM; letting vSphere decide placement.");
             return null;
         }

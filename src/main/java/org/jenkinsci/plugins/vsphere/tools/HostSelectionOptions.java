@@ -15,20 +15,27 @@ public final class HostSelectionOptions {
 
     private final boolean requireCores;
     private final boolean requireMemory;
+    private final boolean requireAvailableMemory;
     private final @CheckForNull Integer vmCpus;
     private final @CheckForNull Long vmMemoryMB;
     private final HostWeights weights;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
-        this(requireCores, requireMemory, null, null, HostWeights.DEFAULT);
+        this(requireCores, requireMemory, false);
+    }
+
+    public HostSelectionOptions(boolean requireCores, boolean requireMemory, boolean requireAvailableMemory) {
+        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT);
     }
 
     private HostSelectionOptions(
             boolean requireCores,
             boolean requireMemory,
+            boolean requireAvailableMemory,
             @CheckForNull Integer vmCpus,
             @CheckForNull Long vmMemoryMB,
             HostWeights weights) {
+        this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
@@ -42,12 +49,14 @@ public final class HostSelectionOptions {
      * - for VMs that are known to be resized right after being cloned.
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
-        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB, weights);
+        return new HostSelectionOptions(
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
     public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
-        return new HostSelectionOptions(requireCores, requireMemory, vmCpus, vmMemoryMB, weights);
+        return new HostSelectionOptions(
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
     }
 
     /** What "most available host" means; {@link HostWeights#DEFAULT} for the original ranking. */
@@ -68,6 +77,14 @@ public final class HostSelectionOptions {
     /** Only consider hosts with at least as many physical cores as the VM has vCPUs. */
     public boolean isRequireCores() {
         return requireCores;
+    }
+
+    /**
+     * Only consider hosts that currently have at least as much memory <em>free</em> as the VM is
+     * configured with, so the new VM does not push the host into swapping.
+     */
+    public boolean isRequireAvailableMemory() {
+        return requireAvailableMemory;
     }
 
     /** Only consider hosts with at least as much physical RAM as the VM is configured with. */

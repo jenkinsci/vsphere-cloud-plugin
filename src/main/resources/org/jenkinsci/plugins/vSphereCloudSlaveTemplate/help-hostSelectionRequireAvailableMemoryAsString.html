@@ -1,0 +1,20 @@
+<div>
+  (Optional, off by default) When automatic host selection is in use (a "Host Selection
+  Mode" is set and no explicit host is given), only consider candidate hosts that have at
+  least as much memory <b>free right now</b> as the VM being created is configured with, so the
+  hypervisor does not have to start swapping to make room for it.
+  <p>
+  This differs from "Require enough RAM", which compares the memory <i>installed</i> in the host.
+  This one uses the host's current memory usage as reported by vCenter, which changes by the
+  minute and lags a little, so several VMs created at once can still land on the same host. A
+  host whose memory usage is unknown does not qualify.
+  </p>
+  <p>
+  If no candidate host qualifies, a message is logged and placement is left to vCenter, as when
+  no usable candidate host exists at all. It has no effect when an explicit host is given.
+  </p>
+  <p>
+  "Inherit" (the default) uses the setting of the vSphere cloud this belongs to; "Yes" or "No"
+  overrides it for this one only.
+  </p>
+</div>
