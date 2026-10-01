@@ -305,6 +305,49 @@ public class VSphere {
             HostSelectionOptions hostSelectionOptions,
             PrintStream jLogger)
             throws VSphereException {
+        deployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus a vCPU count and memory size (MB) to create the VM with
+     * in the same operation, instead of reconfiguring it afterwards; see {@link #cloneOrDeployVm}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void deployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            Integer numCpus,
+            Integer memoryMB,
+            PrintStream jLogger)
+            throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
@@ -325,6 +368,8 @@ public class VSphere {
                 hostSelectionMode,
                 hostSelectionCandidates,
                 hostSelectionOptions,
+                numCpus,
+                memoryMB,
                 jLogger);
     }
 
@@ -432,6 +477,49 @@ public class VSphere {
             HostSelectionOptions hostSelectionOptions,
             PrintStream jLogger)
             throws VSphereException {
+        cloneVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus a vCPU count and memory size (MB) to create the VM with
+     * in the same operation, instead of reconfiguring it afterwards; see {@link #cloneOrDeployVm}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void cloneVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            Integer numCpus,
+            Integer memoryMB,
+            PrintStream jLogger)
+            throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
@@ -452,6 +540,8 @@ public class VSphere {
                 hostSelectionMode,
                 hostSelectionCandidates,
                 hostSelectionOptions,
+                numCpus,
+                memoryMB,
                 jLogger);
     }
 
@@ -639,6 +729,64 @@ public class VSphere {
             HostSelectionOptions hostSelectionOptions,
             PrintStream jLogger)
             throws VSphereException {
+        cloneOrDeployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                useCurrentSnapshot,
+                namedSnapshot,
+                powerOn,
+                extraConfigParameters,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus the size to create the VM with.
+     *
+     * @param numCpus
+     *            (Optional) Number of vCPUs to give the new VM in the same operation that
+     *            creates it, instead of reconfiguring it afterwards. Null keeps the source's.
+     *            Also what the host size checks compare against, in place of the source's.
+     *            Mind that the source's cores-per-socket setting is kept, so the new count has
+     *            to be a multiple of it.
+     * @param memoryMB
+     *            (Optional) Memory size in MB to give the new VM, likewise. Null keeps the
+     *            source's.
+     * @throws VSphereException
+     *             if anything goes wrong.
+     */
+    public void cloneOrDeployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            Integer numCpus,
+            Integer memoryMB,
+            PrintStream jLogger)
+            throws VSphereException {
         if (namedSnapshot == null && extraConfigParameters == null) {
             // NOTE: This "if" clause may be superfluous - just that previously
             // this message was only logged by cloneVm() or deployVm()... so for
@@ -727,6 +875,26 @@ public class VSphere {
                 cloneSpec.setCustomization(spec.getSpec());
             }
 
+            if (numCpus != null || memoryMB != null) {
+                VirtualMachineConfigSpec sizeSpec = cloneSpec.getConfig();
+                if (sizeSpec == null) {
+                    sizeSpec = new VirtualMachineConfigSpec();
+                }
+                if (numCpus != null) {
+                    sizeSpec.setNumCPUs(numCpus);
+                }
+                if (memoryMB != null) {
+                    sizeSpec.setMemoryMB(Long.valueOf(memoryMB));
+                }
+                cloneSpec.setConfig(sizeSpec);
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be created with"
+                                + (numCpus != null ? " " + numCpus + " vCPU(s)" : "")
+                                + (numCpus != null && memoryMB != null ? " and" : "")
+                                + (memoryMB != null ? " " + memoryMB + " MB of memory" : "") + ".");
+            }
+
             Folder folder;
             if (folderName == null || folderName.isEmpty() || folderName.equals(" ")) {
                 // same folder as source
@@ -749,7 +917,16 @@ public class VSphere {
                     host,
                     hostSelectionMode,
                     hostSelectionCandidates,
-                    hostSelectionOptions);
+                    (hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions)
+                            .withVmSize(
+                                    numCpus != null
+                                            ? numCpus
+                                            : (hostSelectionOptions == null ? null : hostSelectionOptions.getVmCpus()),
+                                    memoryMB != null
+                                            ? Long.valueOf(memoryMB)
+                                            : (hostSelectionOptions == null
+                                                    ? null
+                                                    : hostSelectionOptions.getVmMemoryMB())));
             if (selectedHost != null) {
                 rel.setHost(selectedHost.getMOR());
                 logMessage(

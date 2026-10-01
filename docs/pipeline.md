@@ -99,6 +99,8 @@ buildStep: [$class: 'Clone',
             useCurrentSnapshot: null,      // true = clone from current snapshot; false = don't use snapshot
             namedSnapshot: '',             // clone from this specific named snapshot (optional)
             extraConfigParameters: [:],    // extra VMX key-value pairs to set on the new VM (optional)
+            numCpus: '',                   // (optional) create the VM with this many vCPUs, in one step; blank keeps the source's
+            memoryMB: '',                  // (optional) create the VM with this much memory (MB); blank keeps the source's
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
             hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
@@ -165,6 +167,8 @@ buildStep: [$class: 'Deploy',
             powerOn: false,
             timeoutInSeconds: 60,
             customizationSpec: '',
+            numCpus: '',                 // (optional) same meaning as on the Clone step
+            memoryMB: '',                // (optional) same meaning as on the Clone step
             host: '',                    // (optional) same meaning as on the Clone step
             hostSelectionMode: '',        // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED'
             hostSelectionCandidates: [],           // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string

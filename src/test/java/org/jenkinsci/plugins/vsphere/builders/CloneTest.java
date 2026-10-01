@@ -62,6 +62,20 @@ class CloneTest {
     }
 
     @Test
+    void vmSizeIsOptionalAndBoundLikeAPipelineWouldBindIt() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getNumCpus(), nullValue());
+        assertThat(omitted.getMemoryMB(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("numCpus", "8");
+        args.put("memoryMB", "16384");
+        Clone sized = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(sized.getNumCpus(), is("8"));
+        assertThat(sized.getMemoryMB(), is("16384"));
+    }
+
+    @Test
     void hostPlacementFieldsDefaultToNullWhenOmitted() throws Exception {
         // Backward compatibility: existing jobs/pipelines that don't mention these
         // fields must behave exactly as before (no host restriction of any kind).

@@ -55,6 +55,14 @@ limitations under the License.
       <f:textbox/>
     </f:entry>
 
+    <f:entry title="${%vCPUs}" field="numCpus">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Memory (MB)}" field="memoryMB">
+      <f:textbox/>
+    </f:entry>
+
     <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
       <f:select/>
     </f:entry>

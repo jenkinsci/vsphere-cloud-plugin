@@ -252,11 +252,14 @@ Three independent, optional mechanisms are available, in order of precedence:
      those steps will set (they run right after the clone is created). If a value cannot be
      worked out ahead of time, such as one using a variable that only exists at build time,
      the master image's size is assumed for that component.
-   * For the **Clone and Deploy build steps**, the size of the source VM or template. They
-     do **not** know about `Reconfigure*` steps that you run *after* cloning, because host
-     placement has already happened by then - if those steps make the VM bigger or smaller
-     than its source, the checks compare against the wrong size. Keep the source VM at
-     (or above) the size you actually need, or leave the checks off for such steps.
+   * For the **Clone and Deploy build steps**, the size you give in their own **vCPUs**
+     (`numCpus`) / **Memory (MB)** (`memoryMB`) fields, if set - these are applied in the
+     same operation that creates the VM, so no separate reconfigure is needed - else the
+     size of the source VM or template. They do **not** know about `Reconfigure*` steps that
+     you run *after* cloning, because host placement has already happened by then: if those
+     make the VM bigger or smaller than its source, the checks compare against the wrong
+     size. Prefer the `numCpus`/`memoryMB` fields, or leave the checks off for such steps.
+     (The source's cores-per-socket setting is kept, so `numCpus` must be a multiple of it.)
 
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise

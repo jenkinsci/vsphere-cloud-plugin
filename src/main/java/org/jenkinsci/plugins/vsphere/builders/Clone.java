@@ -43,6 +43,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.jenkinsci.plugins.vsphere.tools.VmSize;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -82,6 +83,11 @@ public class Clone extends VSphereBuildStep {
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Optional; vCPU count to create the VM with, in the same operation. Unset keeps the source's. */
+    private String numCpus;
+    /** Optional; memory size in MB to create the VM with, in the same operation. Unset keeps the source's. */
+    private String memoryMB;
 
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private Boolean hostSelectionRequireCores;
@@ -252,6 +258,26 @@ public class Clone extends VSphereBuildStep {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
+    /** Optional: number of vCPUs to create the VM with (instead of the source's); may use variables. */
+    public String getNumCpus() {
+        return numCpus;
+    }
+
+    @DataBoundSetter
+    public void setNumCpus(String numCpus) {
+        this.numCpus = numCpus;
+    }
+
+    /** Optional: memory size in MB to create the VM with (instead of the source's); may use variables. */
+    public String getMemoryMB() {
+        return memoryMB;
+    }
+
+    @DataBoundSetter
+    public void setMemoryMB(String memoryMB) {
+        this.memoryMB = memoryMB;
+    }
+
     /**
      * Opt-in override of the cloud's default: only consider hosts with at least as many
      * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
@@ -389,6 +415,10 @@ public class Clone extends VSphereBuildStep {
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
         final HostSelectionOptions hostSelectionOptions =
                 vSphereCloud.hostSelectionOptions(sourceCloud, hostSelectionRequireCores, hostSelectionRequireMemory);
+        final Integer expandedNumCpus =
+                VmSize.parseOptionalPositive("numCpus", numCpus == null ? null : env.expand(numCpus));
+        final Integer expandedMemoryMB =
+                VmSize.parseOptionalPositive("memoryMB", memoryMB == null ? null : env.expand(memoryMB));
 
         vsphere.cloneOrDeployVm(
                 expandedClone,
@@ -407,6 +437,8 @@ public class Clone extends VSphereBuildStep {
                 resolvedHostSelectionMode,
                 resolvedHostSelectionCandidates,
                 hostSelectionOptions,
+                expandedNumCpus,
+                expandedMemoryMB,
                 jLogger);
 
         final int timeoutInSecondsForGetIp = getTimeoutInSeconds();
