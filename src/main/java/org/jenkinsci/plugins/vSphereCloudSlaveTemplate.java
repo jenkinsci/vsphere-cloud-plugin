@@ -899,15 +899,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             return items;
         }
 
-        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return HostSelectionOptions.triStateItems();
         }
 
-        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return HostSelectionOptions.triStateItems();
         }
 
-        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return HostSelectionOptions.triStateItems();
         }
 

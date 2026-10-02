@@ -14,6 +14,7 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToAccessJob;
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 import com.vmware.vim25.mo.VirtualMachine;
@@ -591,15 +592,21 @@ public class Clone extends VSphereBuildStep {
             return items;
         }
 
-        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
             return HostSelectionOptions.triStateItems();
         }
 
-        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
             return HostSelectionOptions.triStateItems();
         }
 
-        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
             return HostSelectionOptions.triStateItems();
         }
 
