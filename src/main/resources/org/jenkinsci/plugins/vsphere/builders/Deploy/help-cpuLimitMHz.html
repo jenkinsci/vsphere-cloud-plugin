@@ -1,0 +1,12 @@
+<div>
+  (Optional) The CPU reservation, in MHz, guaranteeing this amount of physical CPU capacity to the new VM. (Named like the Reconfigure CPU step's setting, which also sets a reservation.)
+  <p>
+  Applied in the very same operation that creates the VM, rather than cloning at the source's size
+  and reconfiguring afterwards. Has the same meaning as the setting of the same name of the
+  "Reconfigure CPU"/"Reconfigure Memory" steps. Leave blank to keep the source VM's (or template's)
+  own value. Variables can be used.
+  </p>
+  <p>
+  Mind that a reservation can make the cloned VM impossible to power on if the chosen host cannot guarantee it.
+  </p>
+</div>

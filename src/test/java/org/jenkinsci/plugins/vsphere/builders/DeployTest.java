@@ -48,15 +48,21 @@ class DeployTest {
     @Test
     void vmSizeIsOptionalAndBoundLikeAPipelineWouldBindIt() throws Exception {
         Deploy omitted = DescribableModel.of(Deploy.class).instantiate(baseArgs());
-        assertThat(omitted.getNumCpus(), nullValue());
-        assertThat(omitted.getMemoryMB(), nullValue());
+        assertThat(omitted.getCpuCores(), nullValue());
+        assertThat(omitted.getCoresPerSocket(), nullValue());
+        assertThat(omitted.getCpuLimitMHz(), nullValue());
+        assertThat(omitted.getMemorySize(), nullValue());
 
         Map<String, Object> args = baseArgs();
-        args.put("numCpus", "8");
-        args.put("memoryMB", "16384");
+        args.put("cpuCores", "8");
+        args.put("coresPerSocket", "4");
+        args.put("cpuLimitMHz", "2000");
+        args.put("memorySize", "16384");
         Deploy sized = DescribableModel.of(Deploy.class).instantiate(args);
-        assertThat(sized.getNumCpus(), is("8"));
-        assertThat(sized.getMemoryMB(), is("16384"));
+        assertThat(sized.getCpuCores(), is("8"));
+        assertThat(sized.getCoresPerSocket(), is("4"));
+        assertThat(sized.getCpuLimitMHz(), is("2000"));
+        assertThat(sized.getMemorySize(), is("16384"));
     }
 
     @Test

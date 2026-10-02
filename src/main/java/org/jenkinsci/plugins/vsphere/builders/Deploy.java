@@ -73,9 +73,13 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Set<String> hostSelectionCandidates;
 
     /** Optional; vCPU count to create the VM with, in the same operation. Unset keeps the source's. */
-    private String numCpus;
-    /** Optional; memory size in MB to create the VM with, in the same operation. Unset keeps the source's. */
-    private String memoryMB;
+    private String cpuCores;
+    /** Optional; cores per socket to create the VM with. Unset keeps the source's. */
+    private String coresPerSocket;
+    /** Optional; CPU reservation in MHz to create the VM with. Unset means none. */
+    private String cpuLimitMHz;
+    /** Optional; memory size in MB to create the VM with. Unset keeps the source's. */
+    private String memorySize;
 
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private Boolean hostSelectionRequireCores;
@@ -206,24 +210,44 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
-    /** Optional: number of vCPUs to create the VM with (instead of the source's); may use variables. */
-    public String getNumCpus() {
-        return numCpus;
+    /** Optional: number of vCPUs to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCpuCores() {
+        return cpuCores;
     }
 
     @DataBoundSetter
-    public void setNumCpus(String numCpus) {
-        this.numCpus = numCpus;
+    public void setCpuCores(String cpuCores) {
+        this.cpuCores = cpuCores;
     }
 
-    /** Optional: memory size in MB to create the VM with (instead of the source's); may use variables. */
-    public String getMemoryMB() {
-        return memoryMB;
+    /** Optional: cores per socket to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCoresPerSocket() {
+        return coresPerSocket;
     }
 
     @DataBoundSetter
-    public void setMemoryMB(String memoryMB) {
-        this.memoryMB = memoryMB;
+    public void setCoresPerSocket(String coresPerSocket) {
+        this.coresPerSocket = coresPerSocket;
+    }
+
+    /** Optional: CPU reservation in MHz to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCpuLimitMHz() {
+        return cpuLimitMHz;
+    }
+
+    @DataBoundSetter
+    public void setCpuLimitMHz(String cpuLimitMHz) {
+        this.cpuLimitMHz = cpuLimitMHz;
+    }
+
+    /** Optional: memory size in MB to create the VM with, as {@code ReconfigureMemory}'s; may use variables. */
+    public String getMemorySize() {
+        return memorySize;
+    }
+
+    @DataBoundSetter
+    public void setMemorySize(String memorySize) {
+        this.memorySize = memorySize;
     }
 
     /**
@@ -419,10 +443,11 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 hostSelectionRequireCores,
                 hostSelectionRequireMemory,
                 hostSelectionRequireAvailableMemory);
-        final Integer expandedNumCpus =
-                VmSize.parseOptionalPositive("numCpus", numCpus == null ? null : env.expand(numCpus));
-        final Integer expandedMemoryMB =
-                VmSize.parseOptionalPositive("memoryMB", memoryMB == null ? null : env.expand(memoryMB));
+        final VmSize vmSize = VmSize.of(
+                cpuCores == null ? null : env.expand(cpuCores),
+                coresPerSocket == null ? null : env.expand(coresPerSocket),
+                cpuLimitMHz == null ? null : env.expand(cpuLimitMHz),
+                memorySize == null ? null : env.expand(memorySize));
 
         vsphere.deployVm(
                 expandedClone,
@@ -438,8 +463,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 resolvedHostSelectionMode,
                 resolvedHostSelectionCandidates,
                 hostSelectionOptions,
-                expandedNumCpus,
-                expandedMemoryMB,
+                vmSize,
                 jLogger);
         VSphereLogger.vsLogger(jLogger, "\"" + expandedClone + "\" successfully deployed!");
         if (!powerOn) {

@@ -252,14 +252,19 @@ Three independent, optional mechanisms are available, in order of precedence:
      those steps will set (they run right after the clone is created). If a value cannot be
      worked out ahead of time, such as one using a variable that only exists at build time,
      the master image's size is assumed for that component.
-   * For the **Clone and Deploy build steps**, the size you give in their own **vCPUs**
-     (`numCpus`) / **Memory (MB)** (`memoryMB`) fields, if set - these are applied in the
+   * For the **Clone and Deploy build steps**, the size you give in their own
+     **Number CPU Cores** (`cpuCores`) / **Memory Size in MB** (`memorySize`) fields, if set - these are applied in the
      same operation that creates the VM, so no separate reconfigure is needed - else the
      size of the source VM or template. They do **not** know about `Reconfigure*` steps that
      you run *after* cloning, because host placement has already happened by then: if those
      make the VM bigger or smaller than its source, the checks compare against the wrong
-     size. Prefer the `numCpus`/`memoryMB` fields, or leave the checks off for such steps.
-     (The source's cores-per-socket setting is kept, so `numCpus` must be a multiple of it.)
+     size. Prefer the `cpuCores`/`memorySize` fields, or leave the checks off for such steps.
+     (The source's cores-per-socket setting is kept unless you also set `coresPerSocket`, and
+     `cpuCores` must be a multiple of it; this is checked before cloning.)
+     These fields, `cpuCores`, `coresPerSocket`, `cpuLimitMHz` (a CPU *reservation* in MHz,
+     named like the Reconfigure CPU step's) and `memorySize`, have the same names and meaning as
+     the settings of the `Reconfigure CPU` / `Reconfigure Memory` steps, but are applied while the
+     VM is being created. All are optional; unset ones keep the source's values.
 
    A third, separate check, **Require enough free RAM** (`hostSelectionRequireAvailableMemory`,
    also off by default), only considers hosts that have at least the VM's memory size *free

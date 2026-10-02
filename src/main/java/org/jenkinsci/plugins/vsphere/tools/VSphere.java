@@ -320,7 +320,6 @@ public class VSphere {
                 hostSelectionCandidates,
                 hostSelectionOptions,
                 null,
-                null,
                 jLogger);
     }
 
@@ -344,8 +343,7 @@ public class VSphere {
             String hostSelectionMode,
             Set<String> hostSelectionCandidates,
             HostSelectionOptions hostSelectionOptions,
-            Integer numCpus,
-            Integer memoryMB,
+            VmSize vmSize,
             PrintStream jLogger)
             throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
@@ -368,8 +366,7 @@ public class VSphere {
                 hostSelectionMode,
                 hostSelectionCandidates,
                 hostSelectionOptions,
-                numCpus,
-                memoryMB,
+                vmSize,
                 jLogger);
     }
 
@@ -492,7 +489,6 @@ public class VSphere {
                 hostSelectionCandidates,
                 hostSelectionOptions,
                 null,
-                null,
                 jLogger);
     }
 
@@ -516,8 +512,7 @@ public class VSphere {
             String hostSelectionMode,
             Set<String> hostSelectionCandidates,
             HostSelectionOptions hostSelectionOptions,
-            Integer numCpus,
-            Integer memoryMB,
+            VmSize vmSize,
             PrintStream jLogger)
             throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
@@ -540,8 +535,7 @@ public class VSphere {
                 hostSelectionMode,
                 hostSelectionCandidates,
                 hostSelectionOptions,
-                numCpus,
-                memoryMB,
+                vmSize,
                 jLogger);
     }
 
@@ -747,21 +741,17 @@ public class VSphere {
                 hostSelectionCandidates,
                 hostSelectionOptions,
                 null,
-                null,
                 jLogger);
     }
 
     /**
      * As the overload without them, plus the size to create the VM with.
      *
-     * @param numCpus
-     *            (Optional) Number of vCPUs to give the new VM in the same operation that
-     *            creates it, instead of reconfiguring it afterwards. Null keeps the source's.
-     *            Also what the host size checks compare against, in place of the source's.
-     *            Mind that the source's cores-per-socket setting is kept, so the new count has
-     *            to be a multiple of it.
-     * @param memoryMB
-     *            (Optional) Memory size in MB to give the new VM, likewise. Null keeps the
+     * @param vmSize
+     *            (Optional, null means {@link VmSize#NONE}) CPU and memory settings to give the
+     *            new VM in the same operation that creates it, instead of reconfiguring it
+     *            afterwards; unset parts keep the source's. {@code cpuCores} and {@code
+     *            memorySize} are also what the host size checks compare against, in place of the
      *            source's.
      * @throws VSphereException
      *             if anything goes wrong.
@@ -783,8 +773,7 @@ public class VSphere {
             String hostSelectionMode,
             Set<String> hostSelectionCandidates,
             HostSelectionOptions hostSelectionOptions,
-            Integer numCpus,
-            Integer memoryMB,
+            VmSize vmSize,
             PrintStream jLogger)
             throws VSphereException {
         if (namedSnapshot == null && extraConfigParameters == null) {
@@ -875,24 +864,22 @@ public class VSphere {
                 cloneSpec.setCustomization(spec.getSpec());
             }
 
-            if (numCpus != null || memoryMB != null) {
+            final VmSize size = vmSize == null ? VmSize.NONE : vmSize;
+            if (!size.isEmpty()) {
+                final VirtualHardware sourceHardware = vmConfig.getHardware();
+                size.validateAgainstSource(
+                        sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()),
+                        sourceHardware == null ? null : sourceHardware.getNumCoresPerSocket());
                 VirtualMachineConfigSpec sizeSpec = cloneSpec.getConfig();
                 if (sizeSpec == null) {
                     sizeSpec = new VirtualMachineConfigSpec();
                 }
-                if (numCpus != null) {
-                    sizeSpec.setNumCPUs(numCpus);
-                }
-                if (memoryMB != null) {
-                    sizeSpec.setMemoryMB(Long.valueOf(memoryMB));
-                }
+                size.applyTo(sizeSpec);
                 cloneSpec.setConfig(sizeSpec);
                 logMessage(
                         jLogger,
-                        "Clone of " + sourceType + " \"" + sourceName + "\" will be created with"
-                                + (numCpus != null ? " " + numCpus + " vCPU(s)" : "")
-                                + (numCpus != null && memoryMB != null ? " and" : "")
-                                + (memoryMB != null ? " " + memoryMB + " MB of memory" : "") + ".");
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be created with " + size.describe()
+                                + ".");
             }
 
             Folder folder;
@@ -907,6 +894,14 @@ public class VSphere {
                 folder = getFolder(folderName);
             }
 
+            // What the VM will be created with beats what the caller announced, which beats the source's.
+            final HostSelectionOptions announced =
+                    hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
+            final Integer sizeCpus = size.getCpuCores();
+            final Integer sizeMemory = size.getMemorySize();
+            final HostSelectionOptions selectionOptions = announced.withVmSize(
+                    sizeCpus != null ? sizeCpus : announced.getVmCpus(),
+                    sizeMemory != null ? Long.valueOf(sizeMemory.longValue()) : announced.getVmMemoryMB());
             final HostSystem selectedHost = selectHost(
                     jLogger,
                     getClusterByName(cluster),
@@ -917,16 +912,7 @@ public class VSphere {
                     host,
                     hostSelectionMode,
                     hostSelectionCandidates,
-                    (hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions)
-                            .withVmSize(
-                                    numCpus != null
-                                            ? numCpus
-                                            : (hostSelectionOptions == null ? null : hostSelectionOptions.getVmCpus()),
-                                    memoryMB != null
-                                            ? Long.valueOf(memoryMB)
-                                            : (hostSelectionOptions == null
-                                                    ? null
-                                                    : hostSelectionOptions.getVmMemoryMB())));
+                    selectionOptions);
             if (selectedHost != null) {
                 rel.setHost(selectedHost.getMOR());
                 logMessage(
