@@ -167,8 +167,59 @@ below.
 
 #### Controlling which ESXi host a clone lands on
 
-By default (all three fields left blank), clones are placed wherever vCenter's own
-default placement logic decides - in practice, often the same host the source
+##### Overview of dynamic hypervisor selection
+
+The vCenter cluster with several hypervisor hosts can default where new clones would
+appear, often swarming the same host on which the template is defined. Recent versions
+of this plugin allow the Jenkins Configuration for a cloud, and/or the ultimate steps
+to Clone or Deploy a VM, to require load-balancing among hosts in the cluster -- whether
+calling on DRS (paid VMWare feature) or having the plugin itself make a choice based
+on currently reported available resources. Note that these reports may be not real-time,
+so a burst of VM creations in a short time frame can still pile up on the same "most
+preferable" host as it was known in recent past.
+
+Balancing can be further impacted by optionally assigning weights to the available
+absolute and relative memory and CPU resources, for sysadmins to prioritize which
+resource aspect is most important for them. This logic and its settings are explored
+in much more detail in sections below, here is a short summary:
+
+* By default, with all four weights at zero, each host's score is "1 minus the larger
+  of its CPU use and its memory **use**, each as a fraction of that host's own capacity".
+  For example, a host at 70% CPU and 40% memory scores 0.3 (1.0 minus 0.7).
+  The host with the highest score, meaning **the one whose busier resource has the
+  most room**, wins; any ties keep cluster order (the first in considered list wins).
+* With weights set, each host gets four non-negative integers, as sysadmin-assigned
+  "weights" for **available** room in each of the considered resources (absolute or
+  relative to host capacity), and its score is their weighted average:
+  ```
+  score = (wCpuMhz*a + wCpuPct*b + wMemMB*c + wMemPct*d)
+        / (wCpuMhz   + wCpuPct   + wMemMB   + wMemPct)
+  ```
+  - **`a`, free CPU in MHz**: the host's free MHz divided by the largest free MHz
+    among the candidates. The host with the most free MHz gets 1.
+  - **`b`, free CPU percent**: the host's free MHz divided by its own CPU capacity.
+  - **`c`, free memory in MB**: the host's free MB divided by the largest free MB
+    among the candidates.
+  - **`d`, free memory percent**: the host's free MB divided by its own memory.
+
+  Highest score wins with this formula as well. Logical implications:
+
+  - Due to JCasC limitations, weights must be integers.
+    To express `0.5 : 0.25`, use `2` and `1` instead.
+  - Dividing by the **weight total** means only the proportions matter:
+    assignments like `a = b = c = d = 1` and  `a = b = c = d = 100`
+    have identical results.
+  - A weight of `0` drops that measure, and the highest score still wins.
+  - Hosts with **no** usage statistics (no report from vCenter was seen) are
+    left out of the ranking entirely (not just seen as having zero score).
+  - If ALL hosts' usage is not reported, the plugin picks no host and
+    logs that it was unable to determine the load of any candidate host,
+    and lets vSphere decide the placement (which is the original behaviour).
+
+##### Details
+
+By default (all three main fields left blank), clones are placed wherever vCenter's
+own default placement logic decides -- in practice, often the same host the source
 VM/template is registered on, which can unbalance load across a cluster over time.
 **This is unchanged from previous plugin versions**: nothing about existing jobs,
 pipelines, or templates changes unless you explicitly set one of these fields.
@@ -290,7 +341,7 @@ Three independent, optional mechanisms are available, in order of precedence:
    * Whole numbers only: a decimal value from Configuration-as-Code would be silently read as
      zero.
 
-#### Seeing why a host was chosen
+##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)
 lists the cluster's hosts, each with the reason it was ruled out (not connected, in
@@ -299,7 +350,7 @@ statistics), then every remaining candidate with its score and free CPU/memory, 
 and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
 scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
 
-#### Settings for the classic UI, pipeline and YAML
+##### Settings for the classic UI, pipeline and JCasC YAML
 
 On templates and build steps, the *Require enough ...* settings are drop-downs in the classic UI,
 which store an unset ("inherit") value as an empty string - bound through
