@@ -312,7 +312,8 @@ buildStep: [$class: 'RenameSnapshot',
             vm: 'my-vm',
             oldName: 'before-patch',
             newName: 'patched-2024-01',
-            newDescription: ''
+            newDescription: '',
+            failOnNoExist: true  // default; set false to succeed when the snapshot is absent
            ]
 ```
 

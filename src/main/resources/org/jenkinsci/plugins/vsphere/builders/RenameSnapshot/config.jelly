@@ -32,5 +32,9 @@ limitations under the License.
         <f:textarea />
     </f:entry>
 
+    <f:entry title="${%Fail if snapshot does not exist?}" field="failOnNoExist">
+        <f:checkbox default="true"/>
+    </f:entry>
+
     <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,vm,oldName,newName"/>
 </j:jelly>
