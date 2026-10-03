@@ -4,6 +4,7 @@ import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUse
 
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.AbortException;
 import hudson.Extension;
 import hudson.Util;
@@ -11,6 +12,7 @@ import hudson.model.Computer;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Executor;
 import hudson.model.ItemGroup;
+import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Queue.BuildableItem;
 import hudson.model.Result;
@@ -27,6 +29,7 @@ import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import jenkins.model.Jenkins;
+import jenkins.model.NodeListener;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.accmod.Restricted;
@@ -407,6 +410,39 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName())) {
                 throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
             }
+        }
+    }
+
+    /**
+     * Saving the configuration of an agent replaces its {@link Node} (and thereby its launchers) while a
+     * connected {@link SlaveComputer} carries on. Make sure the launcher that made the connection still gets
+     * torn down when that computer disconnects (JENKINS-62570).
+     */
+    @Extension
+    public static class vSphereCloudNodeListener extends NodeListener {
+
+        @Override
+        protected void onUpdated(@NonNull Node oldOne, @NonNull Node newOne) {
+            if (!(oldOne instanceof vSphereCloudSlave) || !(newOne instanceof vSphereCloudSlave)) {
+                return;
+            }
+            final Computer computer = newOne.toComputer();
+            final boolean connected = computer instanceof SlaveComputer && ((SlaveComputer) computer).isOnline();
+            carryOverConnectedLauncher((vSphereCloudSlave) oldOne, (vSphereCloudSlave) newOne, connected);
+        }
+    }
+
+    /**
+     * If the agent was connected when it was replaced, hand the old delegate launcher (which owns the live
+     * connection) over to the new launcher, to be torn down at disconnect.
+     */
+    static void carryOverConnectedLauncher(vSphereCloudSlave oldOne, vSphereCloudSlave newOne, boolean connected) {
+        if (!connected || oldOne == newOne) {
+            return;
+        }
+        if (oldOne.getLauncher() instanceof vSphereCloudLauncher
+                && newOne.getLauncher() instanceof vSphereCloudLauncher) {
+            ((vSphereCloudLauncher) newOne.getLauncher()).takeOverFrom((vSphereCloudLauncher) oldOne.getLauncher());
         }
     }
 
