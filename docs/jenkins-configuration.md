@@ -201,6 +201,14 @@ in much more detail in sections below, here is a short summary:
   - **`c`, free memory in MB**: the host's free MB divided by the largest free MB
     among the candidates.
   - **`d`, free memory percent**: the host's free MB divided by its own memory.
+  - Weight variables for Jenkins configuration, JCasC YAML or step parameters are
+    longer than in the short formula above, e.g.
+    ```
+    hostWeightFreeCpuMhz: '1',
+    hostWeightFreeCpuPercent: '1',
+    hostWeightFreeMemoryMB: '1',
+    hostWeightFreeMemoryPercent: '1',
+    ```
 
   Highest score wins with this formula as well. Logical implications:
 
