@@ -16,6 +16,9 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import com.vmware.vim25.VirtualHardware;
+import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.mo.VirtualMachine;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.AbstractBuild;
@@ -90,9 +93,34 @@ public class ReconfigureMemory extends ReconfigureStep {
         String expandedMemorySize = env.expand(memorySize);
 
         VSphereLogger.vsLogger(jLogger, "Preparing reconfigure: Memory");
-        spec.setMemoryMB(Long.valueOf(expandedMemorySize));
+        final Long newMemoryMB = Long.valueOf(expandedMemorySize);
+        VSphereLogger.vsLogger(jLogger, describeChange(vm, currentMemoryMB(vm), newMemoryMB));
+        spec.setMemoryMB(newMemoryMB);
         VSphereLogger.vsLogger(jLogger, "Finished!");
         return true;
+    }
+
+    /** The memory size (MB) the VM is configured with right now, or null if it cannot be told. */
+    private static Integer currentMemoryMB(final VirtualMachine vm) {
+        try {
+            final VirtualMachineConfigInfo config = vm == null ? null : vm.getConfig();
+            final VirtualHardware hardware = config == null ? null : config.getHardware();
+            return hardware == null ? null : Integer.valueOf(hardware.getMemoryMB());
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The line logged for the change that is about to be requested. */
+    static String describeChange(final VirtualMachine vm, final Integer previousMB, final long newMB) {
+        String vmName = null;
+        try {
+            vmName = vm == null ? null : vm.getName();
+        } catch (RuntimeException e) {
+            // only used to make the message friendlier
+        }
+        return "Will set the memory of " + (vmName == null ? "the VM" : "VM \"" + vmName + "\"") + " to " + newMB
+                + " MB (" + (previousMB == null ? "previous value unknown" : "currently " + previousMB + " MB") + ")";
     }
 
     @Extension
