@@ -333,7 +333,7 @@ Three independent, optional mechanisms are available, in order of precedence:
    can still pick the same host. A host whose memory usage is unknown does not qualify. It
    inherits and overrides exactly like the other two.
 
-5. **Host weights** (on the vSphere Cloud only) - what "most available host" means for
+5. **Host weights** (on the vSphere Cloud, and optionally per template/build step) - what "most available host" means for
    `LEAST_LOADED` (and for the fallback when DRS gives no answer). Four whole-number weights,
    `hostWeightFreeCpuMhz`, `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB` and
    `hostWeightFreeMemoryPercent`, for the host's free CPU in MHz, free CPU as a percentage of
@@ -348,6 +348,13 @@ Three independent, optional mechanisms are available, in order of precedence:
      CPU or memory, is the least used by percentage.
    * Whole numbers only: a decimal value from Configuration-as-Code would be silently read as
      zero.
+
+   A template or build step can set the same four weights for itself (`hostWeightFreeCpuMhz`,
+   `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB`, `hostWeightFreeMemoryPercent`, given as
+   text, with variables allowed in build steps). If it sets **any** of them, its four values
+   **replace** the cloud's weights as a whole, and the ones it leaves blank count as `0`; if it
+   sets none, the cloud's apply. Setting all four to `0` gives the original ranking despite
+   weights on the cloud.
 
 ##### Seeing why a host was chosen
 

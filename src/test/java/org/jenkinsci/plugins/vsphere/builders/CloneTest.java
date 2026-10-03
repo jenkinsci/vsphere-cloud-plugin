@@ -82,6 +82,26 @@ class CloneTest {
     }
 
     @Test
+    void hostWeightsCanBeGivenPerCallAndAreUnsetWhenOmitted() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getHostWeightFreeCpuMhz(), nullValue());
+        assertThat(omitted.getHostWeightFreeCpuPercent(), nullValue());
+        assertThat(omitted.getHostWeightFreeMemoryMB(), nullValue());
+        assertThat(omitted.getHostWeightFreeMemoryPercent(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("hostWeightFreeCpuMhz", "1");
+        args.put("hostWeightFreeCpuPercent", "2");
+        args.put("hostWeightFreeMemoryMB", "3");
+        args.put("hostWeightFreeMemoryPercent", "4");
+        Clone weighted = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(weighted.getHostWeightFreeCpuMhz(), is("1"));
+        assertThat(weighted.getHostWeightFreeCpuPercent(), is("2"));
+        assertThat(weighted.getHostWeightFreeMemoryMB(), is("3"));
+        assertThat(weighted.getHostWeightFreeMemoryPercent(), is("4"));
+    }
+
+    @Test
     void hostPlacementFieldsDefaultToNullWhenOmitted() throws Exception {
         // Backward compatibility: existing jobs/pipelines that don't mention these
         // fields must behave exactly as before (no host restriction of any kind).

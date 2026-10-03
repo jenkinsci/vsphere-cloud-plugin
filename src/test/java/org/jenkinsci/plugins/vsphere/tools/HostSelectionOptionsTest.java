@@ -89,6 +89,30 @@ class HostSelectionOptionsTest {
     }
 
     @Test
+    void callSiteWeightsReplaceTheCloudsAsAWholeAndAbsentOnesInheritThem() throws Exception {
+        vSphereCloud cloud = cloud(false, false);
+        cloud.setHostWeightFreeCpuMhz(5);
+        cloud.setHostWeightFreeMemoryPercent(7);
+
+        HostWeights inherited =
+                vSphereCloud.hostSelectionOptions(cloud, null, null, null, null).getWeights();
+        assertThat(inherited.getFreeCpuMhz(), is(5d));
+        assertThat(inherited.getFreeMemoryPercent(), is(7d));
+
+        HostWeights replaced = vSphereCloud
+                .hostSelectionOptions(cloud, null, null, null, HostWeights.parseOverride(null, "2", null, null))
+                .getWeights();
+        assertThat(replaced.getFreeCpuMhz(), is(0d));
+        assertThat(replaced.getFreeCpuPercent(), is(2d));
+        assertThat(replaced.getFreeMemoryPercent(), is(0d));
+
+        HostWeights optedOut = vSphereCloud
+                .hostSelectionOptions(cloud, null, null, null, HostWeights.parseOverride("0", "0", "0", "0"))
+                .getWeights();
+        assertThat(optedOut.isDefault(), is(true));
+    }
+
+    @Test
     void triStateItemsStartWithInherit() {
         ListBoxModel items = HostSelectionOptions.triStateItems();
         assertThat(items.get(0).value, is(""));

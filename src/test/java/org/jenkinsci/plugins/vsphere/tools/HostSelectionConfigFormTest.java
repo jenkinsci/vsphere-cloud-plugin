@@ -130,6 +130,8 @@ class HostSelectionConfigFormTest {
         clone.setCoresPerSocket("4");
         clone.setCpuLimitMHz("2000");
         clone.setMemorySize("16384");
+        clone.setHostWeightFreeCpuPercent("3");
+        clone.setHostWeightFreeMemoryMB("5");
         clone.setHostSelectionRequireMemory(Boolean.TRUE);
         r.jenkins.clouds.add(new vSphereCloud(
                 new VSphereConnectionConfig("vcenter.example.com", "creds", null),
@@ -156,6 +158,13 @@ class HostSelectionConfigFormTest {
         assertThat(saved.getCoresPerSocket(), is("4"));
         assertThat(saved.getCpuLimitMHz(), is("2000"));
         assertThat(saved.getMemorySize(), is("16384"));
+        assertThat(saved.getHostWeightFreeCpuPercent(), is("3"));
+        assertThat(saved.getHostWeightFreeMemoryMB(), is("5"));
+        // never set: must stay unset (blank), not become 0
+        assertThat(
+                saved.getHostWeightFreeCpuMhz() == null
+                        || saved.getHostWeightFreeCpuMhz().isEmpty(),
+                is(true));
         assertThat(saved.getHostSelectionRequireMemory(), is(true));
         // left on "inherit": must stay unset rather than becoming an explicit value
         assertThat(saved.getHostSelectionRequireCores() == null, is(true));

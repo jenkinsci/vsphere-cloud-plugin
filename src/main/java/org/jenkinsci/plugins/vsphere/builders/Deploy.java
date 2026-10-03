@@ -36,6 +36,7 @@ import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
@@ -87,6 +88,16 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private Boolean hostSelectionRequireAvailableMemory;
+    /**
+     * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
+     * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
+     * (blank ones count as 0); if none is, the cloud's apply.
+     */
+    private String hostWeightFreeCpuMhz;
+
+    private String hostWeightFreeCpuPercent;
+    private String hostWeightFreeMemoryMB;
+    private String hostWeightFreeMemoryPercent;
 
     @DataBoundConstructor
     public Deploy(
@@ -333,6 +344,42 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    public String getHostWeightFreeCpuMhz() {
+        return hostWeightFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuMhz(String hostWeightFreeCpuMhz) {
+        this.hostWeightFreeCpuMhz = hostWeightFreeCpuMhz;
+    }
+
+    public String getHostWeightFreeCpuPercent() {
+        return hostWeightFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuPercent(String hostWeightFreeCpuPercent) {
+        this.hostWeightFreeCpuPercent = hostWeightFreeCpuPercent;
+    }
+
+    public String getHostWeightFreeMemoryMB() {
+        return hostWeightFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryMB(String hostWeightFreeMemoryMB) {
+        this.hostWeightFreeMemoryMB = hostWeightFreeMemoryMB;
+    }
+
+    public String getHostWeightFreeMemoryPercent() {
+        return hostWeightFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryPercent(String hostWeightFreeMemoryPercent) {
+        this.hostWeightFreeMemoryPercent = hostWeightFreeMemoryPercent;
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -438,11 +485,17 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final HostWeights weightsOverride = HostWeights.parseOverride(
+                hostWeightFreeCpuMhz == null ? null : env.expand(hostWeightFreeCpuMhz),
+                hostWeightFreeCpuPercent == null ? null : env.expand(hostWeightFreeCpuPercent),
+                hostWeightFreeMemoryMB == null ? null : env.expand(hostWeightFreeMemoryMB),
+                hostWeightFreeMemoryPercent == null ? null : env.expand(hostWeightFreeMemoryPercent));
         final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
                 sourceCloud,
                 hostSelectionRequireCores,
                 hostSelectionRequireMemory,
-                hostSelectionRequireAvailableMemory);
+                hostSelectionRequireAvailableMemory,
+                weightsOverride);
         final VmSize vmSize = VmSize.of(
                 cpuCores == null ? null : env.expand(cpuCores),
                 coresPerSocket == null ? null : env.expand(coresPerSocket),

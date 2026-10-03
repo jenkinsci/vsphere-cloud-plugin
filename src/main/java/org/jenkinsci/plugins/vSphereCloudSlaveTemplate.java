@@ -71,6 +71,7 @@ import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -133,6 +134,16 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private Boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private Boolean hostSelectionRequireAvailableMemory;
+    /**
+     * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
+     * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
+     * (blank ones count as 0); if none is, the cloud's apply.
+     */
+    private String hostWeightFreeCpuMhz;
+
+    private String hostWeightFreeCpuPercent;
+    private String hostWeightFreeMemoryMB;
+    private String hostWeightFreeMemoryPercent;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -460,6 +471,42 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    public String getHostWeightFreeCpuMhz() {
+        return hostWeightFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuMhz(String hostWeightFreeCpuMhz) {
+        this.hostWeightFreeCpuMhz = hostWeightFreeCpuMhz;
+    }
+
+    public String getHostWeightFreeCpuPercent() {
+        return hostWeightFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuPercent(String hostWeightFreeCpuPercent) {
+        this.hostWeightFreeCpuPercent = hostWeightFreeCpuPercent;
+    }
+
+    public String getHostWeightFreeMemoryMB() {
+        return hostWeightFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryMB(String hostWeightFreeMemoryMB) {
+        this.hostWeightFreeMemoryMB = hostWeightFreeMemoryMB;
+    }
+
+    public String getHostWeightFreeMemoryPercent() {
+        return hostWeightFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryPercent(String hostWeightFreeMemoryPercent) {
+        this.hostWeightFreeMemoryPercent = hostWeightFreeMemoryPercent;
+    }
+
     /**
      * Gets the old (deprecated) credentialsId field.
      *
@@ -638,6 +685,25 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
     }
 
+    /**
+     * What host selection should do for a clone of this template: the cloud's defaults overridden by
+     * this template's own settings (including its own host weights, which replace the cloud's as a
+     * whole), told that the clone is resized by this template's reconfigure steps right after it is
+     * created.
+     */
+    HostSelectionOptions buildHostSelectionOptions(@CheckForNull vSphereCloud cloud) throws VSphereException {
+        final HostWeights weightsOverride = HostWeights.parseOverride(
+                hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
+        return vSphereCloud
+                .hostSelectionOptions(
+                        cloud,
+                        hostSelectionRequireCores,
+                        hostSelectionRequireMemory,
+                        hostSelectionRequireAvailableMemory,
+                        weightsOverride)
+                .withVmSize(reconfiguredCpuCores(), reconfiguredMemoryMB());
+    }
+
     private vSphereCloudProvisionedSlave provision(
             final String cloneName,
             final TaskListener listener,
@@ -668,11 +734,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
-        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
-                sourceCloud,
-                hostSelectionRequireCores,
-                hostSelectionRequireMemory,
-                hostSelectionRequireAvailableMemory);
+        final HostSelectionOptions hostSelectionOptions = buildHostSelectionOptions(sourceCloud);
         try {
             final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
             vSphere.cloneOrDeployVm(

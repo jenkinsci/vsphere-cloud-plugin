@@ -464,6 +464,19 @@ public class vSphereCloud extends Cloud {
             @CheckForNull Boolean requireCores,
             @CheckForNull Boolean requireMemory,
             @CheckForNull Boolean requireAvailableMemory) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, requireAvailableMemory, null);
+    }
+
+    /**
+     * As above, also with the host weights a call site set for itself: if {@code weightsOverride} is
+     * not null it replaces the cloud's weights as a whole, else the cloud's apply.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
@@ -471,7 +484,7 @@ public class vSphereCloud extends Cloud {
                                 cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
-                .withWeights(cloud == null ? null : cloud.hostWeights());
+                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()));
     }
 
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */

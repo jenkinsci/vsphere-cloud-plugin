@@ -386,6 +386,35 @@ class VSphereHostSelectionTest {
         assertThat(VSphereHostSelection.sizeShortfall(unknown, false, null, false, true, null), nullValue());
     }
 
+    @Test
+    void callSiteWeightsAreAbsentWhenNoneIsSet() throws Exception {
+        assertThat(HostWeights.parseOverride(null, null, null, null), nullValue());
+        assertThat(HostWeights.parseOverride("", " ", null, ""), nullValue());
+    }
+
+    @Test
+    void anyCallSiteWeightReplacesTheWholeSetWithBlanksCountingAsZero() throws Exception {
+        HostWeights weights = HostWeights.parseOverride(null, "3", "", null);
+        assertThat(weights.getFreeCpuMhz(), is(0d));
+        assertThat(weights.getFreeCpuPercent(), is(3d));
+        assertThat(weights.getFreeMemoryMB(), is(0d));
+        assertThat(weights.getFreeMemoryPercent(), is(0d));
+    }
+
+    @Test
+    void explicitZerosOverrideToTheOriginalRanking() throws Exception {
+        HostWeights weights = HostWeights.parseOverride("0", "0", "0", "0");
+        assertThat(weights.isDefault(), is(true));
+    }
+
+    @Test
+    void callSiteWeightsMustBeWholeNumbersOfZeroOrMore() {
+        for (String bad : new String[] {"-1", "1.5", "lots", "${UNSET}"}) {
+            org.junit.jupiter.api.Assertions.assertThrows(
+                    VSphereException.class, () -> HostWeights.parseOverride("1", bad, null, null));
+        }
+    }
+
     /** A host with the given CPU use/capacity (MHz) and memory use/capacity (MB). */
     private static HostCandidate loaded(String name, int cpuUsed, int cpuCap, int memUsed, long memCap) {
         return new HostCandidate(name, true, false, cpuUsed, cpuCap, memUsed, memCap);

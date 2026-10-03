@@ -81,4 +81,48 @@ class TemplateReconfiguredSizeTest {
         assertThat(template.reconfiguredCpuCores(), nullValue());
         assertThat(template.reconfiguredMemoryMB(), is(8192L));
     }
+
+    @Test
+    void hostSelectionOptionsAnnounceTheReconfiguredSizeAndCarryTheTemplatesOwnWeights() throws Exception {
+        vSphereCloudSlaveTemplate template =
+                templateWith(new ReconfigureCpu("16", "4"), new ReconfigureMemory("65536"));
+        template.setHostSelectionRequireCores(Boolean.TRUE);
+        template.setHostWeightFreeCpuPercent("3");
+        vSphereCloud cloud = new vSphereCloud(
+                new org.jenkinsci.plugins.vsphere.VSphereConnectionConfig("vcenter.example.com", "creds", null),
+                "wiring",
+                0,
+                0,
+                false,
+                null);
+        cloud.setHostWeightFreeMemoryMB(9);
+
+        org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions options = template.buildHostSelectionOptions(cloud);
+
+        assertThat(options.getVmCpus(), is(16));
+        assertThat(options.getVmMemoryMB(), is(65536L));
+        assertThat(options.isRequireCores(), is(true));
+        // the template set one weight, so the cloud's are replaced as a whole
+        assertThat(options.getWeights().getFreeCpuPercent(), is(3d));
+        assertThat(options.getWeights().getFreeMemoryMB(), is(0d));
+    }
+
+    @Test
+    void withoutOwnWeightsTheTemplateUsesTheCloudsAndKeepsTheMasterSizeWhenNothingResizes() throws Exception {
+        vSphereCloudSlaveTemplate template = templateWith();
+        vSphereCloud cloud = new vSphereCloud(
+                new org.jenkinsci.plugins.vsphere.VSphereConnectionConfig("vcenter.example.com", "creds", null),
+                "wiring2",
+                0,
+                0,
+                false,
+                null);
+        cloud.setHostWeightFreeMemoryMB(9);
+
+        org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions options = template.buildHostSelectionOptions(cloud);
+
+        assertThat(options.getVmCpus(), nullValue());
+        assertThat(options.getVmMemoryMB(), nullValue());
+        assertThat(options.getWeights().getFreeMemoryMB(), is(9d));
+    }
 }

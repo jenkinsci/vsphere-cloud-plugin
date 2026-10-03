@@ -1,0 +1,15 @@
+<div>
+  (Optional, a whole number) How much a host's free CPU in MHz counts when automatic host selection looks
+  for the "most available" host, as on the vSphere Cloud, where the scoring is described in detail.
+  <p>
+  Leave <b>all four</b> host weight fields of this call blank to use the weights of the vSphere
+  cloud. If you set <b>any</b> of them, the four values here <b>replace</b> the cloud's weights as a
+  whole for this call, and the ones left blank count as <tt>0</tt>. Setting all four to
+  <tt>0</tt> gives the original ranking (the host whose busier resource, CPU or memory, is the
+  least used by percentage), whatever the cloud has configured.
+  </p>
+  <p>
+  Only the proportions between the weights matter, so <tt>1</tt> and <tt>1</tt> means the same
+  as <tt>50</tt> and <tt>50</tt>. Variables can be used.
+  </p>
+</div>

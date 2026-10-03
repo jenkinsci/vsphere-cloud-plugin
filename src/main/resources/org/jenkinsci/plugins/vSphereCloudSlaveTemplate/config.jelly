@@ -66,6 +66,22 @@
               <f:select/>
             </f:entry>
 
+            <f:entry title="${%Host weight: free CPU in MHz}" field="hostWeightFreeCpuMhz">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host weight: free CPU as percent of the host}" field="hostWeightFreeCpuPercent">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host weight: free RAM in MB}" field="hostWeightFreeMemoryMB">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host weight: free RAM as percent of the host}" field="hostWeightFreeMemoryPercent">
+              <f:textbox/>
+            </f:entry>
+
             <f:entry title="${%Customization Specification}" field="customizationSpec">
                 <f:textbox/>
             </f:entry>

@@ -90,6 +90,22 @@ limitations under the License.
     <f:entry title="${%Require enough free RAM}" field="hostSelectionRequireAvailableMemoryAsString">
       <f:select/>
     </f:entry>
+
+    <f:entry title="${%Host weight: free CPU in MHz}" field="hostWeightFreeCpuMhz">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host weight: free CPU as percent of the host}" field="hostWeightFreeCpuPercent">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host weight: free RAM in MB}" field="hostWeightFreeMemoryMB">
+      <f:textbox/>
+    </f:entry>
+
+    <f:entry title="${%Host weight: free RAM as percent of the host}" field="hostWeightFreeMemoryPercent">
+      <f:textbox/>
+    </f:entry>
   </f:advanced>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>
