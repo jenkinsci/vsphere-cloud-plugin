@@ -17,12 +17,12 @@ limitations under the License.
 
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
     <f:entry title="${%Number CPU Cores}" field="cpuCores">
-        <f:number clazz="required positive-number" />
+        <f:textbox checkMethod="post" />
     </f:entry>
     <f:entry title="${%Number Cores per Socket}" field="coresPerSocket">
-        <f:number clazz="required positive-number" />
+        <f:textbox checkMethod="post" />
     </f:entry>
     <f:entry title="${%CPU Reservation in MHz}" field="cpuLimitMHz">
-        <f:number clazz="positive-number" />
+        <f:textbox checkMethod="post" />
     </f:entry>
 </j:jelly>

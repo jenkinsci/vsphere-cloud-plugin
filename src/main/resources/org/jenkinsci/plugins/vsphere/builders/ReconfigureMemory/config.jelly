@@ -17,6 +17,6 @@ limitations under the License.
 
 <j:jelly xmlns:j="jelly:core" xmlns:f="/lib/form">
     <f:entry title="${%RAM in MBs}" field="memorySize">
-        <f:number clazz="required positive-number" />
+        <f:textbox checkMethod="post" />
     </f:entry>
 </j:jelly>

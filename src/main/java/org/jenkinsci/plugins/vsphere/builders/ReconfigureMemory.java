@@ -135,8 +135,7 @@ public class ReconfigureMemory extends ReconfigureStep {
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
 
-            if (value.length() == 0) return FormValidation.error(Messages.validation_required("Memory Size"));
-            return FormValidation.ok();
+            return checkPositiveIntegerOrVariable("Memory Size", value, true);
         }
 
         @Override
