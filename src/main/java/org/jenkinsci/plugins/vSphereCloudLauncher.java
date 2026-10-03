@@ -15,7 +15,9 @@ import hudson.slaves.SlaveComputer;
 import java.io.IOException;
 import java.io.ObjectStreamException;
 import java.rmi.RemoteException;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.List;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -361,6 +363,7 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             super.afterDisconnect(slaveComputer, taskListener);
+            tearDownRetiredDelegates(slaveComputer, taskListener);
             MACHINE_ACTION localIdle = idleAction;
             if (localIdle == null) {
                 localIdle = MACHINE_ACTION.SHUTDOWN;
@@ -440,6 +443,69 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
             if (reconnect) {
                 slaveComputer.connect(false);
+            }
+        }
+    }
+
+    /**
+     * Delegate launchers that were replaced by saving the configuration of an agent while it was connected
+     * (JENKINS-62570). Jenkins swaps in a new {@link vSphereCloudLauncher} with a freshly bound delegate, but
+     * the connection that was made by the old delegate (e.g. an SSH session) is still in use and is only known
+     * to the old delegate; it must be torn down by that delegate when the agent finally disconnects.
+     */
+    private transient List<ComputerLauncher> retiredDelegates;
+
+    /**
+     * Remember a delegate launcher that this launcher replaced while the agent was connected, so that it
+     * gets its {@link ComputerLauncher#afterDisconnect} call when this launcher is disconnected.
+     */
+    synchronized void retireDelegate(ComputerLauncher oldDelegate) {
+        if (oldDelegate == null || oldDelegate == launcher) {
+            return;
+        }
+        if (retiredDelegates == null) {
+            retiredDelegates = new ArrayList<>();
+        }
+        if (!retiredDelegates.contains(oldDelegate)) {
+            retiredDelegates.add(oldDelegate);
+        }
+    }
+
+    /**
+     * Take over from a launcher that is being replaced while the agent is connected: its delegate and any
+     * delegates it had retired earlier all have to be torn down when this launcher is disconnected.
+     */
+    synchronized void takeOverFrom(vSphereCloudLauncher replaced) {
+        final List<ComputerLauncher> earlier = replaced.drainRetiredDelegates();
+        for (ComputerLauncher l : earlier) {
+            retireDelegate(l);
+        }
+        retireDelegate(replaced.getLauncher());
+    }
+
+    private synchronized List<ComputerLauncher> drainRetiredDelegates() {
+        final List<ComputerLauncher> result = retiredDelegates == null ? new ArrayList<>() : retiredDelegates;
+        retiredDelegates = null;
+        return result;
+    }
+
+    /** Give every retired delegate launcher the chance to clean up; one failing must not stop the others. */
+    synchronized void tearDownRetiredDelegates(SlaveComputer slaveComputer, TaskListener taskListener) {
+        if (retiredDelegates == null) {
+            return;
+        }
+        final List<ComputerLauncher> toTearDown = retiredDelegates;
+        retiredDelegates = null;
+        for (ComputerLauncher retired : toTearDown) {
+            try {
+                vSphereCloud.Log(
+                        slaveComputer,
+                        taskListener,
+                        "Tearing down a launcher that was replaced while the agent was connected: %s",
+                        retired);
+                retired.afterDisconnect(slaveComputer, taskListener);
+            } catch (Throwable t) {
+                vSphereCloud.Log(slaveComputer, taskListener, t, "Failed to tear down a replaced launcher");
             }
         }
     }
