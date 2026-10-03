@@ -22,10 +22,13 @@ import hudson.*;
 import hudson.model.*;
 import hudson.util.FormValidation;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.List;
 import jenkins.model.Jenkins;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 
 /**
  * Define a base class for all Reconfigure Acion steps.  All Reconfigure Action steps should extend
@@ -90,6 +93,96 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
             // fall through
         }
         return FormValidation.error(Messages.validation_positiveInteger(what));
+    }
+
+    /**
+     * A stricter-than-necessary step may offer a more lenient variant of itself, to be used for one retry when
+     * vCenter refuses the reconfiguration (e.g. a MAC address that cannot be set as a manual one,
+     * JENKINS-34001). The variant is a new instance, so the step as configured is never modified.
+     *
+     * @return the variant to retry with, or null if this step has none
+     */
+    public ReconfigureStep fallbackVariant() {
+        return null;
+    }
+
+    /** What to do with one step when building the reconfiguration. */
+    @FunctionalInterface
+    public interface StepAction {
+        void perform(ReconfigureStep step) throws VSphereException, IOException, InterruptedException;
+    }
+
+    /** Sends a reconfiguration to vCenter. */
+    @FunctionalInterface
+    public interface SpecSubmitter {
+        void submit(VirtualMachineConfigSpec spec) throws VSphereException;
+    }
+
+    /**
+     * Builds one reconfiguration out of all the steps and submits it. If vCenter refuses it and some of the
+     * steps have a more lenient {@link #fallbackVariant()}, builds it again with those and submits it once more.
+     *
+     * @param submit sends the built reconfiguration to vCenter
+     * @param action performs a step, after it has been told which VM, vSphere and spec to work with
+     */
+    public static void reconfigureVm(
+            final VSphere vsphere,
+            final VirtualMachine vm,
+            final List<? extends ReconfigureStep> steps,
+            final StepAction action,
+            final SpecSubmitter submit,
+            final PrintStream log)
+            throws VSphereException, IOException, InterruptedException {
+        final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+        for (ReconfigureStep step : steps) {
+            runStep(step, vsphere, vm, spec, action);
+        }
+        try {
+            submit.submit(spec);
+            return;
+        } catch (VSphereException first) {
+            final List<ReconfigureStep> retrySteps = new ArrayList<>();
+            boolean anyFallback = false;
+            for (ReconfigureStep step : steps) {
+                final ReconfigureStep variant = step.fallbackVariant();
+                anyFallback |= variant != null;
+                retrySteps.add(variant != null ? variant : step);
+            }
+            if (!anyFallback) {
+                throw first;
+            }
+            VSphereLogger.vsLogger(
+                    log,
+                    "vCenter refused the reconfiguration (" + first.getMessage()
+                            + "); retrying once without declaring the MAC address as a manual one...");
+            final VirtualMachineConfigSpec retrySpec = new VirtualMachineConfigSpec();
+            for (ReconfigureStep step : retrySteps) {
+                runStep(step, vsphere, vm, retrySpec, action);
+            }
+            try {
+                submit.submit(retrySpec);
+            } catch (VSphereException second) {
+                second.addSuppressed(first);
+                throw new VSphereException(
+                        "Reconfiguration failed: " + first.getMessage()
+                                + "; the retry without a manual MAC address setting failed too: "
+                                + second.getMessage(),
+                        second);
+            }
+        }
+    }
+
+    private static void runStep(
+            final ReconfigureStep step,
+            final VSphere vsphere,
+            final VirtualMachine vm,
+            final VirtualMachineConfigSpec spec,
+            final StepAction action)
+            throws VSphereException, IOException, InterruptedException {
+        step.setVsphere(vsphere);
+        step.setVM(vm);
+        step.setVirtualMachineConfigSpec(spec);
+        action.perform(step);
     }
 
     public static List<ReconfigureStepDescriptor> all() {

@@ -16,7 +16,6 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
-import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
@@ -124,14 +123,14 @@ public class Reconfigure extends VSphereBuildStep implements SimpleBuildStep {
         VirtualMachine realVM = vsphere.getVmByName(expandedVm);
 
         VSphereLogger.vsLogger(jLogger, "Reconfiguring VM \"" + expandedVm + "\". Please wait ...");
-        VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
-        for (ReconfigureStep actionStep : reconfigureSteps) {
-            actionStep.setVsphere(getVsphere());
-            actionStep.setVM(realVM);
-            actionStep.setVirtualMachineConfigSpec(spec);
-            actionStep.perform(run, null, launcher, listener);
-        }
-        vsphere.reconfigureVm(expandedVm, spec);
+        final String vmToReconfigure = expandedVm;
+        ReconfigureStep.reconfigureVm(
+                getVsphere(),
+                realVM,
+                reconfigureSteps,
+                actionStep -> actionStep.perform(run, null, launcher, listener),
+                spec -> vsphere.reconfigureVm(vmToReconfigure, spec),
+                jLogger);
         VSphereLogger.vsLogger(jLogger, "Finished!");
 
         return true;

@@ -33,6 +33,7 @@ import jakarta.servlet.ServletException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Arrays;
+import org.jenkinsci.plugins.vsphere.tools.MacAddresses;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
@@ -153,6 +154,24 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         return reconfigureNetwork(env, listener);
     }
 
+    /**
+     * Gives the adapter the requested MAC address and marks it as user-supplied. Without
+     * {@code addressType = "manual"} vCenter keeps treating the adapter as "generated"/"assigned", and then
+     * refuses the address with "is not a valid VPX-assigned Ethernet address" (JENKINS-34001).
+     */
+    static void applyMacAddress(final VirtualEthernetCard vEth, final String macAddress) {
+        applyMacAddress(vEth, macAddress, true);
+    }
+
+    /**
+     * @param manual false for the retry variant: the address is then declared as one that vCenter "assigned",
+     *               which is what it takes for addresses from the range that vCenter manages itself.
+     */
+    static void applyMacAddress(final VirtualEthernetCard vEth, final String macAddress, final boolean manual) {
+        vEth.setMacAddress(macAddress);
+        vEth.setAddressType(manual ? "manual" : "assigned");
+    }
+
     private boolean reconfigureNetwork(final EnvVars env, final TaskListener listener) throws VSphereException {
         PrintStream jLogger = listener.getLogger();
         String expandedDeviceLabel = env.expand(deviceLabel);
@@ -200,7 +219,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         // change mac address
         if (!expandedMacAddress.isEmpty()) {
             VSphereLogger.vsLogger(jLogger, "Reconfiguring MAC Address -> " + expandedMacAddress);
-            vEth.setMacAddress(expandedMacAddress);
+            applyMacAddress(vEth, expandedMacAddress, !nonManualMac);
         }
 
         // extract backing from ethernet virtual card, always available
@@ -327,6 +346,59 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 count, number));
     }
 
+    /**
+     * Tells the user up front when vCenter is going to refuse a (manual) MAC address, and why (JENKINS-34001).
+     * These are warnings rather than errors as the allocation rules vary a little between vSphere versions.
+     */
+    static FormValidation macAddressWarnings(final String value) {
+        if (value.contains("$")) {
+            return FormValidation.ok(); // known only once the variables are expanded in a build
+        }
+        switch (MacAddresses.classify(value)) {
+            case MALFORMED:
+                return FormValidation.warning(Messages.validation_macAddress_malformed());
+            case VMWARE_VPX_GENERATED:
+                return FormValidation.warning(Messages.validation_macAddress_vpxRange());
+            case VMWARE_RESERVED:
+                return FormValidation.warning(Messages.validation_macAddress_vmwareReserved());
+            case HOST_GENERATED:
+                return FormValidation.warning(Messages.validation_macAddress_hostGenerated());
+            default:
+                return FormValidation.ok();
+        }
+    }
+
+    /** Set when this is the retry variant of a step, see {@link #fallbackVariant()}. */
+    private transient boolean nonManualMac;
+
+    /**
+     * The MAC address is normally set as a manual one. If vCenter refuses that (e.g. because the address is
+     * in the range that it hands out itself), the reconfiguration is retried once with a step that does not
+     * claim the address to be manual.
+     */
+    @Override
+    public ReconfigureStep fallbackVariant() {
+        if (nonManualMac || macAddress == null || macAddress.isEmpty()) {
+            return null;
+        }
+        try {
+            final ReconfigureNetworkAdapters copy = new ReconfigureNetworkAdapters(
+                    deviceAction,
+                    deviceLabel,
+                    macAddress,
+                    standardSwitch,
+                    portGroup,
+                    distributedSwitch,
+                    distributedPortGroup,
+                    distributedPortId);
+            copy.setDeviceNumber(deviceNumber);
+            copy.nonManualMac = true;
+            return copy;
+        } catch (VSphereException e) {
+            return null;
+        }
+    }
+
     @Extension
     public static final class ReconfigureNetworkAdaptersDescriptor extends ReconfigureStepDescriptor {
 
@@ -339,7 +411,7 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the MAC Address"));
-            return FormValidation.ok();
+            return macAddressWarnings(value);
         }
 
         @RequirePOST

@@ -22,7 +22,6 @@ import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
 import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.VirtualMachineConfigInfo;
-import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -758,18 +757,26 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[] {cloneName, this.masterImageName});
             if (willReconfigure) {
                 final VirtualMachine vm = vSphere.getVmByName(cloneName);
-                final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
                 final EnvVars env = new EnvVars();
+                final List<ReconfigureStep> actionSteps = new ArrayList<>();
                 for (ReconfigureStep globalStep : reconfigureSteps) {
                     // Do not mutate global steps to perform reconfiguration - use a clone
-                    ReconfigureStep actionStep =
-                            (ReconfigureStep) Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep));
-                    actionStep.setVsphere(vSphere);
-                    actionStep.setVM(vm);
-                    actionStep.setVirtualMachineConfigSpec(spec);
-                    actionStep.perform(env, listener);
+                    actionSteps.add((ReconfigureStep) Jenkins.XSTREAM2.fromXML(Jenkins.XSTREAM2.toXML(globalStep)));
                 }
-                vSphere.reconfigureVm(cloneName, spec);
+                try {
+                    ReconfigureStep.reconfigureVm(
+                            vSphere,
+                            vm,
+                            actionSteps,
+                            actionStep -> actionStep.perform(env, listener),
+                            spec -> vSphere.reconfigureVm(cloneName, spec),
+                            logger);
+                } catch (IOException | InterruptedException e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    throw new VSphereException(e);
+                }
                 vSphere.startVm(cloneName, reconfigureStartTimeoutSeconds);
             }
         } catch (VSphereDuplicateException ex) {
