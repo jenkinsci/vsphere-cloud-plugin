@@ -1,0 +1,18 @@
+<div>
+  (Optional) The number of virtual CPUs to create the new VM with.
+  <p>
+  Applied in the very same operation that creates the VM, rather than cloning at the source's size
+  and reconfiguring afterwards. Has the same meaning as the setting of the same name of the
+  "Reconfigure CPU"/"Reconfigure Memory" steps. Leave blank to keep the source VM's (or template's)
+  own value. Variables can be used.
+  </p>
+  <p>
+  When the "Require enough CPU cores"/"Require enough RAM"/"Require enough free RAM" options are in
+  effect, automatic host selection compares candidate hosts against this value instead of the
+  source's.
+  </p>
+  <p>
+  The cores per socket of the source are kept unless "Number Cores per Socket" is set too, and
+  this number has to be a multiple of it, or vCenter will refuse the request.
+  </p>
+</div>

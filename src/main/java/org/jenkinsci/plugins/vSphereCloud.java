@@ -37,6 +37,8 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -101,6 +103,25 @@ public class vSphereCloud extends Cloud {
      * override). Null means no default - every host is a candidate unless overridden.
      */
     private Set<String> hostSelectionCandidates;
+
+    /**
+     * Weights deciding what "most available host" means for automatic host selection: free CPU
+     * (MHz), free CPU (% of the host), free memory (MB) and free memory (% of the host). Whole
+     * numbers, only their proportions matter (a decimal would be silently read as 0 by JCasC). All
+     * zero (the default) keeps the original ranking by the busier of CPU/memory, by percentage.
+     */
+    private int hostWeightFreeCpuMhz;
+
+    private int hostWeightFreeCpuPercent;
+    private int hostWeightFreeMemoryMB;
+    private int hostWeightFreeMemoryPercent;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private boolean hostSelectionRequireAvailableMemory;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
@@ -428,6 +449,44 @@ public class vSphereCloud extends Cloud {
                 hostSelectionCandidates == null ? null : new LinkedHashSet<>(hostSelectionCandidates);
     }
 
+    /**
+     * Resolves the host selection refinements for one call site: the cloud's own defaults (or
+     * none, if there is no {@code cloud}), overridden by whatever the call site set explicitly.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud, @CheckForNull Boolean requireCores, @CheckForNull Boolean requireMemory) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, null);
+    }
+
+    /** As above, also for the "enough memory free right now" requirement. */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, requireAvailableMemory, null);
+    }
+
+    /**
+     * As above, also with the host weights a call site set for itself: if {@code weightsOverride} is
+     * not null it replaces the cloud's weights as a whole, else the cloud's apply.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride) {
+        return new HostSelectionOptions(
+                        HostSelectionOptions.resolve(
+                                cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
+                        HostSelectionOptions.resolve(
+                                cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
+                        HostSelectionOptions.resolve(
+                                cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
+                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()));
+    }
+
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
     public String getHostSelectionCandidatesAsString() {
         return VSphereHostSelection.toAllowListString(hostSelectionCandidates);
@@ -436,6 +495,92 @@ public class vSphereCloud extends Cloud {
     @DataBoundSetter
     public void setHostSelectionCandidatesAsString(String hostSelectionCandidatesCsv) {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
+    }
+
+    public int getHostWeightFreeCpuMhz() {
+        return hostWeightFreeCpuMhz;
+    }
+
+    /** Weight of a host's free CPU, in MHz (absolute), when ranking hosts; 0 = ignore. */
+    @DataBoundSetter
+    public void setHostWeightFreeCpuMhz(int hostWeightFreeCpuMhz) {
+        this.hostWeightFreeCpuMhz = hostWeightFreeCpuMhz;
+    }
+
+    public int getHostWeightFreeCpuPercent() {
+        return hostWeightFreeCpuPercent;
+    }
+
+    /** Weight of a host's free CPU as a share of its capacity (relative), when ranking hosts; 0 = ignore. */
+    @DataBoundSetter
+    public void setHostWeightFreeCpuPercent(int hostWeightFreeCpuPercent) {
+        this.hostWeightFreeCpuPercent = hostWeightFreeCpuPercent;
+    }
+
+    public int getHostWeightFreeMemoryMB() {
+        return hostWeightFreeMemoryMB;
+    }
+
+    /** Weight of a host's free memory, in MB (absolute), when ranking hosts; 0 = ignore. */
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryMB(int hostWeightFreeMemoryMB) {
+        this.hostWeightFreeMemoryMB = hostWeightFreeMemoryMB;
+    }
+
+    public int getHostWeightFreeMemoryPercent() {
+        return hostWeightFreeMemoryPercent;
+    }
+
+    /** Weight of a host's free memory as a share of its capacity (relative), when ranking hosts; 0 = ignore. */
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryPercent(int hostWeightFreeMemoryPercent) {
+        this.hostWeightFreeMemoryPercent = hostWeightFreeMemoryPercent;
+    }
+
+    /** The four weights as one value; {@link HostWeights#DEFAULT} if none is set. */
+    public HostWeights hostWeights() {
+        return new HostWeights(
+                hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
+    }
+
+    /**
+     * Opt-in: only consider hosts with at least as many physical CPU cores as the VM has
+     * vCPUs. Off by default (oversubscribed sites). Default for every template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * Opt-in: only consider hosts with at least as much physical RAM as the VM is configured
+     * with. Off by default (oversubscribed sites). Default for every template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
+     * Opt-in: only consider hosts that currently have at least as much memory free as the VM is
+     * configured with, so the new VM does not get swapped by the hypervisor. Default for every
+     * template/build-step using this cloud; each can override it either way.
+     */
+    public boolean isHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
     }
 
     /** Shuts down any running pool and clears the reference so it is recreated on next use. */
@@ -1012,6 +1157,22 @@ public class vSphereCloud extends Cloud {
 
         public FormValidation doCheckVsDescription(@QueryParameter String value) {
             return FormValidation.validateRequired(value);
+        }
+
+        public FormValidation doCheckHostWeightFreeCpuMhz(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostWeightFreeCpuPercent(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostWeightFreeMemoryMB(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostWeightFreeMemoryPercent(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
         }
 
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {

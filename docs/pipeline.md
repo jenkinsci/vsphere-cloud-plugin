@@ -99,9 +99,20 @@ buildStep: [$class: 'Clone',
             useCurrentSnapshot: null,      // true = clone from current snapshot; false = don't use snapshot
             namedSnapshot: '',             // clone from this specific named snapshot (optional)
             extraConfigParameters: [:],    // extra VMX key-value pairs to set on the new VM (optional)
+            cpuCores: '',                  // (optional) create the VM with this many vCPUs, in one step; blank keeps the source's
+            coresPerSocket: '',            // (optional) cores per socket; blank keeps the source's
+            cpuLimitMHz: '',               // (optional) CPU reservation in MHz; blank means none
+            memorySize: '',                // (optional) create the VM with this much memory (MB); blank keeps the source's
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
-            hostSelectionCandidates: []             // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionRequireCores: false,       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with fewer physical cores than the VM has vCPUs
+            hostSelectionRequireMemory: false,      // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
+            hostSelectionRequireAvailableMemory: false,  // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts without the VM's memory size free right now
+            hostWeightFreeCpuMhz: '',       // (optional) host ranking weights for this call: all blank = use the cloud's;
+            hostWeightFreeCpuPercent: '',   //   if any is set they replace the cloud's as a whole (blank = 0)
+            hostWeightFreeMemoryMB: '',
+            hostWeightFreeMemoryPercent: ''
            ]
 ```
 
@@ -163,9 +174,15 @@ buildStep: [$class: 'Deploy',
             powerOn: false,
             timeoutInSeconds: 60,
             customizationSpec: '',
+            cpuCores: '',                // (optional) same meaning as on the Clone step
+            coresPerSocket: '',          // (optional) same meaning as on the Clone step
+            cpuLimitMHz: '',             // (optional) same meaning as on the Clone step
+            memorySize: '',              // (optional) same meaning as on the Clone step
             host: '',                    // (optional) same meaning as on the Clone step
             hostSelectionMode: '',        // (optional) '', 'LEAST_LOADED', or 'DRS_RECOMMENDED'
-            hostSelectionCandidates: []            // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string
+            hostSelectionCandidates: [],           // (optional) allow-list, or use hostSelectionCandidatesAsString for a CSV string
+            hostSelectionRequireCores: false,      // (optional) same meaning as on the Clone step
+            hostSelectionRequireMemory: false      // (optional) same meaning as on the Clone step
            ]
 ```
 

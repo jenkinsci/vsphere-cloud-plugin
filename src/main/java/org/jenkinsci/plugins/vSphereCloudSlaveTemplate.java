@@ -24,6 +24,7 @@ import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.DescriptorExtensionList;
 import hudson.EnvVars;
@@ -66,7 +67,11 @@ import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -122,6 +127,23 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private Boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private Boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private Boolean hostSelectionRequireAvailableMemory;
+    /**
+     * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
+     * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
+     * (blank ones count as 0); if none is, the cloud's apply.
+     */
+    private String hostWeightFreeCpuMhz;
+
+    private String hostWeightFreeCpuPercent;
+    private String hostWeightFreeMemoryMB;
+    private String hostWeightFreeMemoryPercent;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -367,6 +389,125 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     }
 
     /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as many
+     * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
+     * setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(Boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireCores}.
+     */
+    public String getHostSelectionRequireCoresAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireCores);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCoresAsString(String hostSelectionRequireCoresAsString) {
+        this.hostSelectionRequireCores = HostSelectionOptions.triStateFromString(hostSelectionRequireCoresAsString);
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as much
+     * physical RAM as the VM is configured with. {@code null} (the default) inherits the
+     * cloud's setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireMemory}.
+     */
+    public String getHostSelectionRequireMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemoryAsString(String hostSelectionRequireMemoryAsString) {
+        this.hostSelectionRequireMemory = HostSelectionOptions.triStateFromString(hostSelectionRequireMemoryAsString);
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts that currently have at least as
+     * much memory free as the VM is configured with, so it is not swapped by the hypervisor.
+     * {@code null} (the default) inherits the cloud's setting; {@code true}/{@code false} override
+     * it for this call site.
+     */
+    public Boolean getHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(Boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireAvailableMemory}.
+     */
+    public String getHostSelectionRequireAvailableMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireAvailableMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemoryAsString(String hostSelectionRequireAvailableMemoryAsString) {
+        this.hostSelectionRequireAvailableMemory =
+                HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
+    }
+
+    public String getHostWeightFreeCpuMhz() {
+        return hostWeightFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuMhz(String hostWeightFreeCpuMhz) {
+        this.hostWeightFreeCpuMhz = hostWeightFreeCpuMhz;
+    }
+
+    public String getHostWeightFreeCpuPercent() {
+        return hostWeightFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuPercent(String hostWeightFreeCpuPercent) {
+        this.hostWeightFreeCpuPercent = hostWeightFreeCpuPercent;
+    }
+
+    public String getHostWeightFreeMemoryMB() {
+        return hostWeightFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryMB(String hostWeightFreeMemoryMB) {
+        this.hostWeightFreeMemoryMB = hostWeightFreeMemoryMB;
+    }
+
+    public String getHostWeightFreeMemoryPercent() {
+        return hostWeightFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryPercent(String hostWeightFreeMemoryPercent) {
+        this.hostWeightFreeMemoryPercent = hostWeightFreeMemoryPercent;
+    }
+
+    /**
      * Gets the old (deprecated) credentialsId field.
      *
      * @return the old, deprecated, credentialsId field.
@@ -503,6 +644,66 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         return slave;
     }
 
+    /**
+     * The vCPU count that {@link #reconfigureSteps} will set on a clone, or null if none of them
+     * sets one or its value cannot be worked out ahead of time (e.g. it uses a variable that only
+     * exists at build time) - in which case the master image's size is assumed.
+     */
+    @CheckForNull
+    Integer reconfiguredCpuCores() {
+        Integer result = null;
+        for (ReconfigureStep step : Util.fixNull(reconfigureSteps)) {
+            if (step instanceof ReconfigureCpu) {
+                result = parsePositive(((ReconfigureCpu) step).getCpuCores());
+            }
+        }
+        return result;
+    }
+
+    /** The memory size (MB) that {@link #reconfigureSteps} will set on a clone; see {@link #reconfiguredCpuCores()}. */
+    @CheckForNull
+    Long reconfiguredMemoryMB() {
+        Long result = null;
+        for (ReconfigureStep step : Util.fixNull(reconfigureSteps)) {
+            if (step instanceof ReconfigureMemory) {
+                Integer parsed = parsePositive(((ReconfigureMemory) step).getMemorySize());
+                result = parsed == null ? null : Long.valueOf(parsed);
+            }
+        }
+        return result;
+    }
+
+    private static @CheckForNull Integer parsePositive(@CheckForNull String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            int parsed = Integer.parseInt(new EnvVars().expand(value).trim());
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * What host selection should do for a clone of this template: the cloud's defaults overridden by
+     * this template's own settings (including its own host weights, which replace the cloud's as a
+     * whole), told that the clone is resized by this template's reconfigure steps right after it is
+     * created.
+     */
+    HostSelectionOptions buildHostSelectionOptions(@CheckForNull vSphereCloud cloud) throws VSphereException {
+        final HostWeights weightsOverride = HostWeights.parseOverride(
+                hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
+        return vSphereCloud
+                .hostSelectionOptions(
+                        cloud,
+                        hostSelectionRequireCores,
+                        hostSelectionRequireMemory,
+                        hostSelectionRequireAvailableMemory,
+                        weightsOverride)
+                .withVmSize(reconfiguredCpuCores(), reconfiguredMemoryMB());
+    }
+
     private vSphereCloudProvisionedSlave provision(
             final String cloneName,
             final TaskListener listener,
@@ -533,6 +734,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, this.hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, this.hostSelectionCandidates);
+        final HostSelectionOptions hostSelectionOptions = buildHostSelectionOptions(sourceCloud);
         try {
             final boolean willReconfigure = reconfigureSteps != null && !reconfigureSteps.isEmpty();
             vSphere.cloneOrDeployVm(
@@ -551,6 +753,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                     this.targetHost,
                     resolvedHostSelectionMode,
                     resolvedHostSelectionCandidates,
+                    hostSelectionOptions,
                     logger);
             LOGGER.log(Level.FINE, "Created new VM {0} from image {1}", new Object[] {cloneName, this.masterImageName});
             if (willReconfigure) {
@@ -756,6 +959,27 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            return HostSelectionOptions.triStateItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            return HostSelectionOptions.triStateItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            return HostSelectionOptions.triStateItems();
         }
 
         @RequirePOST

@@ -167,8 +167,67 @@ below.
 
 #### Controlling which ESXi host a clone lands on
 
-By default (all three fields left blank), clones are placed wherever vCenter's own
-default placement logic decides - in practice, often the same host the source
+##### Overview of dynamic hypervisor selection
+
+The vCenter cluster with several hypervisor hosts can default where new clones would
+appear, often swarming the same host on which the template is defined. Recent versions
+of this plugin allow the Jenkins Configuration for a cloud, and/or the ultimate steps
+to Clone or Deploy a VM, to require load-balancing among hosts in the cluster -- whether
+calling on DRS (paid VMWare feature) or having the plugin itself make a choice based
+on currently reported available resources. Note that these reports may be not real-time,
+so a burst of VM creations in a short time frame can still pile up on the same "most
+preferable" host as it was known in recent past.
+
+Balancing can be further impacted by optionally assigning weights to the available
+absolute and relative memory and CPU resources, for sysadmins to prioritize which
+resource aspect is most important for them. This logic and its settings are explored
+in much more detail in sections below, here is a short summary:
+
+* By default, with all four weights at zero, each host's score is "1 minus the larger
+  of its CPU use and its memory **use**, each as a fraction of that host's own capacity".
+  For example, a host at 70% CPU and 40% memory scores 0.3 (1.0 minus 0.7).
+  The host with the highest score, meaning **the one whose busier resource has the
+  most room**, wins; any ties keep cluster order (the first in considered list wins).
+* With weights set, each host gets four non-negative integers, as sysadmin-assigned
+  "weights" for **available** room in each of the considered resources (absolute or
+  relative to host capacity), and its score is their weighted average:
+  ```
+  score = (wCpuMhz*a + wCpuPct*b + wMemMB*c + wMemPct*d)
+        / (wCpuMhz   + wCpuPct   + wMemMB   + wMemPct)
+  ```
+  - **`a`, free CPU in MHz**: the host's free MHz divided by the largest free MHz
+    among the candidates. The host with the most free MHz gets 1.
+  - **`b`, free CPU percent**: the host's free MHz divided by its own CPU capacity.
+  - **`c`, free memory in MB**: the host's free MB divided by the largest free MB
+    among the candidates.
+  - **`d`, free memory percent**: the host's free MB divided by its own memory.
+  - Weight variables for Jenkins configuration, JCasC YAML or step parameters are
+    longer than in the short formula above, e.g.
+    ```
+    hostWeightFreeCpuMhz: '1',
+    hostWeightFreeCpuPercent: '1',
+    hostWeightFreeMemoryMB: '1',
+    hostWeightFreeMemoryPercent: '1',
+    ```
+
+  Highest score wins with this formula as well. Logical implications:
+
+  - Due to JCasC limitations, weights must be integers.
+    To express `0.5 : 0.25`, use `2` and `1` instead.
+  - Dividing by the **weight total** means only the proportions matter:
+    assignments like `a = b = c = d = 1` and  `a = b = c = d = 100`
+    have identical results.
+  - A weight of `0` drops that measure, and the highest score still wins.
+  - Hosts with **no** usage statistics (no report from vCenter was seen) are
+    left out of the ranking entirely (not just seen as having zero score).
+  - If ALL hosts' usage is not reported, the plugin picks no host and
+    logs that it was unable to determine the load of any candidate host,
+    and lets vSphere decide the placement (which is the original behaviour).
+
+##### Details
+
+By default (all three main fields left blank), clones are placed wherever vCenter's
+own default placement logic decides -- in practice, often the same host the source
 VM/template is registered on, which can unbalance load across a cluster over time.
 **This is unchanged from previous plugin versions**: nothing about existing jobs,
 pipelines, or templates changes unless you explicitly set one of these fields.
@@ -232,6 +291,88 @@ Three independent, optional mechanisms are available, in order of precedence:
      site**, even if the cloud has a default candidate list configured. This is not
      blank, so it's treated as a deliberate override rather than "inherit", even though
      it also parses to zero host names.
+
+4. **Require enough CPU cores** / **Require enough RAM** - two independent, opt-in
+   checkboxes (`hostSelectionRequireCores`, `hostSelectionRequireMemory`; both **off by
+   default**). When on, automatic selection (both `LEAST_LOADED` and `DRS_RECOMMENDED`)
+   only considers candidate hosts whose total *physical* CPU core count, respectively
+   RAM, is at least what the VM being created is configured with (read from the source
+   VM or template). This compares absolute capacity, not what is currently free, so
+   sites that deliberately oversubscribe (swap, hyperthreads, ...) can simply leave them
+   off. If no candidate satisfies them, a message is logged and placement is left to
+   vCenter, as when no usable candidate exists at all. They have no effect when an
+   explicit "Host" is given. On the vSphere Cloud they are plain checkboxes that set the
+   default for everything using that cloud. On a template or build step they are
+   tri-state: left on *inherit* (`null`/unset in a pipeline or YAML) they use the cloud's
+   default, while an explicit *Yes* (`true`) or *No* (`false`) overrides it for that call
+   site, in either direction.
+   Which size is compared:
+   * For a **template** with `Reconfigure CPU` / `Reconfigure Memory` steps, the size
+     those steps will set (they run right after the clone is created). If a value cannot be
+     worked out ahead of time, such as one using a variable that only exists at build time,
+     the master image's size is assumed for that component.
+   * For the **Clone and Deploy build steps**, the size you give in their own
+     **Number CPU Cores** (`cpuCores`) / **Memory Size in MB** (`memorySize`) fields, if set - these are applied in the
+     same operation that creates the VM, so no separate reconfigure is needed - else the
+     size of the source VM or template. They do **not** know about `Reconfigure*` steps that
+     you run *after* cloning, because host placement has already happened by then: if those
+     make the VM bigger or smaller than its source, the checks compare against the wrong
+     size. Prefer the `cpuCores`/`memorySize` fields, or leave the checks off for such steps.
+     (The source's cores-per-socket setting is kept unless you also set `coresPerSocket`, and
+     `cpuCores` must be a multiple of it; this is checked before cloning.)
+     These fields, `cpuCores`, `coresPerSocket`, `cpuLimitMHz` (a CPU *reservation* in MHz,
+     named like the Reconfigure CPU step's) and `memorySize`, have the same names and meaning as
+     the settings of the `Reconfigure CPU` / `Reconfigure Memory` steps, but are applied while the
+     VM is being created. All are optional; unset ones keep the source's values.
+
+   A third, separate check, **Require enough free RAM** (`hostSelectionRequireAvailableMemory`,
+   also off by default), only considers hosts that have at least the VM's memory size *free
+   right now*, so the hypervisor does not have to swap to make room for the new VM. Where "Require
+   enough RAM" looks at the memory installed, this one looks at current usage as reported by
+   vCenter: it changes by the minute, lags slightly, and several VMs created at the same moment
+   can still pick the same host. A host whose memory usage is unknown does not qualify. It
+   inherits and overrides exactly like the other two.
+
+5. **Host weights** (on the vSphere Cloud, and optionally per template/build step) - what "most available host" means for
+   `LEAST_LOADED` (and for the fallback when DRS gives no answer). Four whole-number weights,
+   `hostWeightFreeCpuMhz`, `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB` and
+   `hostWeightFreeMemoryPercent`, for the host's free CPU in MHz, free CPU as a percentage of
+   its capacity, free memory in MB and free memory as a percentage of its memory. Each host
+   gets a score between 0 and 1, the weighted average of the four, and the highest score
+   wins. Only the proportions matter (`1,1,1,1` is the same as `50,50,50,50`) and `0` ignores a
+   measure. The two *absolute* measures are compared with the best of the candidate hosts (the
+   host with the most free MHz scores 1 for that measure); the two *percentage* measures use
+   each host's own capacity. Use the absolute ones to prefer bigger hosts with more to give,
+   the percentage ones to prefer whichever host is least busy whatever its size.
+   * all four **zero** (the default) - the original ranking: the host whose busier resource,
+     CPU or memory, is the least used by percentage.
+   * Whole numbers only: a decimal value from Configuration-as-Code would be silently read as
+     zero.
+
+   A template or build step can set the same four weights for itself (`hostWeightFreeCpuMhz`,
+   `hostWeightFreeCpuPercent`, `hostWeightFreeMemoryMB`, `hostWeightFreeMemoryPercent`, given as
+   text, with variables allowed in build steps). If it sets **any** of them, its four values
+   **replace** the cloud's weights as a whole, and the ones it leaves blank count as `0`; if it
+   sets none, the cloud's apply. Setting all four to `0` gives the original ranking despite
+   weights on the cloud.
+
+##### Seeing why a host was chosen
+
+With a host selection mode set, the build console log (and the template's provisioning log)
+lists the cluster's hosts, each with the reason it was ruled out (not connected, in
+maintenance mode, not in the candidate list, too few cores, too little RAM, no usage
+statistics), then every remaining candidate with its score and free CPU/memory, best first,
+and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
+scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
+
+##### Settings for the classic UI, pipeline and JCasC YAML
+
+On templates and build steps, the *Require enough ...* settings are drop-downs in the classic UI,
+which store an unset ("inherit") value as an empty string - bound through
+`hostSelectionRequireCoresAsString` and `hostSelectionRequireMemoryAsString`. In a pipeline or
+Configuration-as-Code YAML, use the real booleans `hostSelectionRequireCores` and
+`hostSelectionRequireMemory` (or the string forms `'true'`/`'false'`/`''`), whichever is more
+convenient; use one of the two per template/step.
 
 In short: pick "Host" for a fixed lab setup, `LEAST_LOADED` if you want basic load
 spreading without a DRS license, or `DRS_RECOMMENDED` if you're already on Enterprise

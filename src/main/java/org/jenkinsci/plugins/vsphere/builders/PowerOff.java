@@ -158,7 +158,8 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
 
             VSphereLogger.vsLogger(jLogger, "Successfully shutdown \"" + expandedVm + "\"");
         } else {
-            VSphereLogger.vsLogger(jLogger, "Does not exists, BUT ignore it! \"" + expandedVm + "\"");
+            VSphereLogger.vsLogger(
+                    jLogger, "Does not exist, BUT we can ignore it for shutdown goals! \"" + expandedVm + "\"");
         }
 
         return true;

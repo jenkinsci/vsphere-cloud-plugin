@@ -37,6 +37,7 @@ public final class VSphereHostSelection {
         private final int cpuCapacityMhz;
         private final Integer memUsageMB;
         private final long memCapacityMB;
+        private final int cpuCores;
 
         public HostCandidate(
                 String name,
@@ -46,6 +47,19 @@ public final class VSphereHostSelection {
                 int cpuCapacityMhz,
                 Integer memUsageMB,
                 long memCapacityMB) {
+            this(name, connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB, 0);
+        }
+
+        public HostCandidate(
+                String name,
+                boolean connected,
+                boolean inMaintenanceMode,
+                Integer cpuUsageMhz,
+                int cpuCapacityMhz,
+                Integer memUsageMB,
+                long memCapacityMB,
+                int cpuCores) {
+            this.cpuCores = cpuCores;
             this.name = name;
             this.connected = connected;
             this.inMaintenanceMode = inMaintenanceMode;
@@ -83,6 +97,11 @@ public final class VSphereHostSelection {
             return memCapacityMB;
         }
 
+        /** Number of physical CPU cores on the host; 0 if unknown. */
+        public int getCpuCores() {
+            return cpuCores;
+        }
+
         /**
          * Fraction of capacity currently in use, taking the higher (more
          * constrained) of CPU and memory. Returns null if usage stats are
@@ -96,6 +115,26 @@ public final class VSphereHostSelection {
             double cpuFraction = cpuCapacityMhz > 0 ? (double) cpuUsageMhz / cpuCapacityMhz : 0d;
             double memFraction = memCapacityMB > 0 ? (double) memUsageMB / memCapacityMB : 0d;
             return Math.max(cpuFraction, memFraction);
+        }
+
+        /** Unused CPU in MHz (0 if usage is unknown). */
+        public double freeCpuMhz() {
+            return cpuUsageMhz == null ? 0d : Math.max(0, cpuCapacityMhz - cpuUsageMhz);
+        }
+
+        /** Unused memory in MB (0 if usage is unknown). */
+        public double freeMemMB() {
+            return memUsageMB == null ? 0d : Math.max(0L, memCapacityMB - memUsageMB);
+        }
+
+        /** Unused CPU as a share (0..1) of the host's CPU capacity. */
+        public double freeCpuFraction() {
+            return cpuCapacityMhz > 0 ? freeCpuMhz() / cpuCapacityMhz : 0d;
+        }
+
+        /** Unused memory as a share (0..1) of the host's memory. */
+        public double freeMemFraction() {
+            return memCapacityMB > 0 ? freeMemMB() / memCapacityMB : 0d;
         }
 
         /**
@@ -206,15 +245,165 @@ public final class VSphereHostSelection {
     public static List<HostCandidate> filterCandidates(List<HostCandidate> candidates, Set<String> allowList) {
         List<HostCandidate> result = new ArrayList<>();
         for (HostCandidate candidate : candidates) {
-            if (!candidate.isUsable()) {
-                continue;
+            if (excludedBecause(candidate, allowList) == null) {
+                result.add(candidate);
             }
-            if (allowList != null && !allowList.isEmpty() && !allowList.contains(candidate.getName())) {
-                continue;
-            }
-            result.add(candidate);
         }
         return result;
+    }
+
+    /**
+     * Why {@link #filterCandidates} drops this host, or null if it keeps it. For logging the
+     * reasoning behind a placement.
+     */
+    public static String excludedBecause(HostCandidate candidate, Set<String> allowList) {
+        if (!candidate.isConnected()) {
+            return "not connected";
+        }
+        if (candidate.isInMaintenanceMode()) {
+            return "in maintenance mode";
+        }
+        if (allowList != null && !allowList.isEmpty() && !allowList.contains(candidate.getName())) {
+            return "not in the list of candidate hosts";
+        }
+        return null;
+    }
+
+    /**
+     * Optionally drops candidates that are physically too small for the VM about to be
+     * created: with {@code requireCores}, hosts with fewer physical CPU cores than {@code
+     * vmCpus}; with {@code requireMemory}, hosts with less total physical RAM than {@code
+     * vmMemoryMB}. Compares absolute capacity, not current free resources, so sites that
+     * oversubscribe (swap, hyperthreads, ...) can simply leave both off. A host whose
+     * relevant capacity is unknown (0) does not satisfy a requirement that is switched
+     * on, and a VM size that is unknown (null) disables the corresponding check.
+     */
+    public static List<HostCandidate> filterByVmSize(
+            List<HostCandidate> candidates,
+            boolean requireCores,
+            Integer vmCpus,
+            boolean requireMemory,
+            Integer vmMemoryMB) {
+        final boolean checkCores = requireCores && vmCpus != null;
+        final boolean checkMemory = requireMemory && vmMemoryMB != null;
+        if (!checkCores && !checkMemory) {
+            return candidates;
+        }
+        List<HostCandidate> result = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            if (sizeShortfall(candidate, requireCores, vmCpus, requireMemory, vmMemoryMB) == null) {
+                result.add(candidate);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Why {@link #filterByVmSize} drops this host, or null if it keeps it. For logging the
+     * reasoning behind a placement.
+     */
+    public static String sizeShortfall(
+            HostCandidate candidate, boolean requireCores, Integer vmCpus, boolean requireMemory, Integer vmMemoryMB) {
+        return sizeShortfall(candidate, requireCores, vmCpus, requireMemory, false, vmMemoryMB);
+    }
+
+    /**
+     * As above, and with {@code requireAvailableMemory} also drops hosts that do not have at least
+     * {@code vmMemoryMB} of memory free right now (so the new VM would not be swapped by the
+     * hypervisor), or whose memory usage is unknown. Unlike {@code requireMemory}, which compares
+     * the RAM installed, this looks at the host's current usage, which changes by the minute.
+     */
+    public static String sizeShortfall(
+            HostCandidate candidate,
+            boolean requireCores,
+            Integer vmCpus,
+            boolean requireMemory,
+            boolean requireAvailableMemory,
+            Integer vmMemoryMB) {
+        if (requireCores && vmCpus != null && candidate.getCpuCores() < vmCpus) {
+            return "has " + candidate.getCpuCores() + " physical core(s), fewer than the " + vmCpus
+                    + " vCPU(s) of the VM";
+        }
+        if (requireMemory && vmMemoryMB != null && candidate.getMemCapacityMB() < vmMemoryMB) {
+            return "has " + candidate.getMemCapacityMB() + " MB of RAM, less than the " + vmMemoryMB + " MB of the VM";
+        }
+        if (requireAvailableMemory && vmMemoryMB != null) {
+            if (candidate.getMemUsageMB() == null) {
+                return "its memory usage is unknown, so it cannot be told whether " + vmMemoryMB + " MB are free";
+            }
+            if (candidate.freeMemMB() < vmMemoryMB) {
+                return "has only " + (long) candidate.freeMemMB() + " MB of free RAM right now, less than the "
+                        + vmMemoryMB + " MB of the VM";
+            }
+        }
+        return null;
+    }
+
+    /** A candidate host with its availability score (0 worst .. 1 best); see {@link #rank}. */
+    public static final class ScoredHost {
+        private final HostCandidate host;
+        private final double score;
+
+        ScoredHost(HostCandidate host, double score) {
+            this.host = host;
+            this.score = score;
+        }
+
+        public HostCandidate getHost() {
+            return host;
+        }
+
+        public double getScore() {
+            return score;
+        }
+    }
+
+    /**
+     * Ranks the candidates that have usage statistics, most available first (equally scored ones
+     * keep their incoming order). Hosts without statistics are left out.
+     *
+     * <p>With {@link HostWeights#isDefault default} weights, a host scores 1 minus its {@link
+     * HostCandidate#loadFraction() load fraction}, which reproduces {@link #pickLeastLoaded}.
+     * Otherwise the score is the weighted average of four measures, each between 0 and 1: free CPU
+     * and free memory as a share of the host's own capacity, and free CPU (MHz) and free memory (MB)
+     * relative to the best of the candidates being compared.
+     */
+    public static List<ScoredHost> rank(List<HostCandidate> candidates, HostWeights weights) {
+        final HostWeights w = weights == null ? HostWeights.DEFAULT : weights;
+        List<HostCandidate> withStats = new ArrayList<>();
+        double maxFreeCpuMhz = 0;
+        double maxFreeMemMB = 0;
+        for (HostCandidate candidate : candidates) {
+            if (candidate.loadFraction() == null) {
+                continue;
+            }
+            withStats.add(candidate);
+            maxFreeCpuMhz = Math.max(maxFreeCpuMhz, candidate.freeCpuMhz());
+            maxFreeMemMB = Math.max(maxFreeMemMB, candidate.freeMemMB());
+        }
+        List<ScoredHost> ranked = new ArrayList<>();
+        for (HostCandidate candidate : withStats) {
+            double score;
+            if (w.isDefault()) {
+                score = 1d - candidate.loadFraction();
+            } else {
+                double sum = w.getFreeCpuMhz() * (maxFreeCpuMhz > 0 ? candidate.freeCpuMhz() / maxFreeCpuMhz : 0d)
+                        + w.getFreeCpuPercent() * candidate.freeCpuFraction()
+                        + w.getFreeMemoryMB() * (maxFreeMemMB > 0 ? candidate.freeMemMB() / maxFreeMemMB : 0d)
+                        + w.getFreeMemoryPercent() * candidate.freeMemFraction();
+                score = sum / w.total();
+            }
+            ranked.add(new ScoredHost(candidate, score));
+        }
+        // List.sort is stable, so ties keep their incoming order.
+        ranked.sort((x, y) -> Double.compare(y.getScore(), x.getScore()));
+        return ranked;
+    }
+
+    /** The most available candidate according to {@link #rank}, or null if none has statistics. */
+    public static HostCandidate pickBest(List<HostCandidate> candidates, HostWeights weights) {
+        List<ScoredHost> ranked = rank(candidates, weights);
+        return ranked.isEmpty() ? null : ranked.get(0).getHost();
     }
 
     /**

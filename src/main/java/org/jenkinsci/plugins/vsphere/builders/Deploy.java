@@ -14,6 +14,7 @@
  */
 package org.jenkinsci.plugins.vsphere.builders;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToAccessJob;
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
 import com.vmware.vim25.mo.VirtualMachine;
@@ -34,10 +35,13 @@ import java.util.Set;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.jenkinsci.plugins.vsphere.tools.VmSize;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -68,6 +72,32 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private String hostSelectionMode;
     /** Optional allow-list restricting {@code hostSelectionMode}'s candidates. */
     private Set<String> hostSelectionCandidates;
+
+    /** Optional; vCPU count to create the VM with, in the same operation. Unset keeps the source's. */
+    private String cpuCores;
+    /** Optional; cores per socket to create the VM with. Unset keeps the source's. */
+    private String coresPerSocket;
+    /** Optional; CPU reservation in MHz to create the VM with. Unset means none. */
+    private String cpuLimitMHz;
+    /** Optional; memory size in MB to create the VM with. Unset keeps the source's. */
+    private String memorySize;
+
+    /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
+    private Boolean hostSelectionRequireCores;
+    /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
+    private Boolean hostSelectionRequireMemory;
+    /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
+    private Boolean hostSelectionRequireAvailableMemory;
+    /**
+     * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
+     * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
+     * (blank ones count as 0); if none is, the cloud's apply.
+     */
+    private String hostWeightFreeCpuMhz;
+
+    private String hostWeightFreeCpuPercent;
+    private String hostWeightFreeMemoryMB;
+    private String hostWeightFreeMemoryPercent;
 
     @DataBoundConstructor
     public Deploy(
@@ -191,6 +221,165 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionCandidates = VSphereHostSelection.parseAllowListOrNull(hostSelectionCandidatesCsv);
     }
 
+    /** Optional: number of vCPUs to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCpuCores() {
+        return cpuCores;
+    }
+
+    @DataBoundSetter
+    public void setCpuCores(String cpuCores) {
+        this.cpuCores = cpuCores;
+    }
+
+    /** Optional: cores per socket to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCoresPerSocket() {
+        return coresPerSocket;
+    }
+
+    @DataBoundSetter
+    public void setCoresPerSocket(String coresPerSocket) {
+        this.coresPerSocket = coresPerSocket;
+    }
+
+    /** Optional: CPU reservation in MHz to create the VM with, as {@code ReconfigureCpu}'s; may use variables. */
+    public String getCpuLimitMHz() {
+        return cpuLimitMHz;
+    }
+
+    @DataBoundSetter
+    public void setCpuLimitMHz(String cpuLimitMHz) {
+        this.cpuLimitMHz = cpuLimitMHz;
+    }
+
+    /** Optional: memory size in MB to create the VM with, as {@code ReconfigureMemory}'s; may use variables. */
+    public String getMemorySize() {
+        return memorySize;
+    }
+
+    @DataBoundSetter
+    public void setMemorySize(String memorySize) {
+        this.memorySize = memorySize;
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as many
+     * physical CPU cores as the VM has vCPUs. {@code null} (the default) inherits the cloud's
+     * setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireCores() {
+        return hostSelectionRequireCores;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCores(Boolean hostSelectionRequireCores) {
+        this.hostSelectionRequireCores = hostSelectionRequireCores;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireCores}.
+     */
+    public String getHostSelectionRequireCoresAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireCores);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireCoresAsString(String hostSelectionRequireCoresAsString) {
+        this.hostSelectionRequireCores = HostSelectionOptions.triStateFromString(hostSelectionRequireCoresAsString);
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts with at least as much
+     * physical RAM as the VM is configured with. {@code null} (the default) inherits the
+     * cloud's setting; {@code true}/{@code false} override it for this call site.
+     */
+    public Boolean getHostSelectionRequireMemory() {
+        return hostSelectionRequireMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemory(Boolean hostSelectionRequireMemory) {
+        this.hostSelectionRequireMemory = hostSelectionRequireMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireMemory}.
+     */
+    public String getHostSelectionRequireMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireMemoryAsString(String hostSelectionRequireMemoryAsString) {
+        this.hostSelectionRequireMemory = HostSelectionOptions.triStateFromString(hostSelectionRequireMemoryAsString);
+    }
+
+    /**
+     * Opt-in override of the cloud's default: only consider hosts that currently have at least as
+     * much memory free as the VM is configured with, so it is not swapped by the hypervisor.
+     * {@code null} (the default) inherits the cloud's setting; {@code true}/{@code false} override
+     * it for this call site.
+     */
+    public Boolean getHostSelectionRequireAvailableMemory() {
+        return hostSelectionRequireAvailableMemory;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemory(Boolean hostSelectionRequireAvailableMemory) {
+        this.hostSelectionRequireAvailableMemory = hostSelectionRequireAvailableMemory;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionRequireAvailableMemory}.
+     */
+    public String getHostSelectionRequireAvailableMemoryAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionRequireAvailableMemory);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionRequireAvailableMemoryAsString(String hostSelectionRequireAvailableMemoryAsString) {
+        this.hostSelectionRequireAvailableMemory =
+                HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
+    }
+
+    public String getHostWeightFreeCpuMhz() {
+        return hostWeightFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuMhz(String hostWeightFreeCpuMhz) {
+        this.hostWeightFreeCpuMhz = hostWeightFreeCpuMhz;
+    }
+
+    public String getHostWeightFreeCpuPercent() {
+        return hostWeightFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeCpuPercent(String hostWeightFreeCpuPercent) {
+        this.hostWeightFreeCpuPercent = hostWeightFreeCpuPercent;
+    }
+
+    public String getHostWeightFreeMemoryMB() {
+        return hostWeightFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryMB(String hostWeightFreeMemoryMB) {
+        this.hostWeightFreeMemoryMB = hostWeightFreeMemoryMB;
+    }
+
+    public String getHostWeightFreeMemoryPercent() {
+        return hostWeightFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostWeightFreeMemoryPercent(String hostWeightFreeMemoryPercent) {
+        this.hostWeightFreeMemoryPercent = hostWeightFreeMemoryPercent;
+    }
+
     @Override
     public String getIP() {
         return IP;
@@ -296,6 +485,22 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 VSphereHostSelection.resolveMode(cloudDefaultHostSelectionMode, hostSelectionMode);
         final Set<String> resolvedHostSelectionCandidates = VSphereHostSelection.resolveCandidates(
                 cloudDefaultHostSelectionCandidates, expandedHostSelectionCandidates);
+        final HostWeights weightsOverride = HostWeights.parseOverride(
+                hostWeightFreeCpuMhz == null ? null : env.expand(hostWeightFreeCpuMhz),
+                hostWeightFreeCpuPercent == null ? null : env.expand(hostWeightFreeCpuPercent),
+                hostWeightFreeMemoryMB == null ? null : env.expand(hostWeightFreeMemoryMB),
+                hostWeightFreeMemoryPercent == null ? null : env.expand(hostWeightFreeMemoryPercent));
+        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
+                sourceCloud,
+                hostSelectionRequireCores,
+                hostSelectionRequireMemory,
+                hostSelectionRequireAvailableMemory,
+                weightsOverride);
+        final VmSize vmSize = VmSize.of(
+                cpuCores == null ? null : env.expand(cpuCores),
+                coresPerSocket == null ? null : env.expand(coresPerSocket),
+                cpuLimitMHz == null ? null : env.expand(cpuLimitMHz),
+                memorySize == null ? null : env.expand(memorySize));
 
         vsphere.deployVm(
                 expandedClone,
@@ -310,6 +515,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 expandedHost,
                 resolvedHostSelectionMode,
                 resolvedHostSelectionCandidates,
+                hostSelectionOptions,
+                vmSize,
                 jLogger);
         VSphereLogger.vsLogger(jLogger, "\"" + expandedClone + "\" successfully deployed!");
         if (!powerOn) {
@@ -390,6 +597,24 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
             return items;
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireCoresAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return HostSelectionOptions.triStateItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireMemoryAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return HostSelectionOptions.triStateItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return HostSelectionOptions.triStateItems();
         }
 
         @RequirePOST

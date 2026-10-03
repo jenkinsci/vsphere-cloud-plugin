@@ -48,6 +48,60 @@ class CloneTest {
     }
 
     @Test
+    void hostSizeRequirementsAreTriStateAndInheritWhenOmitted() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getHostSelectionRequireCores(), nullValue());
+        assertThat(omitted.getHostSelectionRequireMemory(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("hostSelectionRequireCores", false);
+        args.put("hostSelectionRequireMemory", true);
+        Clone explicit = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(explicit.getHostSelectionRequireCores(), is(false));
+        assertThat(explicit.getHostSelectionRequireMemory(), is(true));
+    }
+
+    @Test
+    void vmSizeIsOptionalAndBoundLikeAPipelineWouldBindIt() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getCpuCores(), nullValue());
+        assertThat(omitted.getCoresPerSocket(), nullValue());
+        assertThat(omitted.getCpuLimitMHz(), nullValue());
+        assertThat(omitted.getMemorySize(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("cpuCores", "8");
+        args.put("coresPerSocket", "4");
+        args.put("cpuLimitMHz", "2000");
+        args.put("memorySize", "16384");
+        Clone sized = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(sized.getCpuCores(), is("8"));
+        assertThat(sized.getCoresPerSocket(), is("4"));
+        assertThat(sized.getCpuLimitMHz(), is("2000"));
+        assertThat(sized.getMemorySize(), is("16384"));
+    }
+
+    @Test
+    void hostWeightsCanBeGivenPerCallAndAreUnsetWhenOmitted() throws Exception {
+        Clone omitted = DescribableModel.of(Clone.class).instantiate(baseArgs());
+        assertThat(omitted.getHostWeightFreeCpuMhz(), nullValue());
+        assertThat(omitted.getHostWeightFreeCpuPercent(), nullValue());
+        assertThat(omitted.getHostWeightFreeMemoryMB(), nullValue());
+        assertThat(omitted.getHostWeightFreeMemoryPercent(), nullValue());
+
+        Map<String, Object> args = baseArgs();
+        args.put("hostWeightFreeCpuMhz", "1");
+        args.put("hostWeightFreeCpuPercent", "2");
+        args.put("hostWeightFreeMemoryMB", "3");
+        args.put("hostWeightFreeMemoryPercent", "4");
+        Clone weighted = DescribableModel.of(Clone.class).instantiate(args);
+        assertThat(weighted.getHostWeightFreeCpuMhz(), is("1"));
+        assertThat(weighted.getHostWeightFreeCpuPercent(), is("2"));
+        assertThat(weighted.getHostWeightFreeMemoryMB(), is("3"));
+        assertThat(weighted.getHostWeightFreeMemoryPercent(), is("4"));
+    }
+
+    @Test
     void hostPlacementFieldsDefaultToNullWhenOmitted() throws Exception {
         // Backward compatibility: existing jobs/pipelines that don't mention these
         // fields must behave exactly as before (no host restriction of any kind).

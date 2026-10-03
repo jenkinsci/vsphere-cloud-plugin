@@ -30,6 +30,7 @@ import com.vmware.vim25.PlacementSpec;
 import com.vmware.vim25.RuntimeFault;
 import com.vmware.vim25.TaskInfo;
 import com.vmware.vim25.TaskInfoState;
+import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigSpec;
@@ -265,6 +266,86 @@ public class VSphere {
             Set<String> hostSelectionCandidates,
             PrintStream jLogger)
             throws VSphereException {
+        deployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus the opt-in VM-size checks described at {@link
+     * #cloneOrDeployVm} for {@code hostSelectionOptions}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void deployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            PrintStream jLogger)
+            throws VSphereException {
+        deployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus a vCPU count and memory size (MB) to create the VM with
+     * in the same operation, instead of reconfiguring it afterwards; see {@link #cloneOrDeployVm}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void deployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
         final boolean useCurrentSnapshotIsFALSE = false;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
@@ -284,6 +365,8 @@ public class VSphere {
                 host,
                 hostSelectionMode,
                 hostSelectionCandidates,
+                hostSelectionOptions,
+                vmSize,
                 jLogger);
     }
 
@@ -352,6 +435,86 @@ public class VSphere {
             Set<String> hostSelectionCandidates,
             PrintStream jLogger)
             throws VSphereException {
+        cloneVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus the opt-in VM-size checks described at {@link
+     * #cloneOrDeployVm} for {@code hostSelectionOptions}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void cloneVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            PrintStream jLogger)
+            throws VSphereException {
+        cloneVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                powerOn,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus a vCPU count and memory size (MB) to create the VM with
+     * in the same operation, instead of reconfiguring it afterwards; see {@link #cloneOrDeployVm}.
+     *
+     * @throws VSphereException If an error occurred.
+     */
+    public void cloneVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean powerOn,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
         final boolean useCurrentSnapshotIsTRUE = true;
         final String namedSnapshotIsNULL = null;
         final Map<String, String> extraConfigParameters = null;
@@ -371,6 +534,8 @@ public class VSphere {
                 host,
                 hostSelectionMode,
                 hostSelectionCandidates,
+                hostSelectionOptions,
+                vmSize,
                 jLogger);
     }
 
@@ -500,6 +665,117 @@ public class VSphere {
             Set<String> hostSelectionCandidates,
             PrintStream jLogger)
             throws VSphereException {
+        cloneOrDeployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                useCurrentSnapshot,
+                namedSnapshot,
+                powerOn,
+                extraConfigParameters,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus two opt-in checks on top of {@code
+     * hostSelectionMode}'s candidate list, both comparing the VM's configuration with each
+     * host's total physical capacity (not what is currently free):
+     *
+     * @param hostSelectionOptions
+     *            (Optional, null means {@link HostSelectionOptions#NONE}) Refinements of
+     *            automatic selection: {@link HostSelectionOptions#isRequireCores()} only
+     *            considers hosts with at least as many physical CPU cores as the VM has
+     *            vCPUs, {@link HostSelectionOptions#isRequireMemory()} only hosts with at least
+     *            as much physical RAM as the VM is configured with.
+     *            <p>
+     *            Both default to off elsewhere, as many sites run oversubscribed (swap,
+     *            hyperthreads, ...). They have no effect when {@code host} is set or
+     *            {@code hostSelectionMode} is empty. If no host satisfies them, placement is
+     *            left to vCenter (as when no candidate is usable at all).
+     * @throws VSphereException
+     *             if anything goes wrong.
+     */
+    public void cloneOrDeployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            PrintStream jLogger)
+            throws VSphereException {
+        cloneOrDeployVm(
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                useCurrentSnapshot,
+                namedSnapshot,
+                powerOn,
+                extraConfigParameters,
+                customizationSpec,
+                host,
+                hostSelectionMode,
+                hostSelectionCandidates,
+                hostSelectionOptions,
+                null,
+                jLogger);
+    }
+
+    /**
+     * As the overload without them, plus the size to create the VM with.
+     *
+     * @param vmSize
+     *            (Optional, null means {@link VmSize#NONE}) CPU and memory settings to give the
+     *            new VM in the same operation that creates it, instead of reconfiguring it
+     *            afterwards; unset parts keep the source's. {@code cpuCores} and {@code
+     *            memorySize} are also what the host size checks compare against, in place of the
+     *            source's.
+     * @throws VSphereException
+     *             if anything goes wrong.
+     */
+    public void cloneOrDeployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
         if (namedSnapshot == null && extraConfigParameters == null) {
             // NOTE: This "if" clause may be superfluous - just that previously
             // this message was only logged by cloneVm() or deployVm()... so for
@@ -588,6 +864,24 @@ public class VSphere {
                 cloneSpec.setCustomization(spec.getSpec());
             }
 
+            final VmSize size = vmSize == null ? VmSize.NONE : vmSize;
+            if (!size.isEmpty()) {
+                final VirtualHardware sourceHardware = vmConfig.getHardware();
+                size.validateAgainstSource(
+                        sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()),
+                        sourceHardware == null ? null : sourceHardware.getNumCoresPerSocket());
+                VirtualMachineConfigSpec sizeSpec = cloneSpec.getConfig();
+                if (sizeSpec == null) {
+                    sizeSpec = new VirtualMachineConfigSpec();
+                }
+                size.applyTo(sizeSpec);
+                cloneSpec.setConfig(sizeSpec);
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be created with " + size.describe()
+                                + ".");
+            }
+
             Folder folder;
             if (folderName == null || folderName.isEmpty() || folderName.equals(" ")) {
                 // same folder as source
@@ -600,6 +894,14 @@ public class VSphere {
                 folder = getFolder(folderName);
             }
 
+            // What the VM will be created with beats what the caller announced, which beats the source's.
+            final HostSelectionOptions announced =
+                    hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
+            final Integer sizeCpus = size.getCpuCores();
+            final Integer sizeMemory = size.getMemorySize();
+            final HostSelectionOptions selectionOptions = announced.withVmSize(
+                    sizeCpus != null ? sizeCpus : announced.getVmCpus(),
+                    sizeMemory != null ? Long.valueOf(sizeMemory.longValue()) : announced.getVmMemoryMB());
             final HostSystem selectedHost = selectHost(
                     jLogger,
                     getClusterByName(cluster),
@@ -609,7 +911,8 @@ public class VSphere {
                     rel,
                     host,
                     hostSelectionMode,
-                    hostSelectionCandidates);
+                    hostSelectionCandidates,
+                    selectionOptions);
             if (selectedHost != null) {
                 rel.setHost(selectedHost.getMOR());
                 logMessage(
@@ -761,7 +1064,8 @@ public class VSphere {
             VirtualMachineRelocateSpec rel,
             String host,
             String hostSelectionMode,
-            Set<String> hostSelectionCandidates)
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions)
             throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException, VSphereException {
         if (host != null && !host.isEmpty()) {
             HostSystem explicitHost = getHostByName(host, clusterResource);
@@ -796,8 +1100,22 @@ public class VSphere {
             }
         }
 
-        final List<HostCandidate> filtered = VSphereHostSelection.filterCandidates(candidates, hostSelectionCandidates);
-        if (filtered.isEmpty()) {
+        final HostSelectionOptions opts =
+                hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
+        logMessage(
+                jLogger,
+                "Host selection (" + hostSelectionMode + ") in cluster \"" + clusterResource.getName() + "\": "
+                        + candidates.size() + " host(s) found.");
+        final List<HostCandidate> usable = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String excluded = VSphereHostSelection.excludedBecause(candidate, hostSelectionCandidates);
+            if (excluded == null) {
+                usable.add(candidate);
+            } else {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + excluded + ".");
+            }
+        }
+        if (usable.isEmpty()) {
             logMessage(
                     jLogger,
                     "No usable candidate hosts found in cluster \"" + clusterResource.getName()
@@ -806,10 +1124,62 @@ public class VSphere {
             return null;
         }
 
+        final VirtualMachineConfigInfo sourceConfig = sourceVm.getConfig();
+        final VirtualHardware sourceHardware = sourceConfig == null ? null : sourceConfig.getHardware();
+        // A size announced by the caller (e.g. a template whose reconfigure steps resize the
+        // clone right after creation) beats the source VM's, which is only what we clone from.
+        final Integer announcedCpus = opts.getVmCpus();
+        final Integer vmCpus = announcedCpus != null
+                ? announcedCpus
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()));
+        final Long announcedMemoryMB = opts.getVmMemoryMB();
+        final Integer vmMemoryMB = announcedMemoryMB != null
+                ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, announcedMemoryMB.longValue()))
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getMemoryMB()));
+        if ((opts.isRequireCores() && vmCpus == null)
+                || ((opts.isRequireMemory() || opts.isRequireAvailableMemory()) && vmMemoryMB == null)) {
+            logMessage(
+                    jLogger,
+                    "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
+        }
+        final List<HostCandidate> filtered = new ArrayList<>();
+        for (HostCandidate candidate : usable) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate,
+                    opts.isRequireCores(),
+                    vmCpus,
+                    opts.isRequireMemory(),
+                    opts.isRequireAvailableMemory(),
+                    vmMemoryMB);
+            if (shortfall == null) {
+                filtered.add(candidate);
+            } else {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        if (filtered.isEmpty()) {
+            logMessage(
+                    jLogger,
+                    "No candidate host in cluster \"" + clusterResource.getName() + "\" satisfies the requested"
+                            + (opts.isRequireCores() ? " core count (>= " + vmCpus + ")" : "")
+                            + (opts.isRequireCores() && (opts.isRequireMemory() || opts.isRequireAvailableMemory())
+                                    ? " and"
+                                    : "")
+                            + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
+                            + (opts.isRequireMemory() && opts.isRequireAvailableMemory() ? " and" : "")
+                            + (opts.isRequireAvailableMemory() ? " free RAM (>= " + vmMemoryMB + " MB)" : "")
+                            + " of the VM; letting vSphere decide placement.");
+            return null;
+        }
+
         if ("DRS_RECOMMENDED".equals(hostSelectionMode)) {
             HostSystem recommended = recommendHostViaDrs(
                     jLogger, clusterResource, sourceVm, cloneName, cloneSpec, rel, hostSystems, filtered);
             if (recommended != null) {
+                logMessage(
+                        jLogger,
+                        "  DRS recommended host \"" + recommended.getName() + "\" out of the " + filtered.size()
+                                + " candidate host(s) above that passed the filters.");
                 return recommended;
             }
             logMessage(
@@ -817,7 +1187,36 @@ public class VSphere {
                     "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
         }
 
-        final HostCandidate winner = VSphereHostSelection.pickLeastLoaded(filtered);
+        final HostWeights weights = opts.getWeights();
+        logMessage(
+                jLogger,
+                "Ranking " + filtered.size() + " candidate host(s) by "
+                        + (weights.isDefault()
+                                ? "the lower of free CPU and free memory (percentage), no weights configured"
+                                : weights.toString())
+                        + ":");
+        final List<VSphereHostSelection.ScoredHost> ranking = VSphereHostSelection.rank(filtered, weights);
+        for (HostCandidate candidate : filtered) {
+            if (candidate.loadFraction() == null) {
+                logMessage(
+                        jLogger,
+                        "  Host \"" + candidate.getName() + "\" ruled out: no CPU/memory usage statistics available.");
+            }
+        }
+        for (VSphereHostSelection.ScoredHost scored : ranking) {
+            final HostCandidate c = scored.getHost();
+            logMessage(
+                    jLogger,
+                    String.format(
+                            "  Host \"%s\": score %.3f (free CPU %.0f MHz = %.0f%%, free memory %.0f MB = %.0f%%)",
+                            c.getName(),
+                            scored.getScore(),
+                            c.freeCpuMhz(),
+                            c.freeCpuFraction() * 100,
+                            c.freeMemMB(),
+                            c.freeMemFraction() * 100));
+        }
+        final HostCandidate winner = ranking.isEmpty() ? null : ranking.get(0).getHost();
         if (winner == null) {
             logMessage(
                     jLogger,
@@ -900,6 +1299,7 @@ public class VSphere {
         Integer cpuUsageMhz = null;
         Integer memUsageMB = null;
         int cpuCapacityMhz = 0;
+        int cpuCores = 0;
         long memCapacityMB = 0L;
         if (summary != null) {
             final HostListSummaryQuickStats quickStats = summary.getQuickStats();
@@ -909,7 +1309,8 @@ public class VSphere {
             }
             final HostHardwareSummary hardware = summary.getHardware();
             if (hardware != null) {
-                cpuCapacityMhz = hardware.getCpuMhz() * hardware.getNumCpuCores();
+                cpuCores = hardware.getNumCpuCores();
+                cpuCapacityMhz = hardware.getCpuMhz() * cpuCores;
                 memCapacityMB = hardware.getMemorySize() / (1024L * 1024L);
             }
         }
@@ -920,7 +1321,8 @@ public class VSphere {
                 cpuUsageMhz,
                 cpuCapacityMhz,
                 memUsageMB,
-                memCapacityMB);
+                memCapacityMB,
+                cpuCores);
     }
 
     private static HostSystem findHostSystemByName(List<HostSystem> hostSystems, String name) {
