@@ -67,8 +67,17 @@ public class ReconfigureDisk extends ReconfigureStep {
         return diskSize;
     }
 
-    public String getDataStore() {
+    /** Named after the {@code datastore} data-bound property, so that the config form can read the value back. */
+    public String getDatastore() {
         return datastore;
+    }
+
+    /**
+     * @deprecated Misspelled; the config form looks up {@link #getDatastore()} (JENKINS-66937).
+     */
+    @Deprecated
+    public String getDataStore() {
+        return getDatastore();
     }
 
     public DeviceAction getDeviceAction() {
