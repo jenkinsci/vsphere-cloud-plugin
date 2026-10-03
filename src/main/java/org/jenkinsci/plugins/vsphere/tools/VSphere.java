@@ -1831,6 +1831,23 @@ public class VSphere {
      */
     public void renameVmSnapshot(String vmName, String oldName, String newName, String newDescription)
             throws VSphereException {
+        renameVmSnapshot(vmName, oldName, newName, newDescription, true);
+    }
+
+    /**
+     * Renames a VM Snapshot
+     * @param vmName the name of the VM whose snapshot is being renamed.
+     * @param oldName the current name of the VM's snapshot.
+     * @param newName the new name of the VM's snapshot.
+     * @param newDescription the new description of the VM's snapshot.
+     * @param failOnNoExist If true and the snapshot does not exist then a {@link VSphereNotFoundException} will be
+     *                      thrown; otherwise nothing is renamed.
+     * @return true if the snapshot was renamed, false if it did not exist (and that was tolerated).
+     * @throws VSphereException If an error occurred (the VM not existing is always an error).
+     */
+    public boolean renameVmSnapshot(
+            String vmName, String oldName, String newName, String newDescription, boolean failOnNoExist)
+            throws VSphereException {
         try {
             VirtualMachine vm = getVmByName(vmName);
             if (vm == null) {
@@ -1838,11 +1855,18 @@ public class VSphere {
             }
 
             VirtualMachineSnapshot snapshot = getSnapshotInTree(vm, oldName);
+            if (snapshot == null) {
+                if (failOnNoExist) {
+                    throw new VSphereNotFoundException("Snapshot", oldName);
+                }
+                LOGGER.log(Level.FINER, "VM Snapshot does not exist, so was not renamed.");
+                return false;
+            }
 
             snapshot.rename(newName, newDescription);
 
             LOGGER.log(Level.FINER, "VM Snapshot was renamed successfully.");
-            return;
+            return true;
 
         } catch (RuntimeException | VSphereException e) {
             throw e;

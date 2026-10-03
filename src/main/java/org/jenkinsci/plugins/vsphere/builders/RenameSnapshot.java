@@ -33,6 +33,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -42,6 +43,8 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
     private final String oldName;
     private final String newName;
     private final String newDescription;
+    // Nullable so that jobs saved before this option existed (field absent in XML) keep failing on a missing snapshot
+    private Boolean failOnNoExist;
 
     @DataBoundConstructor
     public RenameSnapshot(String vm, String oldName, String newName, String newDescription) throws VSphereException {
@@ -65,6 +68,16 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 
     public String getNewDescription() {
         return newDescription;
+    }
+
+    /** Whether a missing snapshot fails the build step; defaults to true (the historic behavior). */
+    public boolean isFailOnNoExist() {
+        return failOnNoExist == null || failOnNoExist;
+    }
+
+    @DataBoundSetter
+    public void setFailOnNoExist(boolean failOnNoExist) {
+        this.failOnNoExist = failOnNoExist;
     }
 
     @Override
@@ -140,7 +153,13 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
                 "Renaming snapshot of VM \"" + expandedVm + "\" from \"" + expandedOldName + "\" to \""
                         + expandedNewName + "\" with description \"" + expandedNewDescription + "\". Please wait ...");
         try {
-            vsphere.renameVmSnapshot(expandedVm, expandedOldName, expandedNewName, expandedNewDescription);
+            boolean renamed = vsphere.renameVmSnapshot(
+                    expandedVm, expandedOldName, expandedNewName, expandedNewDescription, isFailOnNoExist());
+            if (!renamed) {
+                VSphereLogger.vsLogger(
+                        jLogger, "Snapshot \"" + expandedOldName + "\" does not exist; nothing to rename.");
+                return true;
+            }
         } catch (Exception e) {
             throw new VSphereException(e);
         }

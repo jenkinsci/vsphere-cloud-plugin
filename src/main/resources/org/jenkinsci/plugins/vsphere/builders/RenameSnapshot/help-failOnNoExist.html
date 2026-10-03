@@ -1,0 +1,6 @@
+<div>
+  If the snapshot you are trying to rename does not exist, fail this build step (the default).
+  Uncheck it when the job does not care and the snapshot may legitimately be absent, e.g. when rotating
+  "current" to "old" before taking a new snapshot; the step then logs that there was nothing to rename and succeeds.
+  A missing VM always fails the step.
+</div>
