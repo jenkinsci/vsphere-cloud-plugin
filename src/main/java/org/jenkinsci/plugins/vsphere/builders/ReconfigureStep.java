@@ -20,6 +20,7 @@ import com.vmware.vim25.mo.VirtualMachine;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
+import hudson.util.FormValidation;
 import java.io.IOException;
 import java.util.List;
 import jenkins.model.Jenkins;
@@ -58,6 +59,37 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
 
     public void setVirtualMachineConfigSpec(VirtualMachineConfigSpec spec) {
         this.spec = spec;
+    }
+
+    /** True if the value refers to a build variable such as {@code $RAM} or {@code ${RAM}}, expanded at build time. */
+    static boolean refersToVariable(final String value) {
+        return value != null && value.contains("$");
+    }
+
+    /**
+     * Form validation for a numeric field that may also hold a build variable (JENKINS-31468).
+     *
+     * @param what the human-readable field name used in the messages
+     * @param value the entered value
+     * @param required whether an empty value is an error
+     */
+    static FormValidation checkPositiveIntegerOrVariable(
+            final String what, final String value, final boolean required) {
+        if (value == null || value.trim().isEmpty()) {
+            return required ? FormValidation.error(Messages.validation_required(what)) : FormValidation.ok();
+        }
+        if (refersToVariable(value)) {
+            // Can only be checked once the variable is expanded in a build
+            return FormValidation.ok();
+        }
+        try {
+            if (Long.parseLong(value.trim()) > 0) {
+                return FormValidation.ok();
+            }
+        } catch (NumberFormatException e) {
+            // fall through
+        }
+        return FormValidation.error(Messages.validation_positiveInteger(what));
     }
 
     public static List<ReconfigureStepDescriptor> all() {

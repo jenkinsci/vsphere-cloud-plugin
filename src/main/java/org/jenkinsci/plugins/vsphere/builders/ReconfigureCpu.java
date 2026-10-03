@@ -138,8 +138,7 @@ public class ReconfigureCpu extends ReconfigureStep {
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
 
-            if (value.length() == 0) return FormValidation.error(Messages.validation_required("CPU Cores"));
-            return FormValidation.ok();
+            return checkPositiveIntegerOrVariable("CPU Cores", value, true);
         }
 
         @RequirePOST
@@ -147,8 +146,7 @@ public class ReconfigureCpu extends ReconfigureStep {
                 throws IOException, ServletException {
             throwUnlessUserHasPermissionToConfigureJob(context);
 
-            if (value.length() == 0) return FormValidation.error(Messages.validation_required("Cores per socket"));
-            return FormValidation.ok();
+            return checkPositiveIntegerOrVariable("Cores per socket", value, true);
         }
 
         @RequirePOST
@@ -157,7 +155,7 @@ public class ReconfigureCpu extends ReconfigureStep {
             throwUnlessUserHasPermissionToConfigureJob(context);
 
             // Optional field: a blank value just means "no CPU reservation", which is fine.
-            if (value == null || value.isEmpty()) {
+            if (value == null || value.isEmpty() || refersToVariable(value)) {
                 return FormValidation.ok();
             }
             try {
@@ -179,6 +177,9 @@ public class ReconfigureCpu extends ReconfigureStep {
         public FormValidation doTestData(
                 @AncestorInPath Item context, @QueryParameter String cpuCores, @QueryParameter String coresPerSocket) {
             throwUnlessUserHasPermissionToConfigureJob(context);
+            if (refersToVariable(coresPerSocket) || refersToVariable(cpuCores)) {
+                return FormValidation.ok(); // cannot compare until the variables are expanded in a build
+            }
             try {
                 if (Integer.parseInt(coresPerSocket) > Integer.parseInt(cpuCores)) {
                     return FormValidation.error(Messages.validation_maxValue(Integer.parseInt(cpuCores) + 1));
