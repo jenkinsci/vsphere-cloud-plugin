@@ -24,10 +24,10 @@
 
     <f:advanced>
         <f:entry title="${%Max number of VMs online}" field="maxOnlineSlaves" description="0 means unlimited.">
-            <f:textbox clazz="required number"/>
+            <f:number clazz="required" min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
         <f:entry title="${%Template Instance Cap}" field="instanceCap" description="0 means unlimited.">
-            <f:textbox clazz="required number" default="0"/>
+            <f:number clazz="required" min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
         <f:entry title="${%Use No-Delay Provisioner}" field="useNoDelayProvisioner">
             <f:checkbox/>
@@ -38,19 +38,19 @@
         </f:entry>
         <f:entry title="${%Pool health check interval in seconds}" field="poolHealthCheckIntervalSecs"
                  description="0 - no periodic health checks are performed.">
-            <f:textbox clazz="number" default="0"/>
+            <f:number min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
         <f:entry title="${%Pool session max age in seconds}" field="sessionMaxAgeSecs"
                  description="0 - the session is never restarted based on age.">
-            <f:textbox clazz="number" default="0"/>
+            <f:number min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
         <f:entry title="${%Pool session max uses}" field="sessionMaxUses"
                  description="0 - the session is never restarted based on use count.">
-            <f:textbox clazz="number" default="0"/>
+            <f:number min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
         <f:entry title="${%Pool idle disconnect timeout in seconds}" field="poolIdleTimeoutSecs"
                  description="0 - the connection is kept alive indefinitely.">
-            <f:textbox clazz="number" default="0"/>
+            <f:number min="0" max="2147483647" step="1" default="0"/>
         </f:entry>
 
         <f:entry title="${%Default Host Selection Mode}" field="hostSelectionMode">
