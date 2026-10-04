@@ -19,7 +19,6 @@ import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUse
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
 import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -68,18 +67,6 @@ public class ConvertToTemplate extends VSphereBuildStep {
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }
-    }
-
-    @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = convert(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
     }
 
     private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)

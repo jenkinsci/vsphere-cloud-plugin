@@ -14,8 +14,13 @@ import hudson.model.BuildListener;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Run;
+import hudson.model.StreamBuildListener;
 import hudson.model.TaskListener;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
+import org.jenkinsci.plugins.vsphere.builders.RevertToSnapshot;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -65,6 +70,10 @@ class VSphereBuildStepContainerFailureTest {
         }
     }
 
+    private static BuildListener quietBuildListener() {
+        return new StreamBuildListener(new ByteArrayOutputStream(), StandardCharsets.UTF_8);
+    }
+
     private static FreeStyleBuild someFreestyleBuild(JenkinsRule r) throws Exception {
         FreeStyleProject p = r.createFreeStyleProject();
         return r.buildAndAssertSuccess(p);
@@ -83,6 +92,27 @@ class VSphereBuildStepContainerFailureTest {
 
         assertThat(e.getMessage(), containsString("no images match"));
         assertThat(step.runFlavourCalled, is(true));
+    }
+
+    @Test
+    @Issue("JENKINS-38472")
+    void theAbstractBuildFlavourOfARealStepDoesNotSwallowFailuresEither(JenkinsRule r) throws Exception {
+        FreeStyleBuild build = someFreestyleBuild(r);
+        Launcher launcher = new Launcher.LocalLauncher(TaskListener.NULL);
+        // No vSphere connection was given to the step, so it fails; this used to come back as plain "false"
+        RevertToSnapshot step = new RevertToSnapshot("some-vm", "some-snapshot");
+
+        assertThrows(AbortException.class, () -> step.perform(build, launcher, quietBuildListener()));
+    }
+
+    @Test
+    @Issue("JENKINS-38472")
+    void theAbstractBuildFlavourOfAReconfigureStepDoesNotSwallowFailuresEither(JenkinsRule r) throws Exception {
+        FreeStyleBuild build = someFreestyleBuild(r);
+        Launcher launcher = new Launcher.LocalLauncher(TaskListener.NULL);
+        ReconfigureMemory step = new ReconfigureMemory("1024");
+
+        assertThrows(AbortException.class, () -> step.perform(build, launcher, quietBuildListener()));
     }
 
     @Test

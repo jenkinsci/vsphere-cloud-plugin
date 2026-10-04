@@ -23,8 +23,6 @@ import com.vmware.vim25.mo.Network;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.Extension;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
 import hudson.model.Item;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -133,18 +131,6 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }
-    }
-
-    @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = reconfigureNetwork(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
     }
 
     public boolean reconfigureNetwork(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)

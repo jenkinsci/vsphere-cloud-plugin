@@ -69,8 +69,19 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
         return Jenkins.getInstance().getDescriptorList(VSphereBuildStep.class);
     }
 
-    public abstract boolean perform(
-            final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) throws Exception;
+    /**
+     * Flavour for freestyle builds, kept for callers that still use it: it does exactly what the
+     * {@code Run} flavour does, so that a failure is reported by exception rather than swallowed (JENKINS-38472).
+     */
+    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener)
+            throws InterruptedException, IOException {
+        FilePath workspace = build.getWorkspace();
+        if (workspace == null) {
+            workspace = new FilePath(build.getRootDir());
+        }
+        perform((Run<?, ?>) build, workspace, launcher, listener);
+        return true;
+    }
 
     public abstract void perform(
             @NonNull Run<?, ?> run,

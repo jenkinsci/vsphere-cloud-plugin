@@ -75,18 +75,6 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = rename(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
-    }
-
-    @Override
     public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
         return null;
     }
