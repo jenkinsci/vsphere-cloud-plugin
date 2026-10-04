@@ -41,6 +41,7 @@ final class FakeEsxiHost implements EsxiShell {
     private final Map<Integer, FakeVm> vms = new LinkedHashMap<>();
     final List<String> commands = new ArrayList<>();
     boolean closed;
+    int notFoundExitCode;
     private final Map<String, String> failures = new LinkedHashMap<>();
 
     FakeVm addVm(int id, String name, String datastore, String vmxRelativePath, String vmx) {
@@ -94,7 +95,8 @@ final class FakeEsxiHost implements EsxiShell {
         }
         final FakeVm vm = vms.get(Integer.parseInt(words.get(2)));
         if (vm == null) {
-            return new ShellResult(1, "", "Unable to find a VM corresponding to \"" + words.get(2) + "\"");
+            // as printed by an ESXi 8 host; whether it exits with an error code too is not known, so it does not
+            return new ShellResult(notFoundExitCode, notFound(words.get(2)), "");
         }
         switch (sub) {
             case "vmsvc/power.getstate":
@@ -130,6 +132,18 @@ final class FakeEsxiHost implements EsxiShell {
             default:
                 throw new AssertionError("Unexpected vim-cmd command: " + command);
         }
+    }
+
+    /** The way a host reports a fault: it prints it. */
+    static String notFound(String vmId) {
+        return String.join(
+                "\n",
+                "(vim.fault.NotFound) {",
+                "   faultCause = (vmodl.MethodFault) null,",
+                "   faultMessage = <unset>",
+                "   msg = \"Unable to find a VM corresponding to \"" + vmId + "\"\"",
+                "}",
+                "");
     }
 
     private String allVms() {

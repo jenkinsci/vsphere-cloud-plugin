@@ -26,6 +26,12 @@ public final class VimCmdParsers {
     private static final Pattern GUEST_TOOLS_STATUS =
             Pattern.compile("^\\s*toolsStatus\\s*=\\s*\"?(\\w+)\"?", Pattern.MULTILINE);
 
+    // A fault is a top-level object whose type is a "fault": "(vim.fault.NotFound) {", "(vmodl.fault.X) {"
+    private static final Pattern FAULT_TYPE =
+            Pattern.compile("^\\((?:vim|vmodl)\\.fault\\.(\\w+)\\)\\s*\\{", Pattern.MULTILINE);
+    // msg = "Unable to find a VM corresponding to "1"" - the message may contain quotes itself
+    private static final Pattern FAULT_MSG = Pattern.compile("^\\s*msg\\s*=\\s*\"(.*)\"\\s*$", Pattern.MULTILINE);
+
     private static final Pattern SNAPSHOT_FIELD = Pattern.compile("^(.*?)--Snapshot (\\w[\\w ]*?)\\s*:\\s?(.*)$");
 
     private VimCmdParsers() {}
@@ -50,6 +56,32 @@ public final class VimCmdParsers {
                     m.group(6) == null ? "" : m.group(6).trim()));
         }
         return vms;
+    }
+
+    /**
+     * What {@code vim-cmd} prints when the host reports a fault, e.g.
+     *
+     * <pre>
+     * (vim.fault.NotFound) {
+     *    faultCause = (vmodl.MethodFault) null,
+     *    faultMessage = &lt;unset&gt;
+     *    msg = "Unable to find a VM corresponding to "1""
+     * }
+     * </pre>
+     *
+     * @return the kind of fault and its message, like {@code NotFound: Unable to find a VM ...}, or null if the
+     *     output is not a fault
+     */
+    public static @CheckForNull String parseFault(@CheckForNull String output) {
+        if (output == null) {
+            return null;
+        }
+        final Matcher type = FAULT_TYPE.matcher(output);
+        if (!type.find()) {
+            return null;
+        }
+        final Matcher message = FAULT_MSG.matcher(output.substring(type.end()));
+        return type.group(1) + (message.find() ? ": " + message.group(1) : "");
     }
 
     /** From {@code vim-cmd vmsvc/power.getstate}: "Powered on", "Powered off" or "Suspended". */

@@ -70,11 +70,28 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    /**
+     * Runs a {@code vim-cmd} command. When the host reports a fault, which it does by printing it (as
+     * {@code (vim.fault.NotFound) { ... msg = "..." }}), the command is taken to have failed whatever its exit
+     * code was, with the fault's message as the explanation.
+     */
+    private ShellResult vim(String command) throws VSphereException {
+        final ShellResult result = shell.run(command);
+        final String fault = VimCmdParsers.parseFault(result.getStdout() + "\n" + result.getStderr());
+        if (fault != null && result.succeeded()) {
+            return new ShellResult(1, result.getStdout(), fault);
+        }
+        if (fault != null && result.getStderr().trim().isEmpty()) {
+            return new ShellResult(result.getExitCode(), result.getStdout(), fault);
+        }
+        return result;
+    }
+
     // -- looking up VMs --
 
     List<VmEntry> listVms() throws VSphereException {
         return VimCmdParsers.parseGetAllVms(
-                shell.run(VIM_CMD + " vmsvc/getallvms").stdoutOrThrow("Listing the registered VMs"));
+                vim(VIM_CMD + " vmsvc/getallvms").stdoutOrThrow("Listing the registered VMs"));
     }
 
     @Override
@@ -129,8 +146,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     }
 
     VirtualMachineRuntimeInfo readRuntime(VmEntry vm) throws VSphereException {
-        final String output =
-                shell.run(vmCommand(vm, "power.getstate")).stdoutOrThrow("Getting the power state of " + vm);
+        final String output = vim(vmCommand(vm, "power.getstate")).stdoutOrThrow("Getting the power state of " + vm);
         final VirtualMachinePowerState state = VimCmdParsers.parsePowerState(output);
         if (state == null) {
             throw new VSphereException("Could not tell the power state of " + vm + " from: " + output.trim());
@@ -153,8 +169,8 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     }
 
     GuestInfo readGuest(VmEntry vm) throws VSphereException {
-        // A VM that is not running has little to tell; that is not an error
-        final String output = shell.run(vmCommand(vm, "get.guest")).getStdout();
+        // A VM that is not running has little to tell (fields are "<unset>"); that is not an error
+        final String output = vim(vmCommand(vm, "get.guest")).stdoutOrThrow("Getting the guest information of " + vm);
         final GuestInfo guest = new GuestInfo();
         guest.setIpAddress(VimCmdParsers.parseGuestIp(output));
         final VirtualMachineToolsStatus tools = VimCmdParsers.parseToolsStatus(output);
@@ -165,7 +181,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     /** The snapshots of the VM, or null if it has none (as vCenter says). */
     VirtualMachineSnapshotInfo readSnapshotInfo(VmEntry vm) throws VSphereException {
         final List<VirtualMachineSnapshotTree> roots = VimCmdParsers.parseSnapshotTree(
-                shell.run(vmCommand(vm, "snapshot.get")).getStdout());
+                vim(vmCommand(vm, "snapshot.get")).stdoutOrThrow("Getting the snapshots of " + vm));
         if (roots.isEmpty()) {
             return null;
         }
@@ -179,7 +195,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     /** Has the host do something to a VM, and reports how that went as vCenter would, as a finished task. */
     EsxiTask vmTask(String description, VmEntry vm, String subcommand, String... quotedArguments) {
         try {
-            return taskOf(description, shell.run(vmCommand(vm, subcommand, quotedArguments)));
+            return taskOf(description, vim(vmCommand(vm, subcommand, quotedArguments)));
         } catch (VSphereException e) {
             return new EsxiTask(description, e.getMessage());
         }
@@ -189,7 +205,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         try {
             return taskOf(
                     "createSnapshot",
-                    shell.run(vmCommand(
+                    vim(vmCommand(
                             vm,
                             "snapshot.create",
                             ShellQuote.quote(name),
@@ -215,7 +231,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     /** For the operations that are not tasks and that report failure by an exception. */
     void vmCommandOrThrow(String what, VmEntry vm, String subcommand) {
         try {
-            shell.run(vmCommand(vm, subcommand)).stdoutOrThrow("Asking the host to carry out " + what + " " + vm);
+            vim(vmCommand(vm, subcommand)).stdoutOrThrow("Asking the host to carry out " + what + " " + vm);
         } catch (VSphereException e) {
             throw new IllegalStateException(e.getMessage(), e);
         }

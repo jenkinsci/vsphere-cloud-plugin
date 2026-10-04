@@ -50,6 +50,91 @@ class VimCmdParsersTest {
         assertThat(vm.getAnnotation(), is("Built by CI"));
     }
 
+    // What an ESXi 8 host printed
+    private static final String ESXI8_NO_VMS = "Vmid   Name   File   Guest OS   Version   Annotation\n";
+
+    private static final String ESXI8_ONE_VM = String.join(
+            "\n",
+            "Vmid   Name          File              Guest OS       Version   Annotation",
+            "1      x8     [pve-esx] x8/x8.vmx   centos9_64Guest   vmx-20",
+            "");
+
+    private static final String ESXI8_GUEST = String.join(
+            "\n",
+            "Guest information:",
+            "",
+            "(vim.vm.GuestInfo) {",
+            "   toolsStatus = \"toolsNotInstalled\",",
+            "   toolsVersionStatus = \"guestToolsNotInstalled\",",
+            "   toolsVersionStatus2 = \"guestToolsNotInstalled\",",
+            "   toolsRunningStatus = \"guestToolsNotRunning\",",
+            "   toolsVersion = \"0\",",
+            "   toolsInstallType = \"guestToolsTypeUnknown\",",
+            "   toolsUpdateStatus = (vim.vm.GuestInfo.ToolsUpdateStatus) null,",
+            "   guestId = <unset>,",
+            "   guestFamily = <unset>,",
+            "   guestFullName = <unset>,",
+            "   guestDetailedData = <unset>,",
+            "   hostName = <unset>,",
+            "   ipAddress = <unset>,",
+            "   net = <unset>,",
+            "   ipStack = <unset>,",
+            "   disk = <unset>,",
+            "   screen = (vim.vm.GuestInfo.ScreenInfo) {",
+            "      width = 1024,",
+            "      height = 768",
+            "   },",
+            "   guestState = \"running\",",
+            "   hwVersion = \"vmx-20\",",
+            "   customizationInfo = (vim.vm.GuestInfo.CustomizationInfo) {",
+            "      customizationStatus = \"TOOLSDEPLOYPKG_IDLE\",",
+            "      startTime = <unset>,",
+            "      endTime = <unset>,",
+            "      errorMsg = <unset>",
+            "   }",
+            "}",
+            "");
+
+    @Test
+    void esxi8WithoutVms() {
+        assertThat(VimCmdParsers.parseGetAllVms(ESXI8_NO_VMS), is(empty()));
+    }
+
+    @Test
+    void esxi8WithOneVm() {
+        List<VmEntry> vms = VimCmdParsers.parseGetAllVms(ESXI8_ONE_VM);
+
+        assertThat(vms.size(), is(1));
+        assertThat(vms.get(0).getId(), is(1));
+        assertThat(vms.get(0).getName(), is("x8"));
+        assertThat(vms.get(0).getVmxPath(), is("[pve-esx] x8/x8.vmx"));
+        assertThat(vms.get(0).getDatastore(), is("pve-esx"));
+        assertThat(vms.get(0).getVmxFileSystemPath(), is("/vmfs/volumes/pve-esx/x8/x8.vmx"));
+        assertThat(vms.get(0).getGuestOs(), is("centos9_64Guest"));
+        assertThat(vms.get(0).getVersion(), is("vmx-20"));
+        assertThat(vms.get(0).getAnnotation(), is(""));
+    }
+
+    @Test
+    void esxi8GuestWithoutToolsHasNoIpAndNoTools() {
+        assertThat(VimCmdParsers.parseGuestIp(ESXI8_GUEST), is(nullValue()));
+        assertThat(VimCmdParsers.parseToolsStatus(ESXI8_GUEST), is(VirtualMachineToolsStatus.toolsNotInstalled));
+        assertThat(VimCmdParsers.parseFault(ESXI8_GUEST), is(nullValue()));
+    }
+
+    @Test
+    void faultsAreRecognisedAndExplained() {
+        assertThat(
+                VimCmdParsers.parseFault(FakeEsxiHost.notFound("1")),
+                is("NotFound: Unable to find a VM corresponding to \"1\""));
+        assertThat(VimCmdParsers.parseFault("(vim.fault.InvalidState) {\n}\n"), is("InvalidState"));
+        // ordinary output is no fault, nor is a fault only mentioned inside of some other text
+        assertThat(VimCmdParsers.parseFault("Retrieved runtime info\nPowered on\n"), is(nullValue()));
+        assertThat(VimCmdParsers.parseFault(ESXI8_ONE_VM), is(nullValue()));
+        assertThat(VimCmdParsers.parseFault("   x = (vim.fault.NotFound) null,\n"), is(nullValue()));
+        assertThat(VimCmdParsers.parseFault(null), is(nullValue()));
+    }
+
     @Test
     void nothingOrGarbageIsNoVms() {
         assertThat(VimCmdParsers.parseGetAllVms(null), is(empty()));

@@ -168,6 +168,31 @@ class VSphereEsxiSshTest {
         assertThat(e.getMessage(), containsString("not available from an ESXi host over SSH"));
     }
 
+    @Test
+    void aFaultTheHostPrintsIsAFailureWhateverTheExitCode() throws Exception {
+        for (int exitCode : new int[] {0, 1}) {
+            host.notFoundExitCode = exitCode;
+            VirtualMachine vm = esxi.getVmByName("my vm");
+            host.run("/bin/vim-cmd vmsvc/destroy 12"); // the VM vanishes behind our back
+
+            IllegalStateException e = assertThrows(IllegalStateException.class, () -> vm.getGuest());
+            assertThat(e.getMessage(), containsString("Unable to find a VM corresponding to"));
+            assertThrows(IllegalStateException.class, () -> vm.getRuntime());
+            host.addVm(12, "my vm", "datastore 2", "my vm/my vm.vmx", "displayName = \"my vm\"\n");
+        }
+    }
+
+    @Test
+    void anActionOnAVmThatVanishedGivesAFailedTask() throws Exception {
+        VirtualMachine vm = esxi.getVmByName("kube-master");
+        host.run("/bin/vim-cmd vmsvc/destroy 1");
+
+        com.vmware.vim25.mo.Task task = vm.powerOnVM_Task(null);
+
+        assertThat(task.waitForTask(), is("error"));
+        assertThat(task.getTaskInfo().getError().getLocalizedMessage(), containsString("Unable to find a VM"));
+    }
+
     // -- the operations that vCenter shares with it --
 
     @Test
