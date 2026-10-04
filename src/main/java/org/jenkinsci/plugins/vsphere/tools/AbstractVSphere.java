@@ -162,6 +162,11 @@ public abstract class AbstractVSphere implements VSphere {
         throw new VSphereException("VM cannot be started");
     }
 
+    /** The object through which a snapshot of the VM is operated on; backends that do not use SOAP provide their own. */
+    protected VirtualMachineSnapshot newSnapshotProxy(VirtualMachine vm, ManagedObjectReference mor) {
+        return new VirtualMachineSnapshot(vm.getServerConnection(), mor);
+    }
+
     protected ManagedObjectReference findSnapshotInTree(VirtualMachineSnapshotTree[] snapTree, String snapName) {
         LOGGER.log(Level.FINER, "Looking for snapshot " + snapName);
         for (VirtualMachineSnapshotTree node : snapTree) {
@@ -193,7 +198,7 @@ public abstract class AbstractVSphere implements VSphere {
             if (snapTree != null) {
                 ManagedObjectReference mor = findSnapshotInTree(snapTree, snapName);
                 if (mor != null) {
-                    return new VirtualMachineSnapshot(vm.getServerConnection(), mor);
+                    return newSnapshotProxy(vm, mor);
                 }
             }
         }
