@@ -1,1 +1,13 @@
-<div>Name of the vSphere host to work with.  Typical form would be "https://server-name-or-ip"  There should be NO trailing backslash.</div>
+<div>
+  The host to work with.
+  <ul>
+    <li>
+      <b>vCenter</b> (or an ESXi host whose API can be written to): its URL, in the form
+      <code>https://server-name-or-ip</code>, with NO trailing slash.
+    </li>
+    <li>
+      <b>A standalone ESXi host over SSH</b>: its plain host name or IP address, without
+      <code>https://</code>. The port is a setting of the connection type.
+    </li>
+  </ul>
+</div>

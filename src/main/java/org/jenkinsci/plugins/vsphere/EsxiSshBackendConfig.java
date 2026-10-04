@@ -35,6 +35,7 @@ import hudson.Util;
 import hudson.model.Descriptor;
 import hudson.model.Item;
 import hudson.security.ACL;
+import hudson.security.ACLContext;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import java.io.IOException;
@@ -44,6 +45,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
+import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiConnectionTestResult;
@@ -147,14 +150,39 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         if (hostKeyFingerprint == null) {
             hostKeyFingerprint = fingerprint;
             LOGGER.log(Level.INFO, "Remembering the host key {0} of {1}:{2}", new Object[] {fingerprint, host, port});
-            try {
-                Jenkins.get().save();
-            } catch (IOException e) {
-                // It is in use for as long as this configuration lives, and saved with the next change of it
-                LOGGER.log(Level.WARNING, "Could not save the host key that was remembered for " + host, e);
-            }
+            saveWhatHoldsThisConfiguration(host);
         }
         return hostKeyFingerprint;
+    }
+
+    /**
+     * Saves where this configuration is kept, so that the host key that was remembered stays so: the folder, for
+     * a cloud that is defined in a folder, otherwise Jenkins itself.
+     */
+    private void saveWhatHoldsThisConfiguration(String host) {
+        try (ACLContext ignored = ACL.as2(ACL.SYSTEM2)) {
+            for (AbstractFolder<?> folder : Jenkins.get().getAllItems(AbstractFolder.class)) {
+                final FolderVSphereCloudProperty property =
+                        folder.getProperties().get(FolderVSphereCloudProperty.class);
+                if (property == null || property.getClouds() == null) {
+                    continue;
+                }
+                for (vSphereCloud cloud : property.getClouds()) {
+                    final VSphereConnectionConfig config = cloud.getVsConnectionConfig();
+                    if (config != null && config.getBackend() == this) {
+                        folder.save();
+                        LOGGER.log(Level.INFO, "Saved the folder {0} that holds the cloud for {1}", new Object[] {
+                            folder.getFullName(), host
+                        });
+                        return;
+                    }
+                }
+            }
+            Jenkins.get().save();
+        } catch (IOException e) {
+            // It is in use for as long as this configuration lives, and saved with the next change of it
+            LOGGER.log(Level.WARNING, "Could not save the host key that was remembered for " + host, e);
+        }
     }
 
     // -- connecting --
@@ -301,9 +329,15 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         }
 
         public FormValidation doCheckHostKeyPolicy(@QueryParameter String value) {
-            return EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(value)
-                    ? FormValidation.warning("Warning: This is not secure.")
-                    : FormValidation.ok();
+            if (EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(value)) {
+                return FormValidation.warning("Warning: This is not secure.");
+            }
+            if (EsxiHostKeyPolicy.TRUST_FIRST_USE.name().equals(value)) {
+                return FormValidation.warning("Warning: at the first connection, Jenkins saves its configuration by"
+                        + " itself to remember the host key: the one of the folder if this cloud is in a folder,"
+                        + " otherwise the one of Jenkins. And it is only as safe as that first connection is.");
+            }
+            return FormValidation.ok();
         }
 
         /** Finds out which host key the host presents, without logging in. */

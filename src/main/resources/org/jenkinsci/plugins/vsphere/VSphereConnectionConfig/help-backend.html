@@ -1,0 +1,19 @@
+<div>
+  How the host is connected to, which decides what the other settings are.
+  <ul>
+    <li>
+      <b>vCenter, through the vSphere API</b>: the usual way. Everything the plugin does is available.
+    </li>
+    <li>
+      <b>Standalone ESXi host over SSH</b>: for ESXi hosts that have no vCenter, and whose own API
+      cannot be written to (as with the free license) or is too old. The plugin runs <code>vim-cmd</code> on the
+      host. Only a part of what the plugin can do is available this way, and what is not says so.
+      <p>
+        <b>SSH has to be enabled on the ESXi host:</b> in its web interface go to <i>Host</i> &rarr;
+        <i>Manage</i> &rarr; <i>Services</i>, select <i>TSM-SSH</i>, and in its <i>Actions</i> menu
+        choose <i>Policy</i> &rarr; <i>Start and stop with host</i> (so that it is available after a restart of the
+        host), and <i>Start</i> (so that it is available now).
+      </p>
+    </li>
+  </ul>
+</div>
