@@ -356,6 +356,80 @@ Three independent, optional mechanisms are available, in order of precedence:
    sets none, the cloud's apply. Setting all four to `0` gives the original ranking despite
    weights on the cloud.
 
+##### Choosing host weights
+
+**There is no need to make weights for MHz or MB orders of magnitude larger (or smaller) than the
+percentage ones to "compensate for the units".** Before weighting, every one of the four measures
+is already turned into a number between 0 and 1: the percentage ones are the fraction of the host's
+own capacity that is free, and the MHz and MB ones are the host's free amount divided by the
+largest free amount among the candidates (so a host with 1000000 MB free and a best candidate with
+1100000 MB free contributes about `0.91`, not `1000000`). The weights are therefore directly
+comparable and only say how much *you* care about each measure, e.g. `1, 1, 5, 5` means that
+memory counts five times as much as CPU, whichever way it is measured.
+
+What does matter is how much a measure actually **differs between the candidates**. The influence
+of a weight on the ranking is roughly the weight times the spread of that measure among the
+hosts being compared:
+
+* The MHz and MB measures are relative to the *best candidate*. In a cluster of similar hosts they
+  come out close to each other (say `0.96` to `1.0`), so even a large weight on them separates the
+  hosts only a little - it mostly lifts everybody's score towards 1 and thereby dilutes the
+  measures that differ more. A big weight on a measure where all hosts look alike buys no influence.
+* The same measures depend on which hosts are candidates: with a *candidate list* or *Require
+  enough ...* filters the "best" is the best of the remaining hosts, and a single candidate always
+  gets `1` for them. The percentage measures do not depend on the other hosts.
+* In a cluster of equally sized hosts the absolute and the percentage measures nearly agree (a host
+  with more free MHz also has more free percent), so it is enough to set one of the pair.
+  The absolute measures are for clusters of **mixed sized** hosts, to prefer the bigger ones.
+
+Recommendations:
+
+* Start simple: all `1`, or only the two percentage weights (`0, 1, 0, 1`) to simply prefer the
+  least busy host, and look at the ranking in the log (see below) before tuning.
+* Weight the resource that actually runs out first higher - memory, for most virtualization
+  clusters, as CPU is usually oversubscribed with less harm. A ratio of 2:1 to 10:1 is a strong
+  preference already; there is no gain in `1000:1`.
+* Use `0` to ignore a measure completely, rather than a tiny weight.
+* Remember the weights are whole numbers: to express `1 : 2.5`, use `2` and `5`.
+* The log shows each candidate's score and free CPU/memory, so a weight change can be checked on
+  real numbers without provisioning anything. Scores that differ only in the third decimal are, for
+  all practical purposes, a tie, and as the statistics lag behind, the winner among such hosts can
+  change from one clone to the next.
+
+Example from a real cluster, with the weights `free CPU MHz=1, free CPU %=1, free RAM MB=5, free RAM %=5`
+(total `12`):
+
+```
+Ranking 3 candidate host(s) by weights[free CPU MHz=1, free CPU %=1, free RAM MB=5, free RAM %=5]:
+  Host "virthost3.domain.com": score 0.730 (free CPU 48926 MHz = 51%, free memory 1011648 MB = 49%)
+  Host "virthost1.domain.com": score 0.728 (free CPU 54149 MHz = 57%, free memory 986833 MB = 47%)
+  Host "virthost2.domain.com": score 0.724 (free CPU 42184 MHz = 44%, free memory 1027075 MB = 49%)
+Clone of VM "centos10-template" will be placed on host "virthost3.domain.com".
+```
+
+The four measures of each host, as the formula sees them (the best free MHz, 54149, and the best
+free MB, 1027075, are the reference of the two absolute ones), approximately because the log rounds
+the percentages:
+
+| Host | MHz `a` (weight 1) | CPU % `b` (1) | MB `c` (5) | RAM % `d` (5) | Score |
+|------|------|------|------|------|------|
+| virthost3 | 0.90 | 0.51 | 0.99 | 0.49 | 0.73 |
+| virthost1 | 1.00 | 0.57 | 0.96 | 0.47 | 0.73 |
+| virthost2 | 0.78 | 0.44 | 1.00 | 0.49 | 0.72 |
+
+Things this shows:
+
+* The three hosts are practically tied. The free memory in MB is within 4% across the hosts, and the
+  free memory percentage within two points, so in spite of their weight of 5 these two measures
+  move the scores apart by only about `0.016` and `0.008`. The MHz measure, with weight 1, separates
+  them about as much (`0.018`) because the hosts really differ in free CPU. The `0.73` that every
+  host scores is mostly the memory measures being near `1` and `0.5` for all of them.
+* `virthost1` has the most free CPU (57%, and the most MHz) but a little less free memory, so
+  the memory-heavy weights make it second. If CPU is what really limits these clones, weights
+  like `5, 5, 1, 1` would pick `virthost1` clearly (about `0.77` against `0.71` for `virthost3`
+  and `0.63` for `virthost2`), and `1, 1, 1, 1` would pick it as well (`0.75`, `0.72`, `0.68`).
+  Which of the hosts is "right" is the decision the weights express, not something the plugin can tell.
+
 ##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)

@@ -108,9 +108,20 @@ public final class HostWeights {
         return total() <= 0;
     }
 
+    /**
+     * The weights are whole numbers wherever they come from (the cloud's settings and the per-call overrides
+     * are integers), so show them as such; they are only held as doubles for the ranking arithmetic. Anything
+     * else that may be set programmatically is shown as it is, rather than truncated.
+     */
+    private static String show(double weight) {
+        return weight == Math.rint(weight) && Math.abs(weight) < Long.MAX_VALUE
+                ? Long.toString((long) weight)
+                : Double.toString(weight);
+    }
+
     @Override
     public String toString() {
-        return "weights[free CPU MHz=" + freeCpuMhz + ", free CPU %=" + freeCpuPercent + ", free RAM MB=" + freeMemoryMB
-                + ", free RAM %=" + freeMemoryPercent + "]";
+        return "weights[free CPU MHz=" + show(freeCpuMhz) + ", free CPU %=" + show(freeCpuPercent) + ", free RAM MB="
+                + show(freeMemoryMB) + ", free RAM %=" + show(freeMemoryPercent) + "]";
     }
 }
