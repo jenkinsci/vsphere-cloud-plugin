@@ -4,6 +4,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.vmware.vim25.mo.VirtualMachine;
@@ -48,7 +49,7 @@ class TrileadEsxiShellTest {
 
     private EsxiSshSettings settings(EsxiSshAuth auth) {
         return new EsxiSshSettings("127.0.0.1", server.port(), auth)
-                .withAcceptAnyHostKey(true)
+                .withHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY)
                 .withConnectTimeoutSeconds(10)
                 .withCommandTimeoutSeconds(10);
     }
@@ -183,7 +184,7 @@ class TrileadEsxiShellTest {
 
         EsxiSshSettings pinned = new EsxiSshSettings("127.0.0.1", server.port(), EsxiSshAuth.password("root", "secret"))
                 .withHostKeyFingerprint("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-                .withAcceptAnyHostKey(true);
+                .withHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY);
         VSphereException e = assertThrows(VSphereException.class, () -> TrileadEsxiShell.connect(pinned));
 
         assertThat(e.getMessage(), containsString("is not trusted"));
@@ -204,6 +205,193 @@ class TrileadEsxiShellTest {
         assertThat(e.getMessage(), containsString("Put that fingerprint in the settings"));
     }
 
+    // -- trusting the host key seen first --
+
+    private EsxiSshSettings firstUse(EsxiHostKeyStore store) {
+        return new EsxiSshSettings("127.0.0.1", server.port(), EsxiSshAuth.password("root", "secret"))
+                .withHostKeyPolicy(EsxiHostKeyPolicy.TRUST_FIRST_USE)
+                .withHostKeyStore(store)
+                .withConnectTimeoutSeconds(10);
+    }
+
+    @Test
+    void theHostKeySeenFirstIsRememberedAndThenRequired() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+        assertThat(store.get("127.0.0.1", server.port()), is(nullValue()));
+
+        try (TrileadEsxiShell shell = TrileadEsxiShell.connect(firstUse(store))) {
+            assertThat(shell.run("true").succeeded(), is(true));
+        }
+        assertThat(store.get("127.0.0.1", server.port()), is(server.hostKeySha256()));
+
+        // the second time it is the remembered one that has to match, and does
+        try (TrileadEsxiShell shell = TrileadEsxiShell.connect(firstUse(store))) {
+            assertThat(shell.run("true").succeeded(), is(true));
+        }
+    }
+
+    @Test
+    void aHostKeyThatChangedAfterTheFirstUseIsRefused() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+        store.rememberIfAbsent("127.0.0.1", server.port(), "SHA256:somethingElseThatWasSeenBefore");
+
+        VSphereException e = assertThrows(VSphereException.class, () -> TrileadEsxiShell.connect(firstUse(store)));
+
+        assertThat(e.getMessage(), containsString("has changed"));
+        assertThat(e.getMessage(), containsString(server.hostKeySha256()));
+        assertThat(e.getMessage(), containsString("SHA256:somethingElseThatWasSeenBefore"));
+        assertThat(e.getMessage(), containsString("forget the remembered fingerprint"));
+        // and what was remembered is not replaced by what is seen now
+        assertThat(store.get("127.0.0.1", server.port()), is("SHA256:somethingElseThatWasSeenBefore"));
+    }
+
+    @Test
+    void forgettingMakesTheNextConnectionAFirstOneAgain() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+        store.rememberIfAbsent("127.0.0.1", server.port(), "SHA256:old");
+
+        store.forget("127.0.0.1", server.port());
+
+        try (TrileadEsxiShell shell = TrileadEsxiShell.connect(firstUse(store))) {
+            assertThat(shell.run("true").succeeded(), is(true));
+        }
+        assertThat(store.get("127.0.0.1", server.port()), is(server.hostKeySha256()));
+    }
+
+    @Test
+    void aFingerprintThatIsGivenBeatsTrustingTheFirstOne() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+
+        VSphereException e = assertThrows(
+                VSphereException.class,
+                () -> TrileadEsxiShell.connect(
+                        firstUse(store).withHostKeyFingerprint("SHA256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")));
+
+        assertThat(e.getMessage(), containsString("is not trusted"));
+        // the host key that was refused is not remembered as the first one
+        assertThat(store.get("127.0.0.1", server.port()), is(nullValue()));
+    }
+
+    @Test
+    void ofSeveralFirstConnectionsAtOnceAllTrustTheSameKey() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+
+        String first = store.rememberIfAbsent("h", 22, "SHA256:one");
+        String second = store.rememberIfAbsent("h", 22, "SHA256:two");
+
+        assertThat(first, is("SHA256:one"));
+        assertThat(second, is("SHA256:one"));
+    }
+
+    // -- asking the host which key it has --
+
+    @Test
+    void theHostKeyCanBeQueriedWithoutLoggingIn() throws Exception {
+        start("secret", false, false);
+
+        EsxiHostKeyInfo key = TrileadEsxiShell.queryHostKey("127.0.0.1", server.port(), 10);
+
+        assertThat(key.getSha256(), is(server.hostKeySha256()));
+        assertThat(key.getAlgorithm(), containsString("rsa"));
+        assertThat(key.getMd5().matches("([0-9a-f]{2}:){15}[0-9a-f]{2}"), is(true));
+        // no credentials were sent, and nothing was run on the host
+        assertThat(server.authAttempts.get(), is(0));
+        assertThat(host.commands.isEmpty(), is(true));
+    }
+
+    @Test
+    void queryingAnUnreachableHostFails() {
+        VSphereException e =
+                assertThrows(VSphereException.class, () -> TrileadEsxiShell.queryHostKey("127.0.0.1", 1, 5));
+
+        assertThat(e.getMessage(), containsString("Could not connect to 127.0.0.1:1 over SSH"));
+    }
+
+    // -- testing the connection --
+
+    @Test
+    void aTestOfAWorkingConnectionSaysSo() throws Exception {
+        start("secret", false, false);
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(settings(EsxiSshAuth.password("root", "secret")));
+
+        assertThat(result.isOk(), is(true));
+        assertThat(result.isHostKeyTrusted(), is(true));
+        assertThat(result.isLoggedIn(), is(true));
+        assertThat(result.getHostKey().getSha256(), is(server.hostKeySha256()));
+        assertThat(result.getMessage(), containsString("Logged in to ssh://root@127.0.0.1"));
+    }
+
+    @Test
+    void aTestWithoutAFingerprintShowsTheHostKeyToTrust() throws Exception {
+        start("secret", false, false);
+        EsxiSshSettings strict =
+                new EsxiSshSettings("127.0.0.1", server.port(), EsxiSshAuth.password("root", "secret"));
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(strict);
+
+        assertThat(result.isOk(), is(false));
+        assertThat(result.isHostKeyTrusted(), is(false));
+        assertThat(result.getHostKey().getSha256(), is(server.hostKeySha256()));
+        assertThat(result.getMessage(), containsString(server.hostKeySha256()));
+        // not trusted, so no login was tried
+        assertThat(server.authAttempts.get(), is(0));
+    }
+
+    @Test
+    void aTestOfFirstUseHasNoEffectAndSaysWhatWillHappen() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(firstUse(store));
+
+        assertThat(result.isOk(), is(true));
+        assertThat(result.getMessage(), containsString("going to be remembered"));
+        assertThat(store.get("127.0.0.1", server.port()), is(nullValue()));
+    }
+
+    @Test
+    void aTestSaysThatAChangedHostKeyIsNotTrusted() throws Exception {
+        start("secret", false, false);
+        InMemoryEsxiHostKeyStore store = new InMemoryEsxiHostKeyStore();
+        store.rememberIfAbsent("127.0.0.1", server.port(), "SHA256:old");
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(firstUse(store));
+
+        assertThat(result.isOk(), is(false));
+        assertThat(result.isHostKeyTrusted(), is(false));
+        assertThat(result.getMessage(), containsString("has changed"));
+    }
+
+    @Test
+    void aTestWithAWrongPasswordTrustsTheHostKeyButDoesNotLogIn() throws Exception {
+        start("secret", false, false);
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(settings(EsxiSshAuth.password("root", "wrong")));
+
+        assertThat(result.isOk(), is(false));
+        assertThat(result.isHostKeyTrusted(), is(true));
+        assertThat(result.isLoggedIn(), is(false));
+        assertThat(result.getMessage(), containsString("did not accept the password of root"));
+    }
+
+    @Test
+    void aTestOfAnUnreachableHostSaysSo() {
+        EsxiSshSettings nobody =
+                new EsxiSshSettings("127.0.0.1", 1, EsxiSshAuth.password("root", "x")).withConnectTimeoutSeconds(5);
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(nobody);
+
+        assertThat(result.isOk(), is(false));
+        assertThat(result.getHostKey(), is(nullValue()));
+        assertThat(result.getMessage(), containsString("Could not connect to 127.0.0.1:1"));
+    }
+
     @Test
     void theMd5FingerprintIsAcceptedToo() {
         byte[] key = {1, 2, 3, 4, 5};
@@ -219,7 +407,7 @@ class TrileadEsxiShellTest {
     @Test
     void anUnreachableHostIsReported() {
         EsxiSshSettings nobody = new EsxiSshSettings("127.0.0.1", 1, EsxiSshAuth.password("root", "x"))
-                .withAcceptAnyHostKey(true)
+                .withHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY)
                 .withConnectTimeoutSeconds(5);
 
         VSphereException e = assertThrows(VSphereException.class, () -> TrileadEsxiShell.connect(nobody));

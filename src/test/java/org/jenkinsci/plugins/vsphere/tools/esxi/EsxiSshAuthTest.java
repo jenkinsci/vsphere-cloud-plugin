@@ -25,7 +25,7 @@ class EsxiSshAuthTest {
 
     private static EsxiSshSettings settings(FakeEsxiSshServer server, EsxiSshAuth auth) {
         return new EsxiSshSettings("127.0.0.1", server.port(), auth)
-                .withAcceptAnyHostKey(true)
+                .withHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY)
                 .withConnectTimeoutSeconds(10)
                 .withCommandTimeoutSeconds(10);
     }

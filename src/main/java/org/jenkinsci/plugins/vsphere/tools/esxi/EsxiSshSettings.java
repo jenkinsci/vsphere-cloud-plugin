@@ -13,7 +13,8 @@ public final class EsxiSshSettings {
     private final int port;
     private final EsxiSshAuth auth;
     private @CheckForNull String hostKeyFingerprint;
-    private boolean acceptAnyHostKey;
+    private EsxiHostKeyPolicy hostKeyPolicy = EsxiHostKeyPolicy.FINGERPRINT;
+    private EsxiHostKeyStore hostKeyStore = new InMemoryEsxiHostKeyStore();
     private int connectTimeoutSeconds = DEFAULT_CONNECT_TIMEOUT_SECONDS;
     private int commandTimeoutSeconds = DEFAULT_COMMAND_TIMEOUT_SECONDS;
 
@@ -39,19 +40,36 @@ public final class EsxiSshSettings {
         return hostKeyFingerprint;
     }
 
-    /** Only a host with a host key of this fingerprint ({@code SHA256:...} or MD5 {@code ab:cd:...}) is trusted. */
+    /**
+     * Only a host with a host key of this fingerprint ({@code SHA256:...} or MD5 {@code ab:cd:...}) is trusted,
+     * whatever the {@link #getHostKeyPolicy() policy}.
+     */
     public EsxiSshSettings withHostKeyFingerprint(@CheckForNull String fingerprint) {
         this.hostKeyFingerprint = fingerprint;
         return this;
     }
 
-    public boolean isAcceptAnyHostKey() {
-        return acceptAnyHostKey;
+    public EsxiHostKeyPolicy getHostKeyPolicy() {
+        return hostKeyPolicy;
     }
 
-    /** Trust whichever host key the host presents, when there is no fingerprint to expect. Not secure. */
-    public EsxiSshSettings withAcceptAnyHostKey(boolean acceptAnyHostKey) {
-        this.acceptAnyHostKey = acceptAnyHostKey;
+    /** What to trust when there is no fingerprint to expect. */
+    public EsxiSshSettings withHostKeyPolicy(EsxiHostKeyPolicy policy) {
+        this.hostKeyPolicy = policy == null ? EsxiHostKeyPolicy.FINGERPRINT : policy;
+        return this;
+    }
+
+    public EsxiHostKeyStore getHostKeyStore() {
+        return hostKeyStore;
+    }
+
+    /**
+     * Where {@link EsxiHostKeyPolicy#TRUST_FIRST_USE} remembers the host keys that it saw first. The default
+     * only remembers them as long as these settings are around; something that outlives them is needed for the
+     * trust to last.
+     */
+    public EsxiSshSettings withHostKeyStore(EsxiHostKeyStore store) {
+        this.hostKeyStore = store;
         return this;
     }
 

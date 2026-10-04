@@ -4,10 +4,12 @@ import com.trilead.ssh2.ChannelCondition;
 import com.trilead.ssh2.Connection;
 import com.trilead.ssh2.Session;
 import com.trilead.ssh2.StreamGobbler;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicReference;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
 /**
@@ -36,9 +38,14 @@ public final class TrileadEsxiShell implements EsxiShell {
      *     not trusted (with what it presented), or the credentials were not accepted
      */
     public static TrileadEsxiShell connect(EsxiSshSettings settings) throws VSphereException {
+        return connect(settings, settings.getHostKeyStore());
+    }
+
+    private static TrileadEsxiShell connect(EsxiSshSettings settings, EsxiHostKeyStore hostKeyStore)
+            throws VSphereException {
         final Connection connection = new Connection(settings.getHost(), settings.getPort());
         final EsxiHostKeyVerifier verifier =
-                new EsxiHostKeyVerifier(settings.getHostKeyFingerprint(), settings.isAcceptAnyHostKey());
+                new EsxiHostKeyVerifier(settings.getHostKeyFingerprint(), settings.getHostKeyPolicy(), hostKeyStore);
         final int timeoutMillis = settings.getConnectTimeoutSeconds() * 1000;
         try {
             connection.connect(verifier, timeoutMillis, timeoutMillis);
@@ -64,17 +71,91 @@ public final class TrileadEsxiShell implements EsxiShell {
     private static String describeConnectFailure(
             EsxiSshSettings settings, EsxiHostKeyVerifier verifier, IOException cause) {
         if (verifier.wasRejected()) {
-            final String expected = settings.getHostKeyFingerprint();
-            return "The host key presented by " + settings.getHost() + " is not trusted: its "
-                    + verifier.getPresentedAlgorithm() + " key has the fingerprint "
-                    + verifier.getPresentedFingerprint()
-                    + (expected == null || expected.trim().isEmpty()
-                            ? ". Put that fingerprint in the settings to trust it, after checking that it is the"
-                                    + " host's, or accept any host key (which is not secure)."
-                            : ", not the " + expected + " that is expected.");
+            return verifier.getRejection();
         }
         return "Could not connect to " + settings.getHost() + ":" + settings.getPort() + " over SSH: "
                 + rootMessage(cause);
+    }
+
+    /**
+     * Finds out which host key a host presents, without trusting it and without sending any credentials: the
+     * connection is ended as soon as the host key is known. This is how the fingerprint to expect can be learned.
+     *
+     * @throws VSphereException if the host could not be reached
+     */
+    public static EsxiHostKeyInfo queryHostKey(String host, int port, int timeoutSeconds) throws VSphereException {
+        final Connection connection = new Connection(host, port <= 0 ? EsxiSshSettings.DEFAULT_PORT : port);
+        final AtomicReference<EsxiHostKeyInfo> seen = new AtomicReference<>();
+        final int timeoutMillis =
+                (timeoutSeconds > 0 ? timeoutSeconds : EsxiSshSettings.DEFAULT_CONNECT_TIMEOUT_SECONDS) * 1000;
+        try {
+            connection.connect(
+                    (hostname, p, algorithm, key) -> {
+                        seen.set(new EsxiHostKeyInfo(algorithm, key));
+                        return true;
+                    },
+                    timeoutMillis,
+                    timeoutMillis);
+        } catch (IOException e) {
+            if (seen.get() == null) {
+                throw new VSphereException(
+                        "Could not connect to " + host + ":" + port + " over SSH: " + rootMessage(e), e);
+            }
+            // the host key was seen, which is all that is wanted
+        } finally {
+            connection.close();
+        }
+        return seen.get();
+    }
+
+    /**
+     * Tests the connection to a host as it is configured, without any effect (nothing is remembered, not even
+     * a first host key): which host key does it present, would that be trusted, and does the login work.
+     * Never throws; what went wrong is in the result.
+     */
+    public static EsxiConnectionTestResult test(EsxiSshSettings settings) {
+        final EsxiHostKeyInfo hostKey;
+        try {
+            hostKey = queryHostKey(settings.getHost(), settings.getPort(), settings.getConnectTimeoutSeconds());
+        } catch (VSphereException e) {
+            return new EsxiConnectionTestResult(null, false, false, null, e.getMessage());
+        }
+
+        final EsxiHostKeyStore readOnlyStore = EsxiHostKeyStore.readOnly(settings.getHostKeyStore());
+        final EsxiHostKeyVerifier verifier =
+                new EsxiHostKeyVerifier(settings.getHostKeyFingerprint(), settings.getHostKeyPolicy(), readOnlyStore);
+        final boolean trusted = verifier.verifyServerHostKey(
+                settings.getHost(), settings.getPort(), hostKey.getAlgorithm(), hostKey.getKey());
+        if (!trusted) {
+            return new EsxiConnectionTestResult(hostKey, false, false, null, verifier.getRejection());
+        }
+        final boolean willBeRemembered = settings.getHostKeyFingerprint() == null
+                        || settings.getHostKeyFingerprint().trim().isEmpty()
+                ? settings.getHostKeyPolicy() == EsxiHostKeyPolicy.TRUST_FIRST_USE
+                        && settings.getHostKeyStore().get(settings.getHost(), settings.getPort()) == null
+                : false;
+        final String keyNote = "The host presents a " + hostKey
+                + (willBeRemembered
+                        ? ", which is going to be remembered and then required, as it is the first one seen."
+                        : ".");
+
+        try (TrileadEsxiShell shell = connect(settings, readOnlyStore)) {
+            return new EsxiConnectionTestResult(
+                    hostKey, true, true, serverVersion(shell), "Logged in to " + settings + ". " + keyNote);
+        } catch (VSphereException e) {
+            return new EsxiConnectionTestResult(hostKey, true, false, null, e.getMessage() + ". " + keyNote);
+        }
+    }
+
+    /** What the host calls itself ({@code vmware -v}), if it can be asked. */
+    private static @CheckForNull String serverVersion(EsxiShell shell) {
+        try {
+            final ShellResult result = shell.run("vmware -v");
+            final String line = result.getStdout().trim().split("\\R")[0].trim();
+            return result.succeeded() && !line.isEmpty() ? line : null;
+        } catch (VSphereException e) {
+            return null;
+        }
     }
 
     private static String rootMessage(Throwable t) {

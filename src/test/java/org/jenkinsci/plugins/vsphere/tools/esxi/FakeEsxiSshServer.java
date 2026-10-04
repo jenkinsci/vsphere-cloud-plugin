@@ -22,6 +22,9 @@ final class FakeEsxiSshServer implements AutoCloseable {
 
     static final String USER = "root";
 
+    /** How many times a client tried to log in (with a password or a key), to see that none did. */
+    final java.util.concurrent.atomic.AtomicInteger authAttempts = new java.util.concurrent.atomic.AtomicInteger();
+
     private final SshServer server;
     private final KeyPair hostKey;
 
@@ -42,11 +45,19 @@ final class FakeEsxiSshServer implements AutoCloseable {
         server.setPort(0);
         server.setKeyPairProvider(KeyPairProvider.wrap(hostKey));
         server.setPasswordAuthenticator(
-                password == null ? null : (user, given, session) -> USER.equals(user) && password.equals(given));
+                password == null
+                        ? null
+                        : (user, given, session) -> {
+                            authAttempts.incrementAndGet();
+                            return USER.equals(user) && password.equals(given);
+                        });
         server.setPublickeyAuthenticator(
                 authorizedKey == null
                         ? null
-                        : (user, key, session) -> USER.equals(user) && KeyUtils.compareKeys(authorizedKey, key));
+                        : (user, key, session) -> {
+                            authAttempts.incrementAndGet();
+                            return USER.equals(user) && KeyUtils.compareKeys(authorizedKey, key);
+                        });
         if (keyboardInteractiveOnly) {
             server.setKeyboardInteractiveAuthenticator(DefaultKeyboardInteractiveAuthenticator.INSTANCE);
             server.setUserAuthFactories(List.of(UserAuthKeyboardInteractiveFactory.INSTANCE));

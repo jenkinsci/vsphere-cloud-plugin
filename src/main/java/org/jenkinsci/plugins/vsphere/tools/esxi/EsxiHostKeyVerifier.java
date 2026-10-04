@@ -7,46 +7,91 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 
 /**
- * Decides whether to trust the host key an ESXi host presents: when a fingerprint to expect is given, only a
- * host key with that fingerprint is, and otherwise every host key is, if told to accept any. Remembers what the
- * host presented, so that a refusal can say what to put in the settings to trust it.
+ * Decides whether to trust the host key an ESXi host presents:
+ *
+ * <ul>
+ *   <li>if a fingerprint to expect is given, only a host key with that fingerprint is trusted, whatever the
+ *       policy;
+ *   <li>otherwise, according to the {@link EsxiHostKeyPolicy}: the first host key seen is trusted and
+ *       remembered, and from then on only it ({@link EsxiHostKeyPolicy#TRUST_FIRST_USE}); or every host key is
+ *       ({@link EsxiHostKeyPolicy#ACCEPT_ANY}); or none ({@link EsxiHostKeyPolicy#FINGERPRINT}).
+ * </ul>
+ *
+ * <p>Remembers what the host presented and, if it refused the host key, why, in words that say what to do.
  */
 final class EsxiHostKeyVerifier implements ServerHostKeyVerifier {
 
     private final @CheckForNull String expectedFingerprint;
-    private final boolean acceptAny;
+    private final EsxiHostKeyPolicy policy;
+    private final EsxiHostKeyStore store;
 
-    private volatile @CheckForNull String presentedFingerprint;
-    private volatile @CheckForNull String presentedAlgorithm;
-    private volatile boolean rejected;
+    private volatile @CheckForNull EsxiHostKeyInfo presented;
+    private volatile @CheckForNull String rejection;
+    private volatile boolean learnedNow;
 
-    EsxiHostKeyVerifier(@CheckForNull String expectedFingerprint, boolean acceptAny) {
+    EsxiHostKeyVerifier(@CheckForNull String expectedFingerprint, EsxiHostKeyPolicy policy, EsxiHostKeyStore store) {
         final String trimmed = expectedFingerprint == null ? "" : expectedFingerprint.trim();
         this.expectedFingerprint = trimmed.isEmpty() ? null : trimmed;
-        this.acceptAny = acceptAny;
+        this.policy = policy;
+        this.store = store;
     }
 
     @Override
     public boolean verifyServerHostKey(String hostname, int port, String serverHostKeyAlgorithm, byte[] serverHostKey) {
-        presentedFingerprint = sha256(serverHostKey);
-        presentedAlgorithm = serverHostKeyAlgorithm;
-        final boolean trusted = expectedFingerprint != null ? matches(expectedFingerprint, serverHostKey) : acceptAny;
-        rejected = !trusted;
-        return trusted;
+        final EsxiHostKeyInfo info = new EsxiHostKeyInfo(serverHostKeyAlgorithm, serverHostKey);
+        presented = info;
+        rejection = null;
+        learnedNow = false;
+        final String who = "The host key presented by " + hostname;
+        final String what = "its " + serverHostKeyAlgorithm + " key has the fingerprint " + info.getSha256();
+
+        if (expectedFingerprint != null) {
+            if (matches(expectedFingerprint, serverHostKey)) {
+                return true;
+            }
+            rejection = who + " is not trusted: " + what + ", not the " + expectedFingerprint + " that is expected.";
+            return false;
+        }
+        switch (policy) {
+            case ACCEPT_ANY:
+                return true;
+            case TRUST_FIRST_USE:
+                final boolean first = store.get(hostname, port) == null;
+                final String known = store.rememberIfAbsent(hostname, port, info.getSha256());
+                if (matches(known, serverHostKey)) {
+                    learnedNow = first;
+                    return true;
+                }
+                rejection = who + " has changed: " + what + ", but " + known + " was remembered when the host was"
+                        + " first seen. If the host was reinstalled, or its key replaced on purpose, forget the"
+                        + " remembered fingerprint to trust the new key.";
+                return false;
+            default:
+                rejection = who + " is not trusted: " + what + ". Put that fingerprint in the settings to trust it,"
+                        + " after checking that it is the host's; or trust the host key that is seen first, or any"
+                        + " (which is not secure).";
+                return false;
+        }
     }
 
     boolean wasRejected() {
-        return rejected;
+        return rejection != null;
+    }
+
+    /** Why the host key was refused, in words that say what to do about it; null if it was not. */
+    @CheckForNull
+    String getRejection() {
+        return rejection;
     }
 
     @CheckForNull
-    String getPresentedFingerprint() {
-        return presentedFingerprint;
+    EsxiHostKeyInfo getPresented() {
+        return presented;
     }
 
-    @CheckForNull
-    String getPresentedAlgorithm() {
-        return presentedAlgorithm;
+    /** True if the host key was the first one seen and has been remembered now. */
+    boolean wasLearnedNow() {
+        return learnedNow;
     }
 
     /** True if the fingerprint, in the form {@code SHA256:...} (or without the prefix) or MD5 {@code ab:cd:...}, is the key's. */
