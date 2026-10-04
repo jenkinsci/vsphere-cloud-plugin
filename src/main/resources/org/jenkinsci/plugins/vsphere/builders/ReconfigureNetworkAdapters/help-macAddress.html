@@ -1,3 +1,14 @@
 <div>
   The new MAC address for this network adapter. Leave blank to keep existing or default value.
+  <p>
+    A given address is set as a manual (user-supplied) address. vCenter only accepts those from the right ranges:
+    in the <code>00:50:56</code> block that is <code>00:50:56:00:00:00</code> - <code>00:50:56:3F:FF:FF</code>
+    (<code>00:50:56:80:00:00</code> - <code>00:50:56:BF:FF:FF</code> is what vCenter itself generates), and
+    <code>00:0C:29</code> is what standalone ESXi hosts generate. The form warns about addresses that are likely
+    to be refused.
+  </p>
+  <p>
+    If vCenter does refuse the reconfiguration, it is retried once with the address declared as one that
+    vCenter "assigned", rather than a manual one; if that fails too, both reasons are reported.
+  </p>
 </div>
