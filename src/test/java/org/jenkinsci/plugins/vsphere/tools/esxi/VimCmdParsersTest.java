@@ -95,6 +95,89 @@ class VimCmdParsersTest {
             "}",
             "");
 
+    // ESXi 7: a VM of another guest family and hardware version, and a field that is <unset> there
+    private static final String ESXI7_ONE_VM = String.join(
+            "\n",
+            "Vmid   Name          File              Guest OS      Version   Annotation",
+            "1      x7     [pve-esx] x7/x7.vmx   solaris10Guest   vmx-19",
+            "");
+
+    private static final String ESXI7_GUEST = String.join(
+            "\n",
+            "Guest information:",
+            "",
+            "(vim.vm.GuestInfo) {",
+            "   toolsStatus = \"toolsNotInstalled\",",
+            "   toolsVersionStatus = \"guestToolsNotInstalled\",",
+            "   toolsVersionStatus2 = \"guestToolsNotInstalled\",",
+            "   toolsRunningStatus = \"guestToolsNotRunning\",",
+            "   toolsVersion = \"0\",",
+            "   toolsInstallType = <unset>,",
+            "   ipAddress = <unset>,",
+            "   guestState = \"notRunning\",",
+            "   hwVersion = \"vmx-19\",",
+            "}",
+            "");
+
+    // After "vim-cmd vmsvc/snapshot.create 1 snap1 "Shapshot #1"" on an ESXi 8 host
+    private static final String ESXI8_ONE_SNAPSHOT = String.join(
+            "\n",
+            "Get Snapshot:",
+            "|-ROOT",
+            "--Snapshot Name        : snap1",
+            "--Snapshot Id        : 1",
+            "--Snapshot Desciption  : Shapshot #1",
+            "--Snapshot Created On  : 10/4/2026 18:59:44",
+            "--Snapshot State       : powered off",
+            "");
+
+    @Test
+    void esxi7OutputIsReadLikeEsxi8Output() {
+        List<VmEntry> vms = VimCmdParsers.parseGetAllVms(ESXI7_ONE_VM);
+
+        assertThat(vms.size(), is(1));
+        assertThat(vms.get(0).getName(), is("x7"));
+        assertThat(vms.get(0).getGuestOs(), is("solaris10Guest"));
+        assertThat(vms.get(0).getVersion(), is("vmx-19"));
+        assertThat(VimCmdParsers.parseGuestIp(ESXI7_GUEST), is(nullValue()));
+        assertThat(VimCmdParsers.parseToolsStatus(ESXI7_GUEST), is(VirtualMachineToolsStatus.toolsNotInstalled));
+    }
+
+    // The same on an ESXi 7 host, which prints the time without zero padding
+    private static final String ESXI7_ONE_SNAPSHOT = String.join(
+            "\n",
+            "Get Snapshot:",
+            "|-ROOT",
+            "--Snapshot Name        : snap1",
+            "--Snapshot Id        : 1",
+            "--Snapshot Desciption  : Shapshot #1",
+            "--Snapshot Created On  : 10/4/2026 19:0:52",
+            "--Snapshot State       : powered off",
+            "");
+
+    @Test
+    void esxi7SingleSnapshotIsReadLikeTheEsxi8One() {
+        List<VirtualMachineSnapshotTree> roots = VimCmdParsers.parseSnapshotTree(ESXI7_ONE_SNAPSHOT);
+
+        assertThat(roots.size(), is(1));
+        assertThat(roots.get(0).getName(), is("snap1"));
+        assertThat(roots.get(0).getSnapshot().getVal(), is("1"));
+        assertThat(roots.get(0).getDescription(), is("Shapshot #1"));
+        assertThat(roots.get(0).getState(), is(VirtualMachinePowerState.poweredOff));
+    }
+
+    @Test
+    void esxi8SingleSnapshot() {
+        List<VirtualMachineSnapshotTree> roots = VimCmdParsers.parseSnapshotTree(ESXI8_ONE_SNAPSHOT);
+
+        assertThat(roots.size(), is(1));
+        assertThat(roots.get(0).getName(), is("snap1"));
+        assertThat(roots.get(0).getSnapshot().getVal(), is("1"));
+        assertThat(roots.get(0).getDescription(), is("Shapshot #1"));
+        assertThat(roots.get(0).getState(), is(VirtualMachinePowerState.poweredOff));
+        assertThat(roots.get(0).getChildSnapshotList() == null, is(true));
+    }
+
     @Test
     void esxi8WithoutVms() {
         assertThat(VimCmdParsers.parseGetAllVms(ESXI8_NO_VMS), is(empty()));

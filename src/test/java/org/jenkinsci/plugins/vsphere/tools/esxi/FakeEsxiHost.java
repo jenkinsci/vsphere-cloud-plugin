@@ -184,6 +184,7 @@ final class FakeEsxiHost implements EsxiShell {
             out.append("--Snapshot Name        : ").append(snapshot[0]).append('\n');
             out.append("--Snapshot Id        : ").append(id++).append('\n');
             out.append("--Snapshot Desciption  : ").append(snapshot[1]).append('\n');
+            out.append("--Snapshot Created On  : 10/4/2026 18:59:44\n");
             out.append("--Snapshot State       : powered off\n");
         }
         return out.toString();
