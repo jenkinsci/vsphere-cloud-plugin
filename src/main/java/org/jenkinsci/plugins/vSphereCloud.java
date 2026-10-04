@@ -669,8 +669,9 @@ public class vSphereCloud extends Cloud {
         if (effectiveVsHost == null) {
             throw new VSphereException("vSphere host is not specified");
         }
-        final String effectiveUserName = connectionConfig.getUsername();
-        if (effectiveUserName == null) {
+        // Over SSH to an ESXi host the login is the credential's own, and is looked up when connecting
+        if (connectionConfig.getBackendType() == VSphereConnectionConfig.BackendType.VCENTER
+                && connectionConfig.getUsername() == null) {
             throw new VSphereException("vSphere username is not specified");
         }
 

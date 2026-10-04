@@ -146,6 +146,35 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         return vsHost;
     }
 
+    /** What the connection is made to, which decides which of the settings are in use. */
+    public enum BackendType {
+        /** vCenter (or an ESXi host whose API can be written to), through the vSphere Web Services API. */
+        VCENTER,
+        /** A standalone ESXi host, through SSH and its {@code vim-cmd}. */
+        ESXI_SSH
+    }
+
+    /**
+     * The settings for connecting to a standalone ESXi host over SSH; null (the default) for vCenter, with
+     * {@link #getVsHost()} as its URL and the credentials, certificate and HTTP client settings of this
+     * configuration.
+     */
+    private @CheckForNull EsxiSshBackendConfig esxiSsh;
+
+    public @CheckForNull EsxiSshBackendConfig getEsxiSsh() {
+        return esxiSsh;
+    }
+
+    /** If set, the connection is to a standalone ESXi host over SSH, with {@link #getVsHost()} as its host name. */
+    @DataBoundSetter
+    public void setEsxiSsh(@CheckForNull EsxiSshBackendConfig esxiSsh) {
+        this.esxiSsh = esxiSsh;
+    }
+
+    public BackendType getBackendType() {
+        return esxiSsh == null ? BackendType.VCENTER : BackendType.ESXI_SSH;
+    }
+
     @DataBoundSetter
     public void setAllowUntrustedCertificate(boolean allowUntrustedCertificate) {
         this.allowUntrustedCertificate = allowUntrustedCertificate;
