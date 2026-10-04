@@ -75,8 +75,11 @@
 	  * 5.x after PR- and spotbugs-induced API changes (returning empty
 	    objects instead of nulls, supporting envvar expansion in more
 	    contexts, etc.), should have been bumped a couple of tags earlier.
+	  * 6.x after VSphere class name conversion into interface, to support
+	    different backends (yavijava to vCenter, SSH to ESXi free) cleanly,
+	    or nearest to that with backwards compatibility in mind
       -->
-    <revision>5</revision>
+    <revision>6</revision>
     <changelist>999999-SNAPSHOT</changelist>
     <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
     <jenkins.baseline>2.555</jenkins.baseline>
