@@ -59,12 +59,67 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+
+    // The files of the datastores, for what is done to files: path -> text. Directories are kept apart.
+    final Map<String, String> files = new LinkedHashMap<>();
+    final java.util.Set<String> directories = new java.util.TreeSet<>();
+    /** Files that cannot be read, as those in use by a VM that is running cannot. */
+    final java.util.Set<String> locked = new java.util.HashSet<>();
+    /** Where a datastore really is: /vmfs/volumes/name is a link to /vmfs/volumes/uuid. */
+    final Map<String, String> datastoreUuids = new LinkedHashMap<>();
+
+    private int nextVmId = 100;
     private final Map<String, String> failures = new LinkedHashMap<>();
 
     FakeVm addVm(int id, String name, String datastore, String vmxRelativePath, String vmx) {
         final FakeVm vm = new FakeVm(id, name, datastore, vmxRelativePath, vmx);
         vms.put(id, vm);
+        addFile("/vmfs/volumes/" + datastore + "/" + vmxRelativePath, vmx);
         return vm;
+    }
+
+    /** Puts a file in a datastore, and the folders that lead to it. */
+    void addFile(String path, String content) {
+        files.put(path, content);
+        addDirectories(parentOf(path));
+    }
+
+    private void addDirectories(String directory) {
+        String current = directory;
+        while (current.startsWith("/vmfs/volumes/") && current.length() > "/vmfs/volumes/".length()) {
+            directories.add(current);
+            current = parentOf(current);
+        }
+    }
+
+    private static String parentOf(String path) {
+        return path.substring(0, path.lastIndexOf('/'));
+    }
+
+    boolean hasFile(String path) {
+        return files.containsKey(path);
+    }
+
+    /** The text of a file; fails the test if there is none. */
+    String file(String path) {
+        if (!files.containsKey(path)) {
+            throw new AssertionError("No such file: " + path + " (there are " + files.keySet() + ")");
+        }
+        return files.get(path);
+    }
+
+    boolean hasDirectory(String path) {
+        return directories.contains(path);
+    }
+
+    /** The VM that has the name, or null. */
+    FakeVm vmNamed(String name) {
+        for (FakeVm vm : vms.values()) {
+            if (vm.name.equals(name)) {
+                return vm;
+            }
+        }
+        return null;
     }
 
     FakeVm vm(int id) {
@@ -89,11 +144,27 @@ final class FakeEsxiHost implements EsxiShell {
         if (command.equals("true")) {
             return ok("");
         }
+        final ShellResult written = writeFile(command);
+        if (written != null) {
+            return written;
+        }
         final List<String> words = split(command);
+        for (Map.Entry<String, String> failure : failures.entrySet()) {
+            if (!words.get(0).equals("/bin/vim-cmd") && command.contains(failure.getKey())) {
+                return new ShellResult(1, "", failure.getValue());
+            }
+        }
+        final ShellResult onFiles = onFiles(words);
+        if (onFiles != null) {
+            return onFiles;
+        }
         if (words.equals(List.of("vmware", "-v"))) {
             return ok(esxiVersion + "\n");
         }
         if (words.get(0).equals("cat") && words.size() == 2) {
+            if (files.containsKey(words.get(1))) {
+                return ok(files.get(words.get(1)));
+            }
             for (FakeVm vm : vms.values()) {
                 if (words.get(1).equals("/vmfs/volumes/" + vm.datastore + "/" + vm.vmxRelativePath)) {
                     return ok(vm.vmx);
@@ -112,6 +183,9 @@ final class FakeEsxiHost implements EsxiShell {
         final String sub = words.get(1);
         if (sub.equals("vmsvc/getallvms")) {
             return ok(allVms());
+        }
+        if (sub.equals("solo/registervm")) {
+            return register(words.get(2), words.get(3));
         }
         final FakeVm vm = vms.get(Integer.parseInt(words.get(2)));
         if (vm == null) {
@@ -146,6 +220,9 @@ final class FakeEsxiHost implements EsxiShell {
             case "vmsvc/snapshot.removeall":
                 vm.snapshots.clear();
                 return ok("");
+            case "vmsvc/unregister":
+                vms.remove(vm.id);
+                return ok("");
             case "vmsvc/destroy":
                 vms.remove(vm.id);
                 return ok("Destroying VM\n");
@@ -164,6 +241,120 @@ final class FakeEsxiHost implements EsxiShell {
                 "   msg = \"Unable to find a VM corresponding to \"" + vmId + "\"\"",
                 "}",
                 "");
+    }
+
+    private static final java.util.regex.Pattern PRINTF_TO_FILE = java.util.regex.Pattern.compile(
+            "^printf '%s' (.*) > ('(?:[^']|'\\\\'')*')$", java.util.regex.Pattern.DOTALL);
+
+    /** The one shape of writing a file that the backend uses: printf '%s' 'text' > 'path'. */
+    private ShellResult writeFile(String command) {
+        final java.util.regex.Matcher m = PRINTF_TO_FILE.matcher(command);
+        if (!m.matches()) {
+            return null;
+        }
+        final String text = split("x " + m.group(1)).get(1);
+        final String path = split(m.group(2)).get(0);
+        if (!directories.contains(parentOf(path))) {
+            return new ShellResult(1, "", "sh: can't create " + path + ": nonexistent directory");
+        }
+        files.put(path, text);
+        return ok("");
+    }
+
+    private ShellResult onFiles(List<String> words) {
+        switch (words.get(0)) {
+            case "mkdir":
+                // mkdir -p dir
+                addDirectories(words.get(2));
+                return ok("");
+            case "cp":
+                if (!files.containsKey(words.get(1))) {
+                    return new ShellResult(1, "", "cp: can't stat '" + words.get(1) + "'");
+                }
+                if (!directories.contains(parentOf(words.get(2)))) {
+                    return new ShellResult(1, "", "cp: can't create '" + words.get(2) + "'");
+                }
+                files.put(words.get(2), files.get(words.get(1)));
+                return ok("");
+            case "ls":
+                // ls -1 dir
+                return listDirectory(words.get(2));
+            case "test":
+                // test -e path
+                return new ShellResult(
+                        files.containsKey(words.get(2)) || directories.contains(words.get(2)) ? 0 : 1, "", "");
+            case "dd":
+                // dd if=path of=/dev/null bs=1 count=1
+                final String path = words.get(1).substring("if=".length());
+                return new ShellResult(files.containsKey(path) && !locked.contains(path) ? 0 : 1, "", "");
+            case "readlink":
+                // readlink -f path
+                return ok(canonical(words.get(2)) + "\n");
+            case "rm":
+                // rm -rf dir
+                final String directory = words.get(2);
+                files.keySet().removeIf(f -> f.startsWith(directory + "/"));
+                directories.removeIf(d -> d.equals(directory) || d.startsWith(directory + "/"));
+                return ok("");
+            case "vmkfstools":
+                // vmkfstools -i source destination -d thin
+                final String source = words.get(2);
+                final String destination = words.get(3);
+                if (!files.containsKey(source)) {
+                    return new ShellResult(1, "", "Failed to open disk '" + source + "'");
+                }
+                final String flat = destination.replace(".vmdk", "-flat.vmdk");
+                files.put(
+                        destination,
+                        "# Disk DescriptorFile\nversion=1\ncreateType=\"vmfs\"\n\n# Extent description\nRW 100 VMFS \""
+                                + flat.substring(flat.lastIndexOf('/') + 1)
+                                + "\"\n");
+                files.put(flat, "COPY OF " + source);
+                return ok("Clone: 100% done.\n");
+            default:
+                return null;
+        }
+    }
+
+    private ShellResult listDirectory(String directory) {
+        if (!directories.contains(directory)) {
+            return new ShellResult(1, "", "ls: " + directory + ": No such file or directory");
+        }
+        final java.util.SortedSet<String> names = new java.util.TreeSet<>();
+        for (String file : files.keySet()) {
+            if (parentOf(file).equals(directory)) {
+                names.add(file.substring(file.lastIndexOf('/') + 1));
+            }
+        }
+        for (String child : directories) {
+            if (child.length() > directory.length() && parentOf(child).equals(directory)) {
+                names.add(child.substring(child.lastIndexOf('/') + 1));
+            }
+        }
+        return ok(String.join("\n", names) + (names.isEmpty() ? "" : "\n"));
+    }
+
+    /** Where a path really is: a datastore is also there by its name, as a link to where it is by its UUID. */
+    String canonical(String path) {
+        for (Map.Entry<String, String> datastore : datastoreUuids.entrySet()) {
+            final String named = "/vmfs/volumes/" + datastore.getKey() + "/";
+            if (path.startsWith(named)) {
+                return "/vmfs/volumes/" + datastore.getValue() + "/" + path.substring(named.length());
+            }
+        }
+        return path;
+    }
+
+    private ShellResult register(String vmxPath, String name) {
+        if (!files.containsKey(vmxPath)) {
+            return new ShellResult(1, "", "Failed to register: " + vmxPath + " does not exist");
+        }
+        final String below = vmxPath.substring("/vmfs/volumes/".length());
+        final String datastore = below.substring(0, below.indexOf('/'));
+        final String relative = below.substring(below.indexOf('/') + 1);
+        final int id = nextVmId++;
+        addVm(id, name, datastore, relative, files.get(vmxPath));
+        return ok(id + "\n");
     }
 
     private String allVms() {

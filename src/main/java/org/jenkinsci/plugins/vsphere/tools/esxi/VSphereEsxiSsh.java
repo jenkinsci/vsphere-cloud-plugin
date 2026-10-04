@@ -41,6 +41,7 @@ import java.util.logging.Level;
 import org.jenkinsci.plugins.vsphere.tools.AbstractVSphere;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
 
 /**
@@ -89,7 +90,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
      * {@code (vim.fault.NotFound) { ... msg = "..." }}), the command is taken to have failed whatever its exit
      * code was, with the fault's message as the explanation.
      */
-    private ShellResult vim(String command) throws VSphereException {
+    ShellResult vim(String command) throws VSphereException {
         final ShellResult result = shell.run(command);
         final String fault = VimCmdParsers.parseFault(result.getStdout() + "\n" + result.getStderr());
         if (fault != null && result.succeeded()) {
@@ -256,247 +257,71 @@ public class VSphereEsxiSsh extends AbstractVSphere {
                 operation + " is not supported by the ESXi SSH backend (it needs vCenter, or is not implemented yet)");
     }
 
+    // -- cloning, done on the files of the host --
+
+    /**
+     * Makes a copy of a VM, a linked one (sharing the data of the snapshot of its master) or a full one, by
+     * working on the files of the datastore. What does not apply to a standalone host (clusters, folders,
+     * customization specs, choosing a host) is not accepted where it would change the outcome, and is said to
+     * be ignored where it would not.
+     */
+    @Override
+    public void cloneOrDeployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            String hostName,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
+        refuse("a customization specification", customizationSpec);
+        refuse("choosing a host", hostName);
+        refuse("choosing a host", hostSelectionMode);
+        if (hostSelectionCandidates != null && !hostSelectionCandidates.isEmpty()) {
+            refuse("choosing a host", hostSelectionCandidates.toString());
+        }
+        refuse("a named snapshot (the newest snapshot disk that can be read is used)", namedSnapshot);
+        ignored(jLogger, "cluster", cluster);
+        ignored(jLogger, "folder", folderName);
+        if (resourcePoolName != null && !resourcePoolName.trim().isEmpty() && !"Resources".equals(resourcePoolName)) {
+            ignored(jLogger, "resource pool", resourcePoolName);
+        }
+        new EsxiVmCloner(this, new EsxiDatastoreFiles(shell), jLogger)
+                .clone(cloneName, sourceName, linkedClone, datastoreName, powerOn, extraConfigParameters, vmSize);
+    }
+
+    private static void refuse(String what, String value) throws VSphereException {
+        if (value != null && !value.trim().isEmpty()) {
+            throw new VSphereException("Over SSH to an ESXi host, " + what + " cannot be used (it was given as \""
+                    + value + "\"): leave it empty");
+        }
+    }
+
+    private static void ignored(PrintStream log, String what, String value) {
+        if (value != null && !value.trim().isEmpty() && log != null) {
+            VSphereLogger.vsLogger(
+                    log, "The " + what + " \"" + value + "\" is ignored: a standalone ESXi host has none to choose");
+        }
+    }
+
+    /** Runs a command that takes a while, like the copy of a disk, within the time limit of commands. */
+    void runLong(String command, String what) throws VSphereException {
+        vim(command).stdoutOrThrow(what);
+    }
+
     // -- what needs vCenter, or is not there yet --
-
-    @Override
-    public void deployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("deployVm");
-    }
-
-    @Override
-    public void deployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("deployVm");
-    }
-
-    @Override
-    public void deployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("deployVm");
-    }
-
-    @Override
-    public void deployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            VmSize vmSize,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("deployVm");
-    }
-
-    @Override
-    public void cloneVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneVm");
-    }
-
-    @Override
-    public void cloneVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneVm");
-    }
-
-    @Override
-    public void cloneVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneVm");
-    }
-
-    @Override
-    public void cloneVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean powerOn,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            VmSize vmSize,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneVm");
-    }
-
-    @Override
-    public void cloneOrDeployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean useCurrentSnapshot,
-            final String namedSnapshot,
-            boolean powerOn,
-            Map<String, String> extraConfigParameters,
-            String customizationSpec,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneOrDeployVm");
-    }
-
-    @Override
-    public void cloneOrDeployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean useCurrentSnapshot,
-            final String namedSnapshot,
-            boolean powerOn,
-            Map<String, String> extraConfigParameters,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneOrDeployVm");
-    }
-
-    @Override
-    public void cloneOrDeployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean useCurrentSnapshot,
-            final String namedSnapshot,
-            boolean powerOn,
-            Map<String, String> extraConfigParameters,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneOrDeployVm");
-    }
-
-    @Override
-    public void cloneOrDeployVm(
-            String cloneName,
-            String sourceName,
-            boolean linkedClone,
-            String resourcePoolName,
-            String cluster,
-            String datastoreName,
-            String folderName,
-            boolean useCurrentSnapshot,
-            final String namedSnapshot,
-            boolean powerOn,
-            Map<String, String> extraConfigParameters,
-            String customizationSpec,
-            String host,
-            String hostSelectionMode,
-            Set<String> hostSelectionCandidates,
-            HostSelectionOptions hostSelectionOptions,
-            VmSize vmSize,
-            PrintStream jLogger)
-            throws VSphereException {
-        throw unsupported("cloneOrDeployVm");
-    }
 
     @Override
     public boolean hostExists(final String hostName) throws VSphereException {

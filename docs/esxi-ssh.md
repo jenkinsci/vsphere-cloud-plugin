@@ -17,7 +17,8 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | IP address of a VM (needs VMware Tools in it)                 | yes           |
 | Take a snapshot                                               | yes           |
 | Delete a VM                                                   | yes           |
-| Clone and deploy VMs, reconfigure VMs, revert to / delete / rename a snapshot | not yet |
+| Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
+| Reconfigure VMs, revert to / delete / rename a snapshot       | not yet       |
 | Whatever needs vCenter: folders, clusters, templates, customization specs, distributed switches, choosing a host | no |
 
 What is not available says so with a message, when it is used.
@@ -75,6 +76,38 @@ checked, as `ssh` does. There are three ways to say what to trust:
 * **Any host key.** Not secure; for hosts in a network that is safe.
 
 A fingerprint that is given is always required to match, whichever of these is chosen.
+
+## Cloning
+
+An ESXi host cannot clone a VM by itself, so the plugin does what the `esxi-linked-clone` scripts
+do, on the files of the datastore: copies what makes the clone, writes its own `.vmx`, registers
+it with the host, and starts it if asked to. Cloning and deploying a VM (also what the cloud
+templates do) work this way, with the "master" VM as the source.
+
+* A **linked clone** shares the data of its master. For each disk of the master it takes the
+  newest snapshot disk that can be read (the small "delta" with the changes since the snapshot),
+  copies that into the folder of the clone, and makes the copy a change of the master's disk by
+  its parent; the large data is not copied. So **the master has to have a snapshot**, and the
+  clones are made of the state it had then. A master that is **running** has its newest disk in
+  use, which cannot be copied: the snapshot disk before it is used, so take a snapshot of the
+  master, and, if it is to run, a second one, so that the first one stays as it is. A linked
+  clone has to be on the datastore of its master. As with any linked clone, the master must not
+  be deleted, nor its snapshots removed, while clones of it exist.
+* A **full clone** copies the disks (thin provisioned, with `vmkfstools`), which takes time, as long as
+  the copy takes: the time limit of a command (an advanced setting) may need to be raised for
+  large disks. It may be on any datastore.
+* The `.vmx` of the clone has its own name, and nothing of the identity of the master: UUIDs, MAC
+  addresses (new ones are made when it starts) and guest information are not carried over. Where
+  the clone is asked to have another size (CPUs, cores per socket, memory), or extra
+  configuration parameters, they are put in it.
+* The clone is made in a folder of its own, named after it, in the datastore. If anything goes
+  wrong, what was made is removed again.
+
+What a standalone host does not have is not available: a customization specification, choosing
+a host (or a host selection mode), and a named snapshot (the newest one that can be read is used)
+are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
+note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
+`. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
 
 ### Configuration as Code
 
