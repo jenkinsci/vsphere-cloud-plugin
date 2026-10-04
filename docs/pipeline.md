@@ -75,6 +75,9 @@ available within `timeoutInSeconds`:
 | `PowerOn` | always (when IP is obtained) |
 | `ExposeGuestInfo` | when `waitForIp4: true` |
 
+If no IP address arrives in time, `Clone`, `Deploy` and `PowerOn` only log a warning and carry on without
+`VSPHERE_IP` being set, unless they are given `failOnNoAddress: true`, which fails the step.
+
 `ExposeGuestInfo` additionally sets further environment variables named
 `<envVariablePrefix>_<key>` for each guest info property read from the VM.
 
@@ -95,6 +98,7 @@ buildStep: [$class: 'Clone',
             linkedClone: false,            // create a linked clone (requires a snapshot)
             powerOn: false,                // power on after cloning
             timeoutInSeconds: 60,          // seconds to wait for IP after power-on (0 = don't wait)
+            failOnNoAddress: false,        // fail the step if no IP address arrives in time (default: only warn)
             customizationSpec: '',         // guest OS customization spec name (optional)
             useCurrentSnapshot: null,      // true = clone from current snapshot; false = don't use snapshot
             namedSnapshot: '',             // clone from this specific named snapshot (optional)
@@ -173,6 +177,7 @@ buildStep: [$class: 'Deploy',
             linkedClone: false,
             powerOn: false,
             timeoutInSeconds: 60,
+            failOnNoAddress: false,      // fail the step if no IP address arrives in time (default: only warn)
             customizationSpec: '',
             cpuCores: '',                // (optional) same meaning as on the Clone step
             coresPerSocket: '',          // (optional) same meaning as on the Clone step
@@ -195,7 +200,8 @@ Powers on a stopped or suspended VM and waits for its IP address.
 ```groovy
 buildStep: [$class: 'PowerOn',
             vm: 'my-vm',              // (required) VM name
-            timeoutInSeconds: 60      // (required) max seconds to wait for IP (max 3600)
+            timeoutInSeconds: 60,     // (required) max seconds to wait for IP (max 3600)
+            failOnNoAddress: false    // fail the step if no IP address arrives in time (default: only warn)
            ]
 ```
 

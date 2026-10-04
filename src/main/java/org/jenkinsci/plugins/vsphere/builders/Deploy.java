@@ -171,6 +171,18 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         return host;
     }
 
+    private boolean failOnNoAddress;
+
+    /** Whether failing to obtain the VM's IP address within the timeout fails this step (default: only warn). */
+    public boolean isFailOnNoAddress() {
+        return failOnNoAddress;
+    }
+
+    @DataBoundSetter
+    public void setFailOnNoAddress(boolean failOnNoAddress) {
+        this.failOnNoAddress = failOnNoAddress;
+    }
+
     @DataBoundSetter
     public void setHost(String host) {
         this.host = host;
@@ -393,9 +405,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             @NonNull TaskListener listener)
             throws InterruptedException, IOException {
         try {
-            if (!deployFromTemplate(run, launcher, listener)) {
-                throw new AbortException("Timed out while waiting for the IP address of the deployed VM");
-            }
+            deployFromTemplate(run, launcher, listener);
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }
@@ -545,11 +555,14 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             }
             return true;
         } else {
+            final String message = "Timed out after waiting " + timeoutInSecondsForGetIp + " seconds to get IP for \""
+                    + expandedClone + "\"";
+            if (failOnNoAddress) {
+                throw new VSphereException(message);
+            }
             VSphereLogger.vsLogger(
-                    jLogger,
-                    "Error: Timed out after waiting " + timeoutInSecondsForGetIp + " seconds to get IP for \""
-                            + expandedClone + "\" ");
-            return false;
+                    jLogger, "Warning: " + message + " (not failing as \"Fail if no IP address\" is off)");
+            return true;
         }
     }
 
