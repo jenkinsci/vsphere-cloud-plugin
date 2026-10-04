@@ -18,6 +18,7 @@ import static io.jenkins.plugins.casc.misc.Util.getJenkinsRoot;
 import static io.jenkins.plugins.casc.misc.Util.toYamlString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -28,14 +29,20 @@ import io.jenkins.plugins.casc.misc.ConfiguredWithCode;
 import io.jenkins.plugins.casc.misc.JenkinsConfiguredWithCodeRule;
 import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
+import java.util.ArrayList;
+import java.util.List;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
+import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyPolicy;
 import org.junit.jupiter.api.Test;
 
-/** A cloud that connects to a standalone ESXi host over SSH, in Configuration as Code. */
+/**
+ * The connection configurations that have a backend: one for a standalone ESXi host over SSH, one for vCenter,
+ * and the layout from before the settings were grouped by backend, which is still understood.
+ */
 @WithJenkinsConfiguredWithCode
 class EsxiConfigurationAsCodeTest {
 
@@ -57,6 +64,8 @@ class EsxiConfigurationAsCodeTest {
         assertThat(esxi.getHostKeyFingerprint(), is("SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"));
         assertThat(esxi.getConnectTimeoutSeconds(), is(15));
         assertThat(esxi.getCommandTimeoutSeconds(), is(120));
+        // what is of vCenter is not of it
+        assertThat(config.getVCenter(), is(nullValue()));
     }
 
     @Test
@@ -75,31 +84,88 @@ class EsxiConfigurationAsCodeTest {
 
     @Test
     @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
-    void aVCenterNextToThemIsStillOne(JenkinsConfiguredWithCodeRule r) {
+    void aVCenterIsLoadedFromItsGroup(JenkinsConfiguredWithCodeRule r) {
         VSphereConnectionConfig config = connectionOf(r, 2);
 
         assertThat(config.getBackendType(), is(BackendType.VCENTER));
         assertThat(config.getEsxiSsh(), is(nullValue()));
-        assertThat(config.getCredentialsId(), is("vcenter"));
         assertThat(config.getVsHost(), is("https://vcenter.example.com"));
+        assertThat(config.getBackend(), instanceOf(VCenterBackendConfig.class));
+        VCenterBackendConfig vcenter = config.getVCenter();
+        assertThat(vcenter.getCredentialsId(), is("vcenter"));
+        assertThat(vcenter.getAllowUntrustedCertificate(), is(true));
+        assertThat(vcenter.getHttpClientClassName(), is("ApacheHttpClient"));
     }
 
     @Test
     @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
-    void theEsxiSettingsAreExportedAndNothingOfThemForAVCenter(JenkinsConfiguredWithCodeRule r) throws Exception {
+    void theOldFlatLayoutIsConvertedIntoTheGroupOfVCenter(JenkinsConfiguredWithCodeRule r) {
+        VSphereConnectionConfig config = connectionOf(r, 3);
+
+        assertThat(config.getBackendType(), is(BackendType.VCENTER));
+        assertThat(config.getVsHost(), is("https://old.example.com"));
+        VCenterBackendConfig vcenter = config.getVCenter();
+        assertThat(vcenter.getCredentialsId(), is("old-vcenter"));
+        assertThat(vcenter.getAllowUntrustedCertificate(), is(true));
+        assertThat(vcenter.getHttpClientClassName(), is("ApacheHttpClient"));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
+    void aHostAloneIsAVCenterWithDefaults(JenkinsConfiguredWithCodeRule r) {
+        VSphereConnectionConfig config = connectionOf(r, 4);
+
+        assertThat(config.getBackendType(), is(BackendType.VCENTER));
+        assertThat(config.getVCenter().getCredentialsId(), is(nullValue()));
+        assertThat(config.getVCenter().getAllowUntrustedCertificate(), is(false));
+    }
+
+    private static String exportedClouds() throws Exception {
         ConfiguratorRegistry registry = ConfiguratorRegistry.get();
         final CNode clouds = getJenkinsRoot(new ConfigurationContext(registry)).get("clouds");
+        return toYamlString(clouds);
+    }
 
-        String exported = toYamlString(clouds);
+    @Test
+    @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
+    void theSettingsAreExportedInTheirGroups(JenkinsConfiguredWithCodeRule r) throws Exception {
+        String exported = exportedClouds();
 
+        assertThat(exported, containsString("backend:"));
         assertThat(exported, containsString("esxiSsh:"));
+        assertThat(exported, containsString("vCenter:"));
         assertThat(exported, containsString("credentialsId: \"esxi-ssh\""));
         assertThat(exported, containsString("hostKeyPolicy: TRUST_FIRST_USE")); // enums are exported unquoted
         assertThat(exported, containsString("port: 2222"));
         assertThat(
                 exported, containsString("hostKeyFingerprint: \"SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG\""));
-        // exactly two of the three clouds are ESXi hosts
+        // two ESXi hosts, and two vCenters with settings (the one that is in the new layout, and the one that was in
+        // the old); the vCenter that has nothing but its host has no settings to write, and is still one when loaded
         assertThat(exported.split("esxiSsh:", -1).length - 1, is(2));
-        assertThat(exported, not(containsString("esxiSsh: null")));
+        assertThat(exported.split("vCenter:", -1).length - 1, is(2));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
+    void theOldLayoutIsNotExportedAnymore(JenkinsConfiguredWithCodeRule r) throws Exception {
+        String exported = exportedClouds();
+
+        // The credentials of the vCenter in the new layout and of the one that was in the old are written alike:
+        // both in the group of vCenter, which is indented deeper than the connection configuration itself
+        List<Integer> indents = new ArrayList<>();
+        String connectionIndent = null;
+        for (String line : exported.split("\n")) {
+            if (line.contains("vsConnectionConfig:")) {
+                connectionIndent = line.substring(0, line.indexOf("vsConnectionConfig:"));
+            }
+            if (line.contains("credentialsId: \"vcenter\"") || line.contains("credentialsId: \"old-vcenter\"")) {
+                indents.add(line.indexOf("credentialsId"));
+            }
+        }
+        assertThat(indents.size(), is(2));
+        assertThat(indents.get(0), is(indents.get(1)));
+        // deeper than the properties of the connection configuration: vsHost, backend, then the group, then these
+        assertThat(indents.get(0) > connectionIndent.length() + 4, is(true));
+        assertThat(exported, not(containsString("credentialsId: \"old-vcenter\"\n          vsHost")));
     }
 }

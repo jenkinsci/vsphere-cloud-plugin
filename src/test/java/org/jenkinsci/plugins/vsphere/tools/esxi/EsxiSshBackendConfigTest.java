@@ -87,7 +87,7 @@ class EsxiSshBackendConfigTest {
 
     private vSphereCloud cloudWith(EsxiSshBackendConfig esxi) {
         VSphereConnectionConfig config = new VSphereConnectionConfig("127.0.0.1", null, null);
-        config.setEsxiSsh(esxi);
+        config.setBackend(esxi);
         return new vSphereCloud(config, "ESXi", 0, 0, false, null);
     }
 

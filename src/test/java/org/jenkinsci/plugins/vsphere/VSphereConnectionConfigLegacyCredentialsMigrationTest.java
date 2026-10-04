@@ -80,7 +80,7 @@ class VSphereConnectionConfigLegacyCredentialsMigrationTest {
         vSphereCloud cloud = (vSphereCloud) new XStream2().fromXML(xml);
 
         assertThat(cloud.getVsConnectionConfig(), notNullValue());
-        assertThat(cloud.getVsConnectionConfig().getCredentialsId(), notNullValue());
+        assertThat(cloud.getVsConnectionConfig().getVCenter().getCredentialsId(), notNullValue());
         assertThat(cloud.getUsername(), is("bob"));
         assertThat(cloud.getPassword(), is("bob-secret"));
     }

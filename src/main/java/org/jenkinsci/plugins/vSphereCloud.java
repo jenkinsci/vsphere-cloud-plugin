@@ -645,7 +645,9 @@ public class vSphereCloud extends Cloud {
     }
 
     public boolean getAllowUntrustedCertificate() {
-        return vsConnectionConfig != null ? vsConnectionConfig.getAllowUntrustedCertificate() : false;
+        return vsConnectionConfig != null
+                && vsConnectionConfig.getVCenter() != null
+                && vsConnectionConfig.getVCenter().getAllowUntrustedCertificate();
     }
 
     public @CheckForNull VSphereConnectionConfig getVsConnectionConfig() {

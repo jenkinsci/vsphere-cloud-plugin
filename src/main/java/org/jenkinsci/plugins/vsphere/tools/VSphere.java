@@ -49,11 +49,9 @@ public interface VSphere {
      * @return A connected instance.
      */
     static VSphere connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
-        // This is where the choice between the ways of talking to a hypervisor is made
-        if (connectionDetails.getBackendType() == VSphereConnectionConfig.BackendType.ESXI_SSH) {
-            return connectionDetails.getEsxiSsh().connect(connectionDetails.getVsHost());
-        }
-        return VSphereYavijava.connect(connectionDetails);
+        // This is where the choice between the ways of talking to a hypervisor is made: by the backend that
+        // the connection configuration is for
+        return connectionDetails.getBackend().connect(connectionDetails);
     }
 
     /**

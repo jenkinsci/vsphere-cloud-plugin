@@ -94,7 +94,11 @@ public class VSphereYavijava extends AbstractVSphere {
      */
     public static VSphereYavijava connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
         final String server = connectionDetails.getVsHost() + "/sdk";
-        final boolean ignoreCert = connectionDetails.getAllowUntrustedCertificate();
+        if (connectionDetails.getVCenter() == null) {
+            throw new VSphereException(
+                    "The connection to " + connectionDetails.getVsHost() + " is not set up for vCenter");
+        }
+        final boolean ignoreCert = connectionDetails.getVCenter().getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
         final String pw = connectionDetails.getPassword();
         if (user == null) {

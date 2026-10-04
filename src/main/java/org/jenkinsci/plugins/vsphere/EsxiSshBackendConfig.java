@@ -32,7 +32,6 @@ import com.cloudbees.plugins.credentials.domains.SchemeRequirement;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
 import hudson.Util;
-import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.model.Item;
 import hudson.security.ACL;
@@ -71,7 +70,7 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
  * is stored in {@link #getHostKeyFingerprint()}, from where it is required from then on; clearing it makes the next
  * connection a first one again.
  */
-public class EsxiSshBackendConfig extends AbstractDescribableImpl<EsxiSshBackendConfig> implements EsxiHostKeyStore {
+public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHostKeyStore {
 
     private static final Logger LOGGER = Logger.getLogger(EsxiSshBackendConfig.class.getName());
 
@@ -217,9 +216,19 @@ public class EsxiSshBackendConfig extends AbstractDescribableImpl<EsxiSshBackend
         return new VSphereEsxiSsh(TrileadEsxiShell.connect(toSettings(host)));
     }
 
+    @Override
+    public VSphere connect(VSphereConnectionConfig config) throws VSphereException {
+        return connect(config.getVsHost());
+    }
+
+    @Override
+    public VSphereConnectionConfig.BackendType getBackendType() {
+        return VSphereConnectionConfig.BackendType.ESXI_SSH;
+    }
+
     @Extension
     @Symbol("esxiSsh")
-    public static class DescriptorImpl extends Descriptor<EsxiSshBackendConfig> {
+    public static class DescriptorImpl extends Descriptor<VSphereBackendConfig> {
 
         @Override
         public String getDisplayName() {
