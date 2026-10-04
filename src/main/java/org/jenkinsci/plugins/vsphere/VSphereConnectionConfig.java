@@ -41,6 +41,7 @@ import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
+import hudson.model.Item;
 import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
@@ -288,16 +289,30 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
 
         @RequirePOST
         public ListBoxModel doFillCredentialsIdItems(
-                @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String vsHost) {
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String vsHost,
+                @QueryParameter String credentialsId) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            return new StandardListBoxModel()
-                    .includeEmptyValue()
+            final StandardListBoxModel result = new StandardListBoxModel();
+            // Only those who may use credentials get to see which ones exist; everybody else just sees the
+            // value that is currently configured.
+            final boolean mayListCredentials = containingFolderOrNull == null
+                    ? Jenkins.get().hasPermission(Jenkins.ADMINISTER)
+                    : containingFolderOrNull.hasPermission(CredentialsProvider.USE_ITEM)
+                            || containingFolderOrNull.hasPermission(Item.EXTENDED_READ);
+            if (!mayListCredentials) {
+                return result.includeCurrentValue(credentialsId);
+            }
+            // Credentials are looked up from the root when connecting (see lookupCredentials), so that is where
+            // they are listed from.
+            return result.includeEmptyValue()
                     .includeMatchingAs(
-                            ACL.SYSTEM,
-                            Jenkins.getInstance(),
+                            ACL.SYSTEM2,
+                            Jenkins.get(),
                             StandardCredentials.class,
                             Collections.singletonList(getDomainRequirement(vsHost)),
-                            CREDENTIALS_MATCHER);
+                            CREDENTIALS_MATCHER)
+                    .includeCurrentValue(credentialsId);
         }
 
         @RequirePOST
@@ -374,8 +389,11 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             final Jenkins instance = Jenkins.getInstance();
             if (instance != null && credentialsId != null) {
                 return CredentialsMatchers.firstOrNull(
-                        CredentialsProvider.lookupCredentials(
-                                StandardCredentials.class, instance, ACL.SYSTEM, getDomainRequirement(vsHost)),
+                        CredentialsProvider.lookupCredentialsInItemGroup(
+                                StandardCredentials.class,
+                                instance,
+                                ACL.SYSTEM2,
+                                Collections.singletonList(getDomainRequirement(vsHost))),
                         CredentialsMatchers.withId(credentialsId));
             }
             return null;
