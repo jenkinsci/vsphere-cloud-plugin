@@ -18,6 +18,7 @@ import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.ManagedObjectReference;
 import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.VirtualMachineConfigSummary;
 import com.vmware.vim25.VirtualMachineConnectionState;
 import com.vmware.vim25.VirtualMachinePowerState;
@@ -232,6 +233,43 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    /**
+     * Changes the settings of a VM that is powered off: the {@code .vmx} file is changed (see
+     * {@link EsxiReconfigure}) and the host is told to read it again. A running VM keeps what it had, as the host
+     * writes the file again from it, so it is not changed; it has to be powered off first.
+     */
+    EsxiTask reconfigureTask(String description, VmEntry vm, VirtualMachineConfigSpec spec) {
+        try {
+            final VirtualMachinePowerState state = readRuntime(vm).getPowerState();
+            if (state != VirtualMachinePowerState.poweredOff) {
+                throw new VSphereException("The VM has to be powered off to be reconfigured over SSH to an ESXi host,"
+                        + " but it is " + state);
+            }
+            final EsxiDatastoreFiles files = new EsxiDatastoreFiles(shell);
+            final VmxFile vmx = VmxFile.parse(files.read(vm.getVmxFileSystemPath()));
+            EsxiReconfigure.apply(vmx, spec);
+            files.replace(vm.getVmxFileSystemPath(), vmx.toString());
+            vim(vmCommand(vm, "reload")).stdoutOrThrow("Having the host read the configuration of " + vm + " again");
+            return new EsxiTask(description, null);
+        } catch (VSphereException e) {
+            return new EsxiTask(description, e.getMessage());
+        }
+    }
+
+    /** Whether the host has a port group of a standard switch with the name; one that cannot be asked is assumed. */
+    @Override
+    public Network getNetworkPortGroupByName(VirtualMachine virtualMachine, String name) throws VSphereException {
+        final ShellResult result = shell.run("esxcli network vswitch standard portgroup list");
+        if (result.succeeded()) {
+            final Boolean known = EsxiNetwork.isListed(result.getStdout(), name);
+            if (known != null) {
+                return known ? new EsxiNetwork(name) : null;
+            }
+        }
+        LOGGER.log(Level.FINE, "Could not look up port groups on the ESXi host, taking \"{0}\" to exist", name);
+        return new EsxiNetwork(name);
+    }
+
     private static EsxiTask taskOf(String description, ShellResult result) {
         if (result.succeeded()) {
             return new EsxiTask(description, null);
@@ -357,11 +395,6 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     @Override
     public ManagedEntity[] getDatastores() throws VSphereException {
         throw unsupported("getDatastores");
-    }
-
-    @Override
-    public Network getNetworkPortGroupByName(VirtualMachine virtualMachine, String name) throws VSphereException {
-        throw unsupported("getNetworkPortGroupByName");
     }
 
     @Override

@@ -122,12 +122,14 @@ public final class EsxiVirtualMachine extends VirtualMachine {
 
     @Override
     public Task reconfigVM_Task(VirtualMachineConfigSpec spec) {
-        return new EsxiTask("reconfigure", "Reconfiguring a VM is not supported by the ESXi SSH backend (yet)");
+        return host.reconfigureTask("reconfigure", entry, spec);
     }
 
     @Override
     public Task rename_Task(String newName) {
-        return new EsxiTask("rename", "Renaming a VM is not supported by the ESXi SSH backend (yet)");
+        final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+        spec.setName(newName);
+        return host.reconfigureTask("rename", entry, spec);
     }
 
     @Override

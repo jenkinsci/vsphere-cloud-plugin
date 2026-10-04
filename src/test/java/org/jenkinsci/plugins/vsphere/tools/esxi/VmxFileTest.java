@@ -94,4 +94,18 @@ class VmxFileTest {
         assertThat(VmxFile.parse(null).toString(), is(""));
         assertThat(VmxFile.parse("").keys().size(), is(0));
     }
+
+    @Test
+    void escapesWhatHasAMeaningInTheFile() {
+        assertThat(VmxFile.escape("a \"b\"|c\r\nd"), is("a |22b|22|7Cc|0D|0Ad"));
+        assertThat(VmxFile.unescape("a |22b|22|7Cc|0D|0Ad"), is("a \"b\"|c\r\nd"));
+    }
+
+    @Test
+    void unescapingLeavesWhatIsNotAnEscapeAlone() {
+        assertThat(VmxFile.unescape("a|b"), is("a|b"));
+        assertThat(VmxFile.unescape("end|2"), is("end|2"));
+        assertThat(VmxFile.unescape("|zz|"), is("|zz|"));
+        assertThat(VmxFile.unescape("|41"), is("A"));
+    }
 }

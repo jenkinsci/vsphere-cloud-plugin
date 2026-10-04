@@ -34,7 +34,7 @@ final class FakeEsxiHost implements EsxiShell {
 
     static final class FakeVm {
         final int id;
-        final String name;
+        String name;
         final String datastore;
         final String vmxRelativePath;
         String vmx;
@@ -59,6 +59,9 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The port groups of the standard switches; null makes "esxcli" unknown, as on a host that has none. */
+    java.util.List<String> portGroups =
+            new java.util.ArrayList<>(java.util.List.of("VM Network", "Management Network"));
 
     // The files of the datastores, for what is done to files: path -> text. Directories are kept apart.
     final Map<String, String> files = new LinkedHashMap<>();
@@ -158,6 +161,18 @@ final class FakeEsxiHost implements EsxiShell {
         if (onFiles != null) {
             return onFiles;
         }
+        if (words.equals(List.of("esxcli", "network", "vswitch", "standard", "portgroup", "list"))) {
+            if (portGroups == null) {
+                return new ShellResult(127, "", "esxcli: not found");
+            }
+            final StringBuilder table = new StringBuilder(
+                            "Name                 Virtual Switch  Active Clients  VLAN ID\n")
+                    .append("-------------------  --------------  --------------  -------\n");
+            for (String group : portGroups) {
+                table.append(String.format("%-19s  vSwitch0                       1        0%n", group));
+            }
+            return ok(table.toString());
+        }
         if (words.equals(List.of("vmware", "-v"))) {
             return ok(esxiVersion + "\n");
         }
@@ -219,6 +234,15 @@ final class FakeEsxiHost implements EsxiShell {
                 return ok("Create Snapshot:\n");
             case "vmsvc/snapshot.removeall":
                 vm.snapshots.clear();
+                return ok("");
+            case "vmsvc/reload":
+                final String text = files.get("/vmfs/volumes/" + vm.datastore + "/" + vm.vmxRelativePath);
+                vm.vmx = text;
+                final java.util.regex.Matcher shown = java.util.regex.Pattern.compile("(?mi)^displayName = \"(.*)\"$")
+                        .matcher(text);
+                if (shown.find()) {
+                    vm.name = shown.group(1);
+                }
                 return ok("");
             case "vmsvc/unregister":
                 vms.remove(vm.id);
@@ -290,7 +314,18 @@ final class FakeEsxiHost implements EsxiShell {
             case "readlink":
                 // readlink -f path
                 return ok(canonical(words.get(2)) + "\n");
+            case "mv":
+                // mv -f from to
+                if (!files.containsKey(words.get(2))) {
+                    return new ShellResult(1, "", "mv: can't stat '" + words.get(2) + "'");
+                }
+                files.put(words.get(3), files.remove(words.get(2)));
+                return ok("");
             case "rm":
+                if (words.get(1).equals("-f")) {
+                    files.remove(words.get(2));
+                    return ok("");
+                }
                 // rm -rf dir
                 final String directory = words.get(2);
                 files.keySet().removeIf(f -> f.startsWith(directory + "/"));

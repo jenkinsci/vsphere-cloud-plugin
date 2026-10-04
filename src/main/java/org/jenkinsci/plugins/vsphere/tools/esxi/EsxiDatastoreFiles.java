@@ -71,6 +71,20 @@ final class EsxiDatastoreFiles {
                 .stdoutOrThrow("Writing " + path);
     }
 
+    /**
+     * Replaces a file with new content, by writing the content next to it and moving that over it, so that a
+     * failure on the way does not leave a half-written file in its place.
+     */
+    void replace(String path, String content) throws VSphereException {
+        final String partial = path + ".jenkins-new";
+        write(partial, content);
+        final ShellResult moved = shell.run("mv -f " + ShellQuote.quote(partial) + " " + ShellQuote.quote(path));
+        if (!moved.succeeded()) {
+            shell.run("rm -f " + ShellQuote.quote(partial));
+            moved.stdoutOrThrow("Replacing " + path);
+        }
+    }
+
     void mkdirs(String directory) throws VSphereException {
         shell.run("mkdir -p " + ShellQuote.quote(directory)).stdoutOrThrow("Making " + directory);
     }

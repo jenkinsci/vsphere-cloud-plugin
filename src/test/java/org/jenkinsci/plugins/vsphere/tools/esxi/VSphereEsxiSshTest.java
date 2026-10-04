@@ -352,11 +352,13 @@ class VSphereEsxiSshTest {
     }
 
     @Test
-    void reconfiguringIsNotSupportedYetAndSays() {
+    void reconfiguringARunningVmSaysItHasToBePoweredOff() {
+        host.vm(1).power = "Powered on";
+
         VSphereException e = assertThrows(
                 VSphereException.class, () -> esxi.reconfigureVm("kube-master", new VirtualMachineConfigSpec()));
 
-        assertThat(e.getMessage(), containsString("not supported by the ESXi SSH backend"));
+        assertThat(e.getMessage(), containsString("has to be powered off"));
     }
 
     // -- the connection --

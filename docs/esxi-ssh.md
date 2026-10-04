@@ -18,7 +18,8 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Take a snapshot                                               | yes           |
 | Delete a VM                                                   | yes           |
 | Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
-| Reconfigure VMs, revert to / delete / rename a snapshot       | not yet       |
+| Reconfigure CPUs, memory, annotation, extra configuration, network adapters; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
+| Revert to / delete / rename a snapshot                        | not yet       |
 | Whatever needs vCenter: folders, clusters, templates, customization specs, distributed switches, choosing a host | no |
 
 What is not available says so with a message, when it is used.
@@ -108,6 +109,23 @@ a host (or a host selection mode), and a named snapshot (the newest one that can
 are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
 note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
 `. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
+
+## Reconfiguring
+
+The reconfigure steps and the renaming of a VM change the `.vmx` file of the VM, and have the host
+read it again. A running VM would write its own settings over the file, so **the VM has to be
+powered off** (a running VM is refused, with a message saying so).
+
+* **CPUs, cores per socket, memory, annotation, extra configuration parameters** (an empty value
+  removes the parameter), and the **name** of the VM (the same restrictions as for the name of a
+  clone).
+* **Network adapters**: add (the first free slot, up to 10), edit (the MAC address, the port group)
+  and remove. The port group has to be one of a standard switch of the host; if the host does not
+  say which it has, the name is taken as it is. A MAC address that is set is a static one: the host
+  only takes one in the range `00:50:56:00:00:00` to `00:50:56:3F:FF:FF` unless the VM also has
+  `ethernet0.checkMACAddress = "FALSE"` (as an extra configuration parameter, for the adapter in question).
+* **Not available**: disks (adding, growing, removing), reservations and limits of CPU and memory,
+  distributed switches.
 
 ### Configuration as Code
 

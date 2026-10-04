@@ -129,6 +129,52 @@ public final class VmxFile {
         return false;
     }
 
+    /**
+     * Makes text fit in the value of a setting: what has a meaning in the file is written as {@code |} and two
+     * hex digits ({@code |22} for a quote, {@code |0A} for a line break, {@code |7C} for the bar itself).
+     */
+    public static String escape(String text) {
+        final StringBuilder out = new StringBuilder();
+        for (char c : text.toCharArray()) {
+            switch (c) {
+                case '|':
+                    out.append("|7C");
+                    break;
+                case '"':
+                    out.append("|22");
+                    break;
+                case '\n':
+                    out.append("|0A");
+                    break;
+                case '\r':
+                    out.append("|0D");
+                    break;
+                default:
+                    out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /** The text that a value of a setting stands for, see {@link #escape(String)}. */
+    public static String unescape(String value) {
+        final StringBuilder out = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            final char c = value.charAt(i);
+            if (c == '|' && i + 2 < value.length() && isHex(value.charAt(i + 1)) && isHex(value.charAt(i + 2))) {
+                out.append((char) Integer.parseInt(value.substring(i + 1, i + 3), 16));
+                i += 2;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    private static boolean isHex(char c) {
+        return Character.digit(c, 16) >= 0;
+    }
+
     @Override
     public String toString() {
         return String.join("\n", lines) + (lines.isEmpty() ? "" : "\n");

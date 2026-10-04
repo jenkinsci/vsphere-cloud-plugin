@@ -51,12 +51,13 @@ final class EsxiConfigInfo {
 
     static VirtualMachineConfigInfo build(VmEntry entry, VmxFile vmx) {
         final VirtualMachineConfigInfo config = new VirtualMachineConfigInfo();
-        config.setName(vmx.get("displayName", entry.getName()));
+        config.setName(VmxFile.unescape(vmx.get("displayName", entry.getName())));
         config.setTemplate(false);
         config.setUuid(vmx.get("uuid.bios"));
         config.setGuestId(vmx.get("guestOS", entry.getGuestOs()));
         config.setVersion(entry.getVersion());
-        config.setAnnotation(vmx.get("annotation", entry.getAnnotation()));
+        final String annotation = vmx.get("annotation");
+        config.setAnnotation(annotation == null ? entry.getAnnotation() : VmxFile.unescape(annotation));
 
         final VirtualHardware hardware = new VirtualHardware();
         hardware.setNumCPU(vmx.getInt("numvcpus", 1));
