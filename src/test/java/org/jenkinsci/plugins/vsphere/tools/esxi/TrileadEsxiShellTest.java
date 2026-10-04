@@ -339,6 +339,17 @@ class TrileadEsxiShellTest {
         assertThat(result.isLoggedIn(), is(true));
         assertThat(result.getHostKey().getSha256(), is(server.hostKeySha256()));
         assertThat(result.getMessage(), containsString("Logged in to ssh://root@127.0.0.1"));
+        assertThat(result.getServerVersion(), is("VMware ESXi 7.0.3 build-20036589"));
+    }
+
+    @Test
+    void theVersionOfAnEsxi8HostIsReportedToo() throws Exception {
+        start("secret", false, false);
+        host.esxiVersion = "VMware ESXi 8.0.1 build-21813344";
+
+        EsxiConnectionTestResult result = TrileadEsxiShell.test(settings(EsxiSshAuth.password("root", "secret")));
+
+        assertThat(result.getServerVersion(), is("VMware ESXi 8.0.1 build-21813344"));
     }
 
     @Test

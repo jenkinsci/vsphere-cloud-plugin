@@ -169,6 +169,43 @@ class VimCmdParsersTest {
             "--Snapshot State       : powered off",
             "");
 
+    // Two snapshots in a row on an ESXi 7 host: the second is a child of the first, shown with "--|-CHILD" and
+    // its fields indented by four dashes, and its description is empty
+    private static final String ESXI7_TWO_SNAPSHOTS_IN_A_ROW = String.join(
+            "\n",
+            "Get Snapshot:",
+            "|-ROOT",
+            "--Snapshot Name        : snap1",
+            "--Snapshot Id        : 1",
+            "--Snapshot Desciption  : Shapshot #1",
+            "--Snapshot Created On  : 10/4/2026 19:0:52",
+            "--Snapshot State       : powered off",
+            "--|-CHILD",
+            "----Snapshot Name        : Corelinux running",
+            "----Snapshot Id        : 2",
+            "----Snapshot Desciption  :",
+            "----Snapshot Created On  : 10/4/2026 19:22:55",
+            "----Snapshot State       : powered on",
+            "");
+
+    @Test
+    void twoSnapshotsInARowAreAParentAndItsChild() {
+        List<VirtualMachineSnapshotTree> roots = VimCmdParsers.parseSnapshotTree(ESXI7_TWO_SNAPSHOTS_IN_A_ROW);
+
+        assertThat(roots.size(), is(1));
+        VirtualMachineSnapshotTree first = roots.get(0);
+        assertThat(first.getName(), is("snap1"));
+        assertThat(first.getSnapshot().getVal(), is("1"));
+        assertThat(first.getState(), is(VirtualMachinePowerState.poweredOff));
+        assertThat(first.getChildSnapshotList().length, is(1));
+        VirtualMachineSnapshotTree second = first.getChildSnapshotList()[0];
+        assertThat(second.getName(), is("Corelinux running"));
+        assertThat(second.getSnapshot().getVal(), is("2"));
+        assertThat(second.getDescription(), is(""));
+        assertThat(second.getState(), is(VirtualMachinePowerState.poweredOn));
+        assertThat(second.getChildSnapshotList() == null, is(true));
+    }
+
     @Test
     void esxi7SingleSnapshotIsReadLikeTheEsxi8One() {
         List<VirtualMachineSnapshotTree> roots = VimCmdParsers.parseSnapshotTree(ESXI7_ONE_SNAPSHOT);

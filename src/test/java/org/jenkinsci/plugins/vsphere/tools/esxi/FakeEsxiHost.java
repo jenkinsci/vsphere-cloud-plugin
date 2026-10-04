@@ -55,6 +55,9 @@ final class FakeEsxiHost implements EsxiShell {
     private final Map<Integer, FakeVm> vms = new LinkedHashMap<>();
     final List<String> commands = new ArrayList<>();
     boolean closed;
+    /** What "vmware -v" prints on an ESXi 7 host. */
+    String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
+
     int notFoundExitCode;
     private final Map<String, String> failures = new LinkedHashMap<>();
 
@@ -87,6 +90,9 @@ final class FakeEsxiHost implements EsxiShell {
             return ok("");
         }
         final List<String> words = split(command);
+        if (words.equals(List.of("vmware", "-v"))) {
+            return ok(esxiVersion + "\n");
+        }
         if (words.get(0).equals("cat") && words.size() == 2) {
             for (FakeVm vm : vms.values()) {
                 if (words.get(1).equals("/vmfs/volumes/" + vm.datastore + "/" + vm.vmxRelativePath)) {
