@@ -393,7 +393,9 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             @NonNull TaskListener listener)
             throws InterruptedException, IOException {
         try {
-            deployFromTemplate(run, launcher, listener);
+            if (!deployFromTemplate(run, launcher, listener)) {
+                throw new AbortException("Timed out while waiting for the IP address of the deployed VM");
+            }
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }

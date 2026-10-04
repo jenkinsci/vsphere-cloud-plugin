@@ -68,7 +68,9 @@ public class PowerOn extends VSphereBuildStep {
             @NonNull TaskListener listener)
             throws InterruptedException, IOException {
         try {
-            powerOn(run, launcher, listener);
+            if (!powerOn(run, launcher, listener)) {
+                throw new AbortException("Timed out while waiting for the IP address of the powered on VM");
+            }
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }

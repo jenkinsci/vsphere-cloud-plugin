@@ -107,19 +107,30 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
 
             buildStep.setVsphere(vsphere);
             buildStep.setSourceCloud(resolvedCloud);
-            if (run instanceof AbstractBuild) {
-                buildStep.perform(((AbstractBuild) run), launcher, (BuildListener) listener);
-            } else {
-                buildStep.perform(run, filePath, launcher, listener);
-            }
+            performStep(buildStep, run, filePath, launcher, listener);
 
         } catch (Exception e) {
-            throw new AbortException(e.getMessage());
+            throw new AbortException(e.getMessage() != null ? e.getMessage() : e.toString());
         } finally {
             if (vsphere != null) {
                 vsphere.disconnect();
             }
         }
+    }
+
+    /**
+     * Runs the step so that a failure fails the build (JENKINS-38472). This is always the {@code Run} flavour,
+     * which reports failure by throwing; the {@code AbstractBuild} flavour of the steps returns a boolean that
+     * nothing looked at, and logs exceptions instead of throwing them, so failed steps ended up as SUCCESS.
+     */
+    static void performStep(
+            final VSphereBuildStep step,
+            final Run<?, ?> run,
+            final FilePath filePath,
+            final Launcher launcher,
+            final TaskListener listener)
+            throws InterruptedException, IOException {
+        step.perform(run, filePath, launcher, listener);
     }
 
     private vSphereCloud resolveCloud(String expandedServerName, String jobName) throws VSphereException {
