@@ -105,18 +105,6 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = powerOff(build, launcher, listener);
-        } catch (VSphereException e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
-    }
-
-    @Override
     public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
         return null;
     }

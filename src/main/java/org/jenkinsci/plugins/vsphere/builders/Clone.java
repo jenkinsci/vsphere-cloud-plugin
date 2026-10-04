@@ -226,6 +226,18 @@ public class Clone extends VSphereBuildStep {
         return host;
     }
 
+    private boolean failOnNoAddress;
+
+    /** Whether failing to obtain the VM's IP address within the timeout fails this step (default: only warn). */
+    public boolean isFailOnNoAddress() {
+        return failOnNoAddress;
+    }
+
+    @DataBoundSetter
+    public void setFailOnNoAddress(boolean failOnNoAddress) {
+        this.failOnNoAddress = failOnNoAddress;
+    }
+
     @DataBoundSetter
     public void setHost(String host) {
         this.host = host;
@@ -586,6 +598,15 @@ public class Clone extends VSphereBuildStep {
                     "Powering on VM \"" + expandedClone + "\".  Waiting for its IP for the next "
                             + timeoutInSecondsForGetIp + " seconds.");
             IP = vsphere.getIp(vsphere.getVmByName(expandedClone), timeoutInSecondsForGetIp);
+            if (IP == null) {
+                final String message = "Timed out after waiting " + timeoutInSecondsForGetIp
+                        + " seconds to get IP for \"" + expandedClone + "\"";
+                if (failOnNoAddress) {
+                    throw new VSphereException(message);
+                }
+                VSphereLogger.vsLogger(
+                        jLogger, "Warning: " + message + " (not failing as \"Fail if no IP address\" is off)");
+            }
         }
         VSphereLogger.vsLogger(
                 jLogger, "\"" + expandedClone + "\" successfully cloned " + (powerOn ? "and powered on" : "") + "!");

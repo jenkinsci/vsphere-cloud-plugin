@@ -32,6 +32,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
+import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
@@ -40,6 +41,7 @@ public class PowerOn extends VSphereBuildStep {
     private final String vm;
     private final int timeoutInSeconds;
     private String IP;
+    private boolean failOnNoAddress;
 
     @DataBoundConstructor
     public PowerOn(final String vm, final int timeoutInSeconds) throws VSphereException {
@@ -53,6 +55,16 @@ public class PowerOn extends VSphereBuildStep {
 
     public int getTimeoutInSeconds() {
         return timeoutInSeconds;
+    }
+
+    /** Whether failing to obtain the VM's IP address within the timeout fails this step (default: only warn). */
+    public boolean isFailOnNoAddress() {
+        return failOnNoAddress;
+    }
+
+    @DataBoundSetter
+    public void setFailOnNoAddress(boolean failOnNoAddress) {
+        this.failOnNoAddress = failOnNoAddress;
     }
 
     @Override
@@ -72,18 +84,6 @@ public class PowerOn extends VSphereBuildStep {
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }
-    }
-
-    @Override
-    public boolean perform(final AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = powerOn(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
     }
 
     private boolean powerOn(final Run<?, ?> run, Launcher launcher, final TaskListener listener)
@@ -108,11 +108,14 @@ public class PowerOn extends VSphereBuildStep {
         IP = vsphere.getIp(vsphere.getVmByName(expandedVm), secondsToWaitForIp);
 
         if (IP == null) {
+            final String message =
+                    "Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for \"" + expandedVm + "\"";
+            if (failOnNoAddress) {
+                throw new VSphereException(message);
+            }
             VSphereLogger.vsLogger(
-                    jLogger,
-                    "Error: Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for \"" + expandedVm
-                            + "\" ");
-            return false;
+                    jLogger, "Warning: " + message + " (not failing as \"Fail if no IP address\" is off)");
+            return true;
         }
 
         VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedVm + "\" : " + IP);

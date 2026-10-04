@@ -15,8 +15,6 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
-import hudson.model.AbstractBuild;
-import hudson.model.BuildListener;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import java.io.IOException;
@@ -70,18 +68,6 @@ public class ReconfigureAnnotation extends ReconfigureStep {
         } catch (Exception e) {
             throw new AbortException(e.getMessage());
         }
-    }
-
-    @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = reconfigureAnnotation(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
     }
 
     public boolean reconfigureAnnotation(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)

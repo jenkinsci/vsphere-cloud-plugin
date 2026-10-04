@@ -171,6 +171,18 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         return host;
     }
 
+    private boolean failOnNoAddress;
+
+    /** Whether failing to obtain the VM's IP address within the timeout fails this step (default: only warn). */
+    public boolean isFailOnNoAddress() {
+        return failOnNoAddress;
+    }
+
+    @DataBoundSetter
+    public void setFailOnNoAddress(boolean failOnNoAddress) {
+        this.failOnNoAddress = failOnNoAddress;
+    }
+
     @DataBoundSetter
     public void setHost(String host) {
         this.host = host;
@@ -405,18 +417,6 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     }
 
     @Override
-    public boolean perform(final AbstractBuild<?, ?> build, final Launcher launcher, final BuildListener listener) {
-        boolean retVal = false;
-        try {
-            retVal = deployFromTemplate(build, launcher, listener);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return retVal;
-        // TODO throw AbortException instead of returning value
-    }
-
-    @Override
     public Action getProjectAction(AbstractProject<?, ?> abstractProject) {
         return null;
     }
@@ -543,11 +543,14 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             }
             return true;
         } else {
+            final String message = "Timed out after waiting " + timeoutInSecondsForGetIp + " seconds to get IP for \""
+                    + expandedClone + "\"";
+            if (failOnNoAddress) {
+                throw new VSphereException(message);
+            }
             VSphereLogger.vsLogger(
-                    jLogger,
-                    "Error: Timed out after waiting " + timeoutInSecondsForGetIp + " seconds to get IP for \""
-                            + expandedClone + "\" ");
-            return false;
+                    jLogger, "Warning: " + message + " (not failing as \"Fail if no IP address\" is off)");
+            return true;
         }
     }
 
