@@ -237,6 +237,60 @@ jenkins:
               commandTimeoutSeconds: 600
 ```
 
+## Several ESXi hosts: a poor man's cluster
+
+A cloud can use more than one ESXi host. The `vsHost` is the first one, and the others are listed
+as **More ESXi hosts** (`additionalHosts` in Configuration as Code). What a host does not say is
+that of the first: the port, the credentials, how its host key is trusted. Its fingerprint is always
+its own, and so is the one that "the host key seen first" remembers (the configuration is saved for
+it the same way).
+
+```yaml
+vsConnectionConfig:
+  vsHost: "esxi-a.example.com"
+  backend:
+    esxiSsh:
+      credentialsId: "esxi-ssh"
+      additionalHosts:
+        - host: "esxi-b.example.com"
+        - host: "esxi-c.example.com"
+          port: 2200
+          credentialsId: "esxi-c"
+          hostKeyPolicy: ACCEPT_ANY
+```
+
+This is **not vSphere's DRS, nor vMotion**: the hosts are independent, the plugin does not move VMs,
+and the load of a host is not measured. What it does:
+
+* **VMs are looked up on all the hosts** that can be reached, and whatever is done to a VM (power,
+  snapshots, reconfiguring, deleting, ...) is done by the host it is registered on. A name that is
+  registered on more than one host is found on the first one, as the hosts are listed.
+* **A clone is made on one of the hosts that can see the files of its master**, which they can if they
+  have a datastore in common, with the same name on each: an NFS datastore mounted with the same label
+  on all of them, or VMFS on shared storage. The clone's files are written there, the clone is
+  registered with the host that made it, and the master need not be registered with that host: the
+  host reads it from the shared datastore. A linked clone shares the disks of the master by their
+  path on the datastore (by the UUID that the datastore really has), so the datastore has to be the same one.
+* **Which host?** If the *host* of the step is given (as it is configured, or the name the host
+  calls itself by), that one, if it can be used. Otherwise, of the hosts that can see the master (and
+  the datastore the clone is asked to be on), and are in the list of *host selection candidates*, if there
+  is one: the host with the fewest VMs that are on, then the fewest registered, then the first as
+  configured. A host selection mode of `NONE` keeps the clone with the host of the master. Whatever
+  else is in the host selection options is not used.
+* **A host that cannot be reached is left out**, and tried again after half a minute, or when the
+  connection is checked (the connection pool does that each time it hands the connection out).
+  The cluster is up as long as one host is. All the sessions are part of the one connection that the
+  pool keeps for a cloud, so a restart of that connection (its age, its number of uses, a change of
+  configuration) restarts them all. A master that is registered only on a host that is down is not
+  found (the clone fails as it does for a VM that does not exist), though the hosts that are up could
+  see its files.
+* **Datastores** are those of all the hosts; one that several have under the same name is listed once.
+
+What it does not do: moving a VM to another host (cold migration is possible by hand: power it off,
+unregister it on one host, register its `.vmx` on the other, from the same datastore), making a copy
+of a master on each host (where each has its own local datastore), or any use of hosts that do not share
+a datastore with the master. Without shared storage, each host is only good for the VMs that are on it.
+
 ## The layout of the settings of a connection
 
 The settings that are specific to the way of connecting are grouped under `backend` (a

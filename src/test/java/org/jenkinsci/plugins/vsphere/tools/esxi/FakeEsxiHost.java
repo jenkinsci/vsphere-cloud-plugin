@@ -81,12 +81,12 @@ final class FakeEsxiHost implements EsxiShell {
             new java.util.ArrayList<>(java.util.List.of("VM Network", "Management Network"));
 
     // The files of the datastores, for what is done to files: path -> text. Directories are kept apart.
-    final Map<String, String> files = new LinkedHashMap<>();
-    final java.util.Set<String> directories = new java.util.TreeSet<>();
+    Map<String, String> files = new LinkedHashMap<>();
+    java.util.Set<String> directories = new java.util.TreeSet<>();
     /** Files that cannot be read, as those in use by a VM that is running cannot. */
-    final java.util.Set<String> locked = new java.util.HashSet<>();
+    java.util.Set<String> locked = new java.util.HashSet<>();
     /** Where a datastore really is: /vmfs/volumes/name is a link to /vmfs/volumes/uuid. */
-    final Map<String, String> datastoreUuids = new LinkedHashMap<>();
+    Map<String, String> datastoreUuids = new LinkedHashMap<>();
 
     /** What esxcli storage filesystem list prints on an ESXi 7 host: mount point, name, UUID, mounted, type, size, free. */
     static final String[][] DATASTORE_ROWS = {
@@ -182,6 +182,19 @@ final class FakeEsxiHost implements EsxiShell {
 
     private int nextVmId = 100;
     private final Map<String, String> failures = new LinkedHashMap<>();
+
+    /** Has this host see the same datastores as the other: the same files, folders, locks and names for them. */
+    void shareStorageWith(FakeEsxiHost other) {
+        this.files = other.files;
+        this.directories = other.directories;
+        this.locked = other.locked;
+        this.datastoreUuids = other.datastoreUuids;
+    }
+
+    /** The host forgets the VM, as when it is unregistered; its files stay. */
+    void removeVmRegistration(String name) {
+        vms.remove(vmNamed(name).id);
+    }
 
     FakeVm addVm(int id, String name, String datastore, String vmxRelativePath, String vmx) {
         final FakeVm vm = new FakeVm(id, name, datastore, vmxRelativePath, vmx);
@@ -413,6 +426,10 @@ final class FakeEsxiHost implements EsxiShell {
                 vms.remove(vm.id);
                 return ok("");
             case "vmsvc/destroy":
+                // the files of the VM go with it
+                final String folder = "/vmfs/volumes/" + vm.datastore + "/"
+                        + vm.vmxRelativePath.substring(0, vm.vmxRelativePath.lastIndexOf('/') + 1);
+                files.keySet().removeIf(file -> file.startsWith(folder));
                 vms.remove(vm.id);
                 return ok("Destroying VM\n");
             default:
@@ -466,6 +483,20 @@ final class FakeEsxiHost implements EsxiShell {
                 files.put(words.get(2), files.get(words.get(1)));
                 return ok("");
             case "ls":
+                if (words.get(1).equals("-1d")) {
+                    // ls -1d 'dir'/*/*.vmx: what a shell would have made of the pattern
+                    final java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(
+                            java.util.regex.Pattern.quote(words.get(2)).replace("*", "\\E[^/]+\\Q"));
+                    final java.util.SortedSet<String> found = new java.util.TreeSet<>();
+                    for (String file : files.keySet()) {
+                        if (pattern.matcher(file).matches()) {
+                            found.add(file);
+                        }
+                    }
+                    return found.isEmpty()
+                            ? new ShellResult(1, "", "ls: " + words.get(2) + ": No such file or directory")
+                            : ok(String.join("\n", found) + "\n");
+                }
                 // ls -1 dir
                 return listDirectory(words.get(2));
             case "test":

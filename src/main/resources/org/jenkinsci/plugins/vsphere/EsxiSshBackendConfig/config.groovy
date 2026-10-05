@@ -23,6 +23,10 @@ f.entry(title:_("Host key fingerprint"), field:"hostKeyFingerprint") {
     f.textbox(checkMethod:"post")
 }
 
+f.entry(title:_("More ESXi hosts"), field:"additionalHosts") {
+    f.repeatableProperty(field:"additionalHosts", add:_("Add another ESXi host"))
+}
+
 f.advanced {
     f.entry(title:_("Connect timeout in seconds"), field:"connectTimeoutSeconds") {
         f.number(clazz:"required", min:1, step:1, default:30)

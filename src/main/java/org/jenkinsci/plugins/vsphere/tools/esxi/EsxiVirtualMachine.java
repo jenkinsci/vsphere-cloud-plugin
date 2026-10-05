@@ -62,6 +62,11 @@ public final class EsxiVirtualMachine extends VirtualMachine {
         return entry;
     }
 
+    /** The host this VM is registered on, which is the one that does what is asked of it. */
+    VSphereEsxiSsh getHost() {
+        return host;
+    }
+
     @Override
     protected Object getCurrentProperty(String propertyName) {
         try {

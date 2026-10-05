@@ -50,3 +50,19 @@ jenkins:
         vsDescription: "A vCenter with nothing but its host"
         vsConnectionConfig:
           vsHost: "https://bare.example.com"
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "A cluster of ESXi hosts"
+        vsConnectionConfig:
+          vsHost: "esxi-a.example.com"
+          backend:
+            esxiSsh:
+              credentialsId: "esxi-ssh"
+              additionalHosts:
+                - host: "esxi-b.example.com"
+                - host: "esxi-c.example.com"
+                  port: 2200
+                  credentialsId: "esxi-c"
+                  hostKeyPolicy: ACCEPT_ANY
+                  hostKeyFingerprint: "SHA256:cccccccccccccccccccccccccccccccccccccccccc"

@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
+import org.jenkinsci.plugins.vsphere.EsxiSshHost;
 import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
@@ -120,6 +121,39 @@ class EsxiConfigurationAsCodeTest {
         assertThat(config.getVCenter().getAllowUntrustedCertificate(), is(false));
     }
 
+    @Test
+    @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
+    void moreHostsOfAClusterAreLoadedWithWhatTheyDoNotInherit(JenkinsConfiguredWithCodeRule r) {
+        VSphereConnectionConfig config = connectionOf(r, 5);
+
+        assertThat(config.getVsHost(), is("esxi-a.example.com"));
+        EsxiSshBackendConfig esxi = config.getEsxiSsh();
+        assertThat(esxi.getAdditionalHosts().size(), is(2));
+        EsxiSshHost bare = esxi.getAdditionalHosts().get(0);
+        assertThat(bare.getHost(), is("esxi-b.example.com"));
+        assertThat(bare.getPort(), is(0)); // that of the first host
+        assertThat(bare.getCredentialsId(), is(nullValue())); // those of the first host
+        assertThat(bare.getHostKeyPolicy(), is(nullValue())); // that of the first host
+        EsxiSshHost own = esxi.getAdditionalHosts().get(1);
+        assertThat(own.getPort(), is(2200));
+        assertThat(own.getCredentialsId(), is("esxi-c"));
+        assertThat(own.getHostKeyPolicy(), is(EsxiHostKeyPolicy.ACCEPT_ANY));
+        assertThat(own.getHostKeyFingerprint(), is("SHA256:cccccccccccccccccccccccccccccccccccccccccc"));
+        // a host that has none is on its own
+        assertThat(connectionOf(r, 0).getEsxiSsh().getAdditionalHosts().isEmpty(), is(true));
+    }
+
+    @Test
+    @ConfiguredWithCode("configuration-as-code-esxi-ssh.yml")
+    void moreHostsAreExportedAndOnlyWhenThereAreSome(JenkinsConfiguredWithCodeRule r) throws Exception {
+        String exported = exportedClouds();
+
+        assertThat(exported, containsString("additionalHosts:"));
+        assertThat(exported, containsString("host: \"esxi-b.example.com\""));
+        assertThat(exported, containsString("host: \"esxi-c.example.com\""));
+        assertThat(exported.split("additionalHosts:", -1).length - 1, is(1));
+    }
+
     private static String exportedClouds() throws Exception {
         ConfiguratorRegistry registry = ConfiguratorRegistry.get();
         final CNode clouds = getJenkinsRoot(new ConfigurationContext(registry)).get("clouds");
@@ -139,9 +173,10 @@ class EsxiConfigurationAsCodeTest {
         assertThat(exported, containsString("port: 2222"));
         assertThat(
                 exported, containsString("hostKeyFingerprint: \"SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG\""));
-        // two ESXi hosts, and two vCenters with settings (the one that is in the new layout, and the one that was in
+        // three ESXi hosts (one of them a cluster), and two vCenters with settings (the one that is in the new layout,
+        // and the one that was in
         // the old); the vCenter that has nothing but its host has no settings to write, and is still one when loaded
-        assertThat(exported.split("esxiSsh:", -1).length - 1, is(2));
+        assertThat(exported.split("esxiSsh:", -1).length - 1, is(3));
         assertThat(exported.split("vCenter:", -1).length - 1, is(2));
     }
 

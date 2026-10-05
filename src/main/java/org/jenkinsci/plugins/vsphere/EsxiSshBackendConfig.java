@@ -56,6 +56,7 @@ import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyStore;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshAuth;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshSettings;
 import org.jenkinsci.plugins.vsphere.tools.esxi.TrileadEsxiShell;
+import org.jenkinsci.plugins.vsphere.tools.esxi.VSphereEsxiCluster;
 import org.jenkinsci.plugins.vsphere.tools.esxi.VSphereEsxiSsh;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -83,6 +84,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
     private @CheckForNull String hostKeyFingerprint;
     private int connectTimeoutSeconds = EsxiSshSettings.DEFAULT_CONNECT_TIMEOUT_SECONDS;
     private int commandTimeoutSeconds = EsxiSshSettings.DEFAULT_COMMAND_TIMEOUT_SECONDS;
+    private List<EsxiSshHost> additionalHosts = new ArrayList<>();
 
     @DataBoundConstructor
     public EsxiSshBackendConfig(@CheckForNull String credentialsId) {
@@ -138,6 +140,29 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         this.commandTimeoutSeconds = seconds > 0 ? seconds : EsxiSshSettings.DEFAULT_COMMAND_TIMEOUT_SECONDS;
     }
 
+    /** The other hosts of the cluster, if there is one: the first host is the {@code vsHost} of the connection. */
+    public List<EsxiSshHost> getAdditionalHosts() {
+        return additionalHosts == null ? new ArrayList<>() : new ArrayList<>(additionalHosts);
+    }
+
+    @DataBoundSetter
+    public void setAdditionalHosts(@CheckForNull List<EsxiSshHost> hosts) {
+        this.additionalHosts = new ArrayList<>();
+        if (hosts != null) {
+            for (EsxiSshHost host : hosts) {
+                if (host != null && !host.getHost().isEmpty()) {
+                    host.setOwner(this);
+                    this.additionalHosts.add(host);
+                }
+            }
+        }
+    }
+
+    protected Object readResolve() {
+        setAdditionalHosts(additionalHosts);
+        return this;
+    }
+
     // -- the host key remembered by "trust the first one seen" --
 
     @Override
@@ -159,6 +184,10 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
      * Saves where this configuration is kept, so that the host key that was remembered stays so: the folder, for
      * a cloud that is defined in a folder, otherwise Jenkins itself.
      */
+    void saveRemembered(String host) {
+        saveWhatHoldsThisConfiguration(host);
+    }
+
     private void saveWhatHoldsThisConfiguration(String host) {
         try (ACLContext ignored = ACL.as2(ACL.SYSTEM2)) {
             for (AbstractFolder<?> folder : Jenkins.get().getAllItems(AbstractFolder.class)) {
@@ -182,6 +211,112 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         } catch (IOException e) {
             // It is in use for as long as this configuration lives, and saved with the next change of it
             LOGGER.log(Level.WARNING, "Could not save the host key that was remembered for " + host, e);
+        }
+    }
+
+    // -- what the forms of this and of the other hosts share --
+
+    static ListBoxModel hostKeyPolicyItems() {
+        final ListBoxModel items = new ListBoxModel();
+        items.add("Only the host key with the fingerprint below", EsxiHostKeyPolicy.FINGERPRINT.name());
+        items.add(
+                "The host key seen first (remembered in the fingerprint below, and required from then on)",
+                EsxiHostKeyPolicy.TRUST_FIRST_USE.name());
+        items.add("Any host key (not secure)", EsxiHostKeyPolicy.ACCEPT_ANY.name());
+        return items;
+    }
+
+    static ListBoxModel credentialsItems(
+            @CheckForNull AbstractFolder<?> containingFolderOrNull, @CheckForNull String host, String credentialsId) {
+        final StandardListBoxModel result = new StandardListBoxModel();
+        // Only those who may use credentials get to see which ones exist; everybody else just sees the
+        // value that is currently configured.
+        final boolean mayListCredentials = containingFolderOrNull == null
+                ? Jenkins.get().hasPermission(Jenkins.ADMINISTER)
+                : containingFolderOrNull.hasPermission(CredentialsProvider.USE_ITEM)
+                        || containingFolderOrNull.hasPermission(Item.EXTENDED_READ);
+        if (!mayListCredentials) {
+            return result.includeCurrentValue(credentialsId);
+        }
+        return result.includeEmptyValue()
+                .includeMatchingAs(
+                        ACL.SYSTEM2,
+                        Jenkins.get(),
+                        StandardUsernameCredentials.class,
+                        domainRequirements(Util.fixEmptyAndTrim(host)),
+                        CREDENTIALS_MATCHER)
+                .includeCurrentValue(credentialsId);
+    }
+
+    static FormValidation checkFingerprint(@CheckForNull String value, @CheckForNull String hostKeyPolicy) {
+        final String fingerprint = Util.fixEmptyAndTrim(value);
+        if (fingerprint == null) {
+            return EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(hostKeyPolicy)
+                            || EsxiHostKeyPolicy.TRUST_FIRST_USE.name().equals(hostKeyPolicy)
+                    ? FormValidation.ok()
+                    : FormValidation.warning("Without a fingerprint, no host key is trusted: use \"Test connection\""
+                            + " to see which one the host presents");
+        }
+        if (!fingerprint.startsWith("SHA256:") && !fingerprint.matches("(?i)(MD5:)?([0-9a-f]{2}:){15}[0-9a-f]{2}")) {
+            return FormValidation.warning(
+                    "Expected SHA256:... (as ssh-keygen -l shows it) or an MD5 fingerprint" + " like 00:11:22:...");
+        }
+        return FormValidation.ok();
+    }
+
+    static FormValidation queryHostKey(
+            @CheckForNull String vsHost, @CheckForNull String port, @CheckForNull String connectTimeoutSeconds) {
+        final String host = Util.fixEmptyAndTrim(vsHost);
+        if (host == null) {
+            return FormValidation.error("The ESXi host is not specified");
+        }
+        try {
+            final EsxiHostKeyInfo key =
+                    TrileadEsxiShell.queryHostKey(host, parse(port, 0), parse(connectTimeoutSeconds, 0));
+            return FormValidation.ok("The host presents a " + key.getAlgorithm() + " key, with the fingerprints "
+                    + key.getSha256() + " and " + key.getMd5());
+        } catch (VSphereException e) {
+            return FormValidation.error(e.getMessage());
+        }
+    }
+
+    static FormValidation testConnection(
+            @CheckForNull String vsHost,
+            @CheckForNull String credentialsId,
+            @CheckForNull String port,
+            @CheckForNull String hostKeyPolicy,
+            @CheckForNull String hostKeyFingerprint,
+            @CheckForNull String connectTimeoutSeconds) {
+        final EsxiSshBackendConfig config = new EsxiSshBackendConfig(credentialsId);
+        config.setPort(parse(port, 0));
+        config.setHostKeyFingerprint(hostKeyFingerprint);
+        config.setConnectTimeoutSeconds(parse(connectTimeoutSeconds, 0));
+        try {
+            config.setHostKeyPolicy(EsxiHostKeyPolicy.valueOf(hostKeyPolicy));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            config.setHostKeyPolicy(EsxiHostKeyPolicy.FINGERPRINT);
+        }
+        final EsxiConnectionTestResult result;
+        try {
+            result = TrileadEsxiShell.test(config.toSettings(Util.fixEmptyAndTrim(vsHost)));
+        } catch (VSphereException e) {
+            return FormValidation.error(e.getMessage());
+        }
+        final String version = result.getServerVersion() == null ? "" : " (" + result.getServerVersion() + ")";
+        if (result.isOk()) {
+            return FormValidation.ok(result.getMessage() + version);
+        }
+        // A host key that is not trusted yet is shown as such, with the fingerprint to put in the settings
+        return result.getHostKey() != null && !result.isHostKeyTrusted()
+                ? FormValidation.warning(result.getMessage())
+                : FormValidation.error(result.getMessage());
+    }
+
+    private static int parse(@CheckForNull String number, int defaultValue) {
+        try {
+            return number == null ? defaultValue : Integer.parseInt(number.trim());
+        } catch (NumberFormatException e) {
+            return defaultValue;
         }
     }
 
@@ -244,9 +379,63 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         return new VSphereEsxiSsh(TrileadEsxiShell.connect(toSettings(host)));
     }
 
+    /** What is needed for the SSH session to another host of the cluster: what it does not say is that of the first. */
+    EsxiSshSettings toSettings(EsxiSshHost other) throws VSphereException {
+        final String id = other.getCredentialsId() != null ? other.getCredentialsId() : credentialsId;
+        if (id == null) {
+            throw new VSphereException("SSH credentials are not specified for ESXi host " + other.getHost());
+        }
+        final StandardUsernameCredentials credentials = lookupCredentials(id, other.getHost());
+        if (credentials == null) {
+            throw new VSphereException("Cannot find a username with password, or SSH username with private key,"
+                    + " credential with id " + id + " for ESXi host " + other.getHost());
+        }
+        return new EsxiSshSettings(
+                        other.getHost(), other.getPort() > 0 ? other.getPort() : port, EsxiSshAuth.from(credentials))
+                .withHostKeyFingerprint(other.getHostKeyFingerprint())
+                .withHostKeyPolicy(other.getHostKeyPolicy() != null ? other.getHostKeyPolicy() : hostKeyPolicy)
+                .withHostKeyStore(other)
+                .withConnectTimeoutSeconds(connectTimeoutSeconds)
+                .withCommandTimeoutSeconds(commandTimeoutSeconds);
+    }
+
+    /**
+     * A connection to the host of the connection configuration, or, if there are other hosts configured, to all of
+     * them as one cluster (see {@link VSphereEsxiCluster}). Hosts that cannot be reached are left out, to be
+     * tried again later, as long as one can.
+     */
     @Override
     public VSphere connect(VSphereConnectionConfig config) throws VSphereException {
-        return connect(config.getVsHost());
+        if (additionalHosts == null || additionalHosts.isEmpty()) {
+            return connect(config.getVsHost());
+        }
+        final List<VSphereEsxiCluster.Connector> connectors = new ArrayList<>();
+        final String first = config.getVsHost();
+        connectors.add(new VSphereEsxiCluster.Connector() {
+            @Override
+            public String label() {
+                return first == null ? "" : first;
+            }
+
+            @Override
+            public VSphereEsxiSsh connect() throws VSphereException {
+                return new VSphereEsxiSsh(TrileadEsxiShell.connect(toSettings(first)));
+            }
+        });
+        for (EsxiSshHost other : additionalHosts) {
+            connectors.add(new VSphereEsxiCluster.Connector() {
+                @Override
+                public String label() {
+                    return other.getHost();
+                }
+
+                @Override
+                public VSphereEsxiSsh connect() throws VSphereException {
+                    return new VSphereEsxiSsh(TrileadEsxiShell.connect(toSettings(other)));
+                }
+            });
+        }
+        return new VSphereEsxiCluster(connectors);
     }
 
     @Override
@@ -266,13 +455,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         @RequirePOST
         public ListBoxModel doFillHostKeyPolicyItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final ListBoxModel items = new ListBoxModel();
-            items.add("Only the host key with the fingerprint below", EsxiHostKeyPolicy.FINGERPRINT.name());
-            items.add(
-                    "The host key seen first (remembered in the fingerprint below, and required from then on)",
-                    EsxiHostKeyPolicy.TRUST_FIRST_USE.name());
-            items.add("Any host key (not secure)", EsxiHostKeyPolicy.ACCEPT_ANY.name());
-            return items;
+            return hostKeyPolicyItems();
         }
 
         @RequirePOST
@@ -281,24 +464,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 @QueryParameter String vsHost,
                 @QueryParameter String credentialsId) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final StandardListBoxModel result = new StandardListBoxModel();
-            // Only those who may use credentials get to see which ones exist; everybody else just sees the
-            // value that is currently configured.
-            final boolean mayListCredentials = containingFolderOrNull == null
-                    ? Jenkins.get().hasPermission(Jenkins.ADMINISTER)
-                    : containingFolderOrNull.hasPermission(CredentialsProvider.USE_ITEM)
-                            || containingFolderOrNull.hasPermission(Item.EXTENDED_READ);
-            if (!mayListCredentials) {
-                return result.includeCurrentValue(credentialsId);
-            }
-            return result.includeEmptyValue()
-                    .includeMatchingAs(
-                            ACL.SYSTEM2,
-                            Jenkins.get(),
-                            StandardUsernameCredentials.class,
-                            domainRequirements(Util.fixEmptyAndTrim(vsHost)),
-                            CREDENTIALS_MATCHER)
-                    .includeCurrentValue(credentialsId);
+            return credentialsItems(containingFolderOrNull, vsHost, credentialsId);
         }
 
         @RequirePOST
@@ -323,21 +489,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 @QueryParameter String value,
                 @QueryParameter String hostKeyPolicy) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final String fingerprint = Util.fixEmptyAndTrim(value);
-            if (fingerprint == null) {
-                return EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(hostKeyPolicy)
-                                || EsxiHostKeyPolicy.TRUST_FIRST_USE.name().equals(hostKeyPolicy)
-                        ? FormValidation.ok()
-                        : FormValidation.warning(
-                                "Without a fingerprint, no host key is trusted: use \"Test connection\""
-                                        + " to see which one the host presents");
-            }
-            if (!fingerprint.startsWith("SHA256:")
-                    && !fingerprint.matches("(?i)(MD5:)?([0-9a-f]{2}:){15}[0-9a-f]{2}")) {
-                return FormValidation.warning(
-                        "Expected SHA256:... (as ssh-keygen -l shows it) or an MD5 fingerprint" + " like 00:11:22:...");
-            }
-            return FormValidation.ok();
+            return checkFingerprint(value, hostKeyPolicy);
         }
 
         @RequirePOST
@@ -363,18 +515,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 @QueryParameter String port,
                 @QueryParameter String connectTimeoutSeconds) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final String host = Util.fixEmptyAndTrim(vsHost);
-            if (host == null) {
-                return FormValidation.error("The ESXi host is not specified");
-            }
-            try {
-                final EsxiHostKeyInfo key =
-                        TrileadEsxiShell.queryHostKey(host, parse(port, 0), parse(connectTimeoutSeconds, 0));
-                return FormValidation.ok("The host presents a " + key.getAlgorithm() + " key, with the fingerprints "
-                        + key.getSha256() + " and " + key.getMd5());
-            } catch (VSphereException e) {
-                return FormValidation.error(e.getMessage());
-            }
+            return queryHostKey(vsHost, port, connectTimeoutSeconds);
         }
 
         /** Tests the connection as it is configured, without any effect: the host key, whether it is trusted, the login. */
@@ -388,37 +529,8 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 @QueryParameter String hostKeyFingerprint,
                 @QueryParameter String connectTimeoutSeconds) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final EsxiSshBackendConfig config = new EsxiSshBackendConfig(credentialsId);
-            config.setPort(parse(port, 0));
-            config.setHostKeyFingerprint(hostKeyFingerprint);
-            config.setConnectTimeoutSeconds(parse(connectTimeoutSeconds, 0));
-            try {
-                config.setHostKeyPolicy(EsxiHostKeyPolicy.valueOf(hostKeyPolicy));
-            } catch (IllegalArgumentException | NullPointerException e) {
-                config.setHostKeyPolicy(EsxiHostKeyPolicy.FINGERPRINT);
-            }
-            final EsxiConnectionTestResult result;
-            try {
-                result = TrileadEsxiShell.test(config.toSettings(Util.fixEmptyAndTrim(vsHost)));
-            } catch (VSphereException e) {
-                return FormValidation.error(e.getMessage());
-            }
-            final String version = result.getServerVersion() == null ? "" : " (" + result.getServerVersion() + ")";
-            if (result.isOk()) {
-                return FormValidation.ok(result.getMessage() + version);
-            }
-            // A host key that is not trusted yet is shown as such, with the fingerprint to put in the settings
-            return result.getHostKey() != null && !result.isHostKeyTrusted()
-                    ? FormValidation.warning(result.getMessage())
-                    : FormValidation.error(result.getMessage());
-        }
-
-        private static int parse(@CheckForNull String number, int defaultValue) {
-            try {
-                return number == null ? defaultValue : Integer.parseInt(number.trim());
-            } catch (NumberFormatException e) {
-                return defaultValue;
-            }
+            return testConnection(
+                    vsHost, credentialsId, port, hostKeyPolicy, hostKeyFingerprint, connectTimeoutSeconds);
         }
     }
 }

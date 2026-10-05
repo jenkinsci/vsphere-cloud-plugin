@@ -37,6 +37,7 @@ import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.Network;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -75,8 +76,54 @@ public class VSphereEsxiSsh extends AbstractVSphere {
 
     private final EsxiShell shell;
 
+    /** The cluster this host is a member of, and what it is called there, if it is one. */
+    private @CheckForNull VSphereEsxiCluster cluster;
+
+    private @CheckForNull String label;
+
     public VSphereEsxiSsh(EsxiShell shell) {
         this.shell = shell;
+    }
+
+    void joinCluster(VSphereEsxiCluster cluster, String label) {
+        this.cluster = cluster;
+        this.label = label;
+    }
+
+    /** What this host is called in messages: how it is configured if it is part of a cluster. */
+    String getLabel() {
+        return label == null ? "the ESXi host" : label;
+    }
+
+    /** The hosts that are asked about VMs and datastores: this one, and those of its cluster that can be reached. */
+    List<VSphereEsxiSsh> clusterHosts() {
+        return cluster == null ? List.of(this) : cluster.availableMembers();
+    }
+
+    EsxiDatastoreFiles files() {
+        return new EsxiDatastoreFiles(shell);
+    }
+
+    /** True if the path exists on this host (a shared datastore is there for each of the hosts that have it). */
+    boolean fileExists(String path) throws VSphereException {
+        return files().exists(path);
+    }
+
+    /**
+     * How busy the host is, simply: the number of VMs that are on, then the number that are registered. What
+     * decides where a clone is made when no host is asked for.
+     */
+    long[] load() throws VSphereException {
+        long on = 0;
+        final List<VmEntry> vms = listVms();
+        for (VmEntry entry : vms) {
+            if (VimCmdParsers.parsePowerState(
+                            vim(vmCommand(entry, "power.getstate")).getStdout())
+                    == VirtualMachinePowerState.poweredOn) {
+                on++;
+            }
+        }
+        return new long[] {on, vms.size()};
     }
 
     @Override
@@ -618,29 +665,74 @@ public class VSphereEsxiSsh extends AbstractVSphere {
             VmSize vmSize,
             PrintStream jLogger)
             throws VSphereException {
-        refuse("a customization specification", customizationSpec);
         refuse("choosing a host", hostName);
         refuse("choosing a host", hostSelectionMode);
         if (hostSelectionCandidates != null && !hostSelectionCandidates.isEmpty()) {
             refuse("choosing a host", hostSelectionCandidates.toString());
         }
+        cloneFrom(
+                null,
+                null,
+                cloneName,
+                sourceName,
+                linkedClone,
+                resourcePoolName,
+                cluster,
+                datastoreName,
+                folderName,
+                useCurrentSnapshot,
+                namedSnapshot,
+                powerOn,
+                extraConfigParameters,
+                customizationSpec,
+                vmSize,
+                jLogger);
+    }
+
+    /**
+     * Makes the clone on this host. The master is registered here, or, if a cluster has this host make the clone
+     * and the master is on another host, there ({@code sourceHost}, with {@code master} as it knows it): the files
+     * that are copied and linked to are those of a datastore that the hosts share.
+     */
+    void cloneFrom(
+            @CheckForNull VSphereEsxiSsh sourceHost,
+            @CheckForNull VmEntry master,
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
+        refuse("a customization specification", customizationSpec);
         ignored(jLogger, "cluster", cluster);
         ignored(jLogger, "folder", folderName);
         final String resourcePoolId = EsxiResourcePool.isRoot(resourcePoolName)
                 ? null
                 : poolForClone(resourcePoolName.trim(), jLogger).getId();
-        new EsxiVmCloner(this, new EsxiDatastoreFiles(shell), jLogger)
-                .clone(
-                        cloneName,
-                        sourceName,
-                        linkedClone,
-                        datastoreName,
-                        powerOn,
-                        extraConfigParameters,
-                        vmSize,
-                        namedSnapshot,
-                        resourcePoolId,
-                        useCurrentSnapshot);
+        final EsxiVmCloner cloner = new EsxiVmCloner(this, new EsxiDatastoreFiles(shell), jLogger);
+        if (master != null) {
+            cloner.fromOtherHost(sourceHost, master);
+        }
+        cloner.clone(
+                cloneName,
+                sourceName,
+                linkedClone,
+                datastoreName,
+                powerOn,
+                extraConfigParameters,
+                vmSize,
+                namedSnapshot,
+                resourcePoolId,
+                useCurrentSnapshot);
     }
 
     private static void refuse(String what, String value) throws VSphereException {

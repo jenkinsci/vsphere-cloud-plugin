@@ -18,6 +18,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -28,8 +29,10 @@ import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.util.FormValidation;
 import java.security.KeyPair;
+import java.util.List;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
+import org.jenkinsci.plugins.vsphere.EsxiSshHost;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -98,6 +101,68 @@ class EsxiSshBackendConfigTest {
         esxi.setConnectTimeoutSeconds(10);
         esxi.setCommandTimeoutSeconds(10);
         return esxi;
+    }
+
+    @Test
+    void severalHostsAreOneClusterThatEachOfThemIsPartOf(JenkinsRule r) throws Exception {
+        final FakeEsxiHost second = new FakeEsxiHost();
+        second.shareStorageWith(host);
+        second.addVm(2, "on-second", "datastore1", "on-second/on-second.vmx", "displayName = \"on-second\"\n");
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        final FakeEsxiSshServer other = new FakeEsxiSshServer(second, "secret", null, false);
+        try {
+            addPasswordCredentials("esxi-password");
+            EsxiSshBackendConfig esxi = esxiFor("esxi-password", EsxiHostKeyPolicy.ACCEPT_ANY);
+            // what this host does not say is that of the first: the credentials and the way to trust the host key
+            EsxiSshHost more = new EsxiSshHost("127.0.0.1");
+            more.setPort(other.port());
+            esxi.setAdditionalHosts(List.of(more));
+            vSphereCloud cloud = cloudWith(esxi);
+
+            VSphere vsphere = cloud.vSphereInstance();
+            try {
+                assertThat(vsphere, instanceOf(VSphereEsxiCluster.class));
+                assertThat(vsphere.getVmByName("kube-master"), notNullValue());
+                assertThat(vsphere.getVmByName("on-second"), notNullValue());
+                assertThat(vsphere.countVms(), is(2));
+            } finally {
+                vsphere.disconnect();
+            }
+        } finally {
+            other.close();
+        }
+    }
+
+    @Test
+    void aHostThatIsDownDoesNotStopTheOthers(JenkinsRule r) throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        addPasswordCredentials("esxi-password");
+        EsxiSshBackendConfig esxi = esxiFor("esxi-password", EsxiHostKeyPolicy.ACCEPT_ANY);
+        EsxiSshHost down = new EsxiSshHost("127.0.0.1");
+        down.setPort(1);
+        esxi.setAdditionalHosts(List.of(down));
+
+        VSphere vsphere = cloudWith(esxi).vSphereInstance();
+        try {
+            assertThat(vsphere, instanceOf(VSphereEsxiCluster.class));
+            assertThat(vsphere.getVmByName("kube-master"), notNullValue());
+        } finally {
+            vsphere.disconnect();
+        }
+    }
+
+    @Test
+    void aHostAloneIsNotACluster(JenkinsRule r) throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        addPasswordCredentials("esxi-password");
+
+        VSphere vsphere = cloudWith(esxiFor("esxi-password", EsxiHostKeyPolicy.ACCEPT_ANY))
+                .vSphereInstance();
+        try {
+            assertThat(vsphere, instanceOf(VSphereEsxiSsh.class));
+        } finally {
+            vsphere.disconnect();
+        }
     }
 
     @Test

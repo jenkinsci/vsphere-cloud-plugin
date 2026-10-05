@@ -75,6 +75,10 @@ final class EsxiVmCloner {
     private final VSphereEsxiSsh host;
     private final EsxiDatastoreFiles files;
     private final PrintStream log;
+    /** The host the master is registered on, if that is not this one, and the master as that host knows it. */
+    private @CheckForNull VSphereEsxiSsh sourceHost;
+
+    private @CheckForNull VmEntry sourceEntry;
 
     EsxiVmCloner(VSphereEsxiSsh host, EsxiDatastoreFiles files, PrintStream log) {
         this.host = host;
@@ -110,6 +114,16 @@ final class EsxiVmCloner {
         }
     }
 
+    /**
+     * The master is registered on another host, and is reached through the datastore that the hosts share: it is
+     * read, copied and linked to on this host's view of it, and snapshots are asked about on the host it is on.
+     */
+    EsxiVmCloner fromOtherHost(VSphereEsxiSsh registeredOn, VmEntry master) {
+        this.sourceHost = registeredOn;
+        this.sourceEntry = master;
+        return this;
+    }
+
     private void say(String message) {
         if (log != null) {
             VSphereLogger.vsLogger(log, message);
@@ -143,7 +157,7 @@ final class EsxiVmCloner {
             throws VSphereException {
         EsxiDatastoreFiles.checkName("The name of the clone", cloneName);
         final List<VmEntry> vms = host.listVms();
-        final VmEntry source = find(vms, sourceName);
+        final VmEntry source = sourceEntry != null ? sourceEntry : find(vms, sourceName);
         if (source == null) {
             throw new VSphereNotFoundException("VM", sourceName);
         }
@@ -238,7 +252,7 @@ final class EsxiVmCloner {
             throw new VSphereNotFoundException(
                     "Snapshot", null, "Source VM \"" + source.getName() + "\" requires at least one snapshot.");
         }
-        String id = named ? host.snapshotIdByName(source, namedSnapshot) : null;
+        String id = named ? (sourceHost != null ? sourceHost : host).snapshotIdByName(source, namedSnapshot) : null;
         if (named && id == null) {
             throw new VSphereNotFoundException("Snapshot", namedSnapshot);
         }
