@@ -298,6 +298,9 @@ final class FakeEsxiHost implements EsxiShell {
             return ok(esxiVersion + "\n");
         }
         if (words.get(0).equals("cat") && words.size() == 2) {
+            if (words.get(1).equals("/etc/vmware/hostd/pools.xml")) {
+                return ok(poolsXml());
+            }
             if (files.containsKey(words.get(1))) {
                 return ok(files.get(words.get(1)));
             }
@@ -328,12 +331,10 @@ final class FakeEsxiHost implements EsxiShell {
             final String name = words.get(words.size() - 1);
             final String id = "pool-" + (pools.size() + 1);
             pools.put(name, id);
-            files.put("/etc/vmware/hostd/pools.xml", poolsXml());
             return ok("'vim.ResourcePool:" + id + "'\n");
         }
         if (sub.equals("hostsvc/rsrc/destroy")) {
             pools.values().remove(words.get(2));
-            files.put("/etc/vmware/hostd/pools.xml", poolsXml());
             return ok("");
         }
         final FakeVm vm = vms.get(Integer.parseInt(words.get(2)));
@@ -356,10 +357,6 @@ final class FakeEsxiHost implements EsxiShell {
                 return ok("");
             case "vmsvc/power.reset":
                 return ok("");
-            case "vmsvc/get.config":
-                return ok("Vim.Vm.ConfigInfo {\n   name = \"" + vm.name + "\",\n"
-                        + (vm.pool == null ? "" : "   resourcePool = 'vim.ResourcePool:" + vm.pool + "',\n")
-                        + "}\n");
             case "vmsvc/get.guest":
                 return ok(guest(vm));
             case "vmsvc/snapshot.get":
@@ -593,16 +590,31 @@ final class FakeEsxiHost implements EsxiShell {
         return path;
     }
 
+    /** pools.xml as an ESXi 8 host writes it: the pools, then an entry for each VM and the pool it is in. */
     private String poolsXml() {
-        final StringBuilder xml = new StringBuilder("<?xml version=\"1.0\"?>\n<ConfigRoot>\n  <ResourcePools>\n");
+        final StringBuilder xml = new StringBuilder("<ConfigRoot>\n");
+        xml.append("  <resourcePool id=\"0000\">\n    <name>Resources</name>\n    <objID>ha-root-pool</objID>\n")
+                .append("    <path>host/user</path>\n  </resourcePool>\n");
+        int n = 1;
         for (Map.Entry<String, String> pool : pools.entrySet()) {
-            xml.append("    <ResourcePool>\n      <name>")
+            xml.append("  <resourcePool id=\"000" + n++ + "\">\n    <name>")
                     .append(pool.getKey().replace("&", "&amp;"))
-                    .append("</name>\n      <objID>")
+                    .append("</name>\n    <objID>")
                     .append(pool.getValue())
-                    .append("</objID>\n    </ResourcePool>\n");
+                    .append("</objID>\n    <path>host/user/")
+                    .append(pool.getKey())
+                    .append("</path>\n  </resourcePool>\n");
         }
-        return xml.append("  </ResourcePools>\n</ConfigRoot>\n").toString();
+        int m = 0;
+        for (FakeVm vm : vms.values()) {
+            xml.append("  <vm id=\"000" + m++ + "\">\n    <lastModified>2026-10-04T19:12:28.567498Z</lastModified>\n")
+                    .append("    <objID>")
+                    .append(vm.id)
+                    .append("</objID>\n    <resourcePool>")
+                    .append(vm.pool == null ? "ha-root-pool" : vm.pool)
+                    .append("</resourcePool>\n  </vm>\n");
+        }
+        return xml.append("</ConfigRoot>\n").toString();
     }
 
     private ShellResult register(String vmxPath, String name, String pool) {

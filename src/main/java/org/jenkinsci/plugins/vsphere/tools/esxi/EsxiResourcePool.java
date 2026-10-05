@@ -33,6 +33,9 @@ public final class EsxiResourcePool extends ResourcePool {
 
     public static final String ROOT_NAME = "Resources";
 
+    private static final Pattern VM = Pattern.compile(
+            "<vm\\b[^>]*>(?:(?!</vm>).)*?<objID>(\\d+)</objID>(?:(?!</vm>).)*?<resourcePool>([^<]+)</resourcePool>",
+            Pattern.DOTALL);
     private static final Pattern POOL = Pattern.compile("<name>([^<]*)</name>\\s*<objID>([^<]+)</objID>");
 
     private final String name;
@@ -71,6 +74,21 @@ public final class EsxiResourcePool extends ResourcePool {
     /** True for the name of the pool that every host has (or for no name, which means the same). */
     static boolean isRoot(@CheckForNull String name) {
         return name == null || name.trim().isEmpty() || ROOT_NAME.equals(name.trim());
+    }
+
+    /**
+     * The id of the pool that the text of {@code pools.xml} puts the VM in: it has an entry
+     * {@code <vm>...<objID>id of the VM</objID>...<resourcePool>id of the pool</resourcePool></vm>} for each.
+     */
+    @CheckForNull
+    static String poolIdOfVm(String xml, int vmId) {
+        final Matcher m = VM.matcher(xml);
+        while (m.find()) {
+            if (m.group(1).equals(Integer.toString(vmId))) {
+                return m.group(2).trim();
+            }
+        }
+        return null;
     }
 
     /** The pools in the text of {@code pools.xml}: name to id, in the order of the file. */

@@ -98,6 +98,22 @@ class EsxiCloneTest {
                 MASTER + "/master-000002.vmdk",
                 descriptor("master-000001.vmdk", "SESPARSE", "master-000002-sesparse.vmdk"));
         host.addFile(MASTER + "/master-000002-sesparse.vmdk", "HEAD DELTA");
+        // two snapshots in a row: the first froze master.vmdk, the second froze master-000001.vmdk
+        host.addFile(
+                MASTER + "/master.vmsd",
+                String.join(
+                        "\n",
+                        "snapshot.lastUID = \"2\"",
+                        "snapshot.current = \"2\"",
+                        "snapshot0.uid = \"1\"",
+                        "snapshot0.disk0.fileName = \"master.vmdk\"",
+                        "snapshot0.disk0.node = \"scsi0:0\"",
+                        "snapshot1.uid = \"2\"",
+                        "snapshot1.parent = \"1\"",
+                        "snapshot1.disk0.fileName = \"master-000001.vmdk\"",
+                        "snapshot1.disk0.node = \"scsi0:0\"",
+                        "snapshot.numSnapshots = \"2\"",
+                        ""));
         esxi = new VSphereEsxiSsh(host);
     }
 
@@ -236,12 +252,59 @@ class EsxiCloneTest {
         clone("clone-01", false, false);
 
         String cloneDir = DS + "/clone-01";
-        assertThat(host.file(cloneDir + "/clone-01-flat.vmdk"), is("COPY OF " + MASTER + "/master-000002.vmdk"));
+        // a clone has the state of the snapshot the master is at, not what the master has written since
+        assertThat(host.file(cloneDir + "/clone-01-flat.vmdk"), is("COPY OF " + MASTER + "/master-000001.vmdk"));
         assertThat(host.file(cloneDir + "/clone-01.vmdk"), not(containsString("parentFileNameHint")));
         assertThat(VmxFile.parse(host.file(cloneDir + "/clone-01.vmx")).get("scsi0:0.fileName"), is("clone-01.vmdk"));
         assertThat(
-                host.commands.stream().anyMatch(c -> c.startsWith("vmkfstools -i '" + MASTER + "/master-000002.vmdk'")),
+                host.commands.stream().anyMatch(c -> c.startsWith("vmkfstools -i '" + MASTER + "/master-000001.vmdk'")),
                 is(true));
+    }
+
+    @Test
+    void aDeploymentIsACopyOfTheStateTheVmHasNow() throws Exception {
+        esxi.deployVm("deployed", "master", false, "", "", "", "", false, "", log);
+
+        assertThat(host.file(DS + "/deployed/deployed-flat.vmdk"), is("COPY OF " + MASTER + "/master-000002.vmdk"));
+    }
+
+    @Test
+    void aFullCloneNeedsASnapshotToBeAtButADeploymentDoesNot() throws Exception {
+        host.files.remove(MASTER + "/master.vmsd");
+
+        VSphereException e = assertThrows(VSphereException.class, () -> clone("clone-01", false, false));
+        assertThat(e.getMessage(), containsString("requires at least one snapshot"));
+        assertThat(host.hasDirectory(DS + "/clone-01"), is(false));
+
+        esxi.deployVm("deployed", "master", false, "", "", "", "", false, "", log);
+        assertThat(host.hasFile(DS + "/deployed/deployed.vmx"), is(true));
+    }
+
+    @Test
+    void aSnapshotCannotBeNamedAndAlsoBeTheCurrentOne() {
+        VSphereException e = assertThrows(
+                VSphereException.class,
+                () -> esxi.cloneOrDeployVm(
+                        "c",
+                        "master",
+                        false,
+                        "",
+                        "",
+                        "",
+                        "",
+                        true,
+                        "snap1",
+                        false,
+                        null,
+                        "",
+                        "",
+                        "",
+                        null,
+                        null,
+                        VmSize.NONE,
+                        log));
+
+        assertThat(e.getMessage(), containsString("AND also say that the latest snapshot"));
     }
 
     @Test

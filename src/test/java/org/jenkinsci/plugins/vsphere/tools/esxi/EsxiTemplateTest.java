@@ -120,7 +120,7 @@ class EsxiTemplateTest {
         esxi.markAsTemplate("base", "x", false);
 
         final PrintStream log = new PrintStream(new ByteArrayOutputStream());
-        esxi.cloneVm("deployed", "base", false, "", "", "", "", false, "", log);
+        esxi.deployVm("deployed", "base", false, "", "", "", "", false, "", log);
 
         final VmxFile deployed = VmxFile.parse(host.file("/vmfs/volumes/datastore1/deployed/deployed.vmx"));
         assertThat(deployed.get("template"), is(nullValue()));

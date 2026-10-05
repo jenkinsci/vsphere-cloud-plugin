@@ -121,6 +121,9 @@ final class EsxiVmCloner {
      *
      * @param datastoreName where the clone goes; blank for the datastore of the master, which a linked clone has
      *     to be on
+     * @param useCurrentSnapshot clone the state of the master at the snapshot it is at (as a clone, in contrast to a
+     *     deployment, is made of vCenter); a full clone is made of the disks that snapshot froze, a linked clone of
+     *     the snapshot disk it uses anyway. Not both this and a named snapshot
      * @param resourcePoolId the id of the resource pool to put the clone in; null for the top one
      * @param namedSnapshot clone the state of the master at this snapshot; blank for the newest one that can be read.
      *     A full clone can be made of any snapshot; a linked clone only of the newest, as it needs a disk that is a
@@ -135,7 +138,8 @@ final class EsxiVmCloner {
             @CheckForNull Map<String, String> extraConfigParameters,
             @CheckForNull VmSize vmSize,
             @CheckForNull String namedSnapshot,
-            @CheckForNull String resourcePoolId)
+            @CheckForNull String resourcePoolId,
+            boolean useCurrentSnapshot)
             throws VSphereException {
         EsxiDatastoreFiles.checkName("The name of the clone", cloneName);
         final List<VmEntry> vms = host.listVms();
@@ -169,7 +173,8 @@ final class EsxiVmCloner {
             throw new VSphereException("The VM \"" + sourceName + "\" has no virtual disk to clone");
         }
 
-        final Map<String, String> frozen = frozenDisks(source, sourceVmx, disks, namedSnapshot);
+        final Map<String, String> frozen =
+                frozenDisks(source, sourceVmx, disks, namedSnapshot, useCurrentSnapshot, linkedClone);
 
         say("Making " + (linkedClone ? "a linked clone" : "a full clone") + " \"" + cloneName + "\" of \"" + sourceName
                 + "\" in " + cloneDirectory);
@@ -210,31 +215,55 @@ final class EsxiVmCloner {
      * For a named snapshot, the disk file that held each disk when it was taken (a disk that was not there then is
      * an error); empty when no snapshot is named.
      */
-    private Map<String, String> frozenDisks(VmEntry source, String sourceVmx, List<Disk> disks, String namedSnapshot)
+    private Map<String, String> frozenDisks(
+            VmEntry source,
+            String sourceVmx,
+            List<Disk> disks,
+            String namedSnapshot,
+            boolean useCurrentSnapshot,
+            boolean linkedClone)
             throws VSphereException {
         final Map<String, String> frozen = new HashMap<>();
-        if (namedSnapshot == null || namedSnapshot.trim().isEmpty()) {
+        final boolean named = namedSnapshot != null && !namedSnapshot.trim().isEmpty();
+        if (named && useCurrentSnapshot) {
+            throw new VSphereException("It is not valid to name the snapshot \"" + namedSnapshot
+                    + "\" to clone AND also say that the latest snapshot is to be used: choose one, or neither");
+        }
+        if (!named && (!useCurrentSnapshot || linkedClone)) {
+            // nothing in particular (a deployment), or a linked clone of the snapshot disk the VM has
             return frozen;
         }
-        final String id = host.snapshotIdByName(source, namedSnapshot);
-        if (id == null) {
+        final String vmsd = EsxiSnapshotMetadata.pathFor(sourceVmx);
+        if (!named && !files.exists(vmsd)) {
+            throw new VSphereNotFoundException(
+                    "Snapshot", null, "Source VM \"" + source.getName() + "\" requires at least one snapshot.");
+        }
+        String id = named ? host.snapshotIdByName(source, namedSnapshot) : null;
+        if (named && id == null) {
             throw new VSphereNotFoundException("Snapshot", namedSnapshot);
         }
-        final String vmsd = EsxiSnapshotMetadata.pathFor(sourceVmx);
         if (!files.exists(vmsd)) {
             throw new VSphereException(
                     "Cannot tell the disks of the snapshot \"" + namedSnapshot + "\": " + vmsd + " is not there");
         }
         final EsxiSnapshotMetadata metadata = EsxiSnapshotMetadata.parse(files.read(vmsd));
+        if (!named) {
+            id = metadata.currentUid();
+            if (id == null) {
+                throw new VSphereNotFoundException(
+                        "Snapshot", null, "Source VM \"" + source.getName() + "\" requires at least one snapshot.");
+            }
+        }
         final int index = metadata.indexOfUid(id);
         if (index < 0) {
-            throw new VSphereException("The snapshot \"" + namedSnapshot + "\" (" + id + ") is not in " + vmsd);
+            throw new VSphereException(
+                    "The snapshot " + (named ? "\"" + namedSnapshot + "\" " : "") + "(" + id + ") is not in " + vmsd);
         }
         for (Disk disk : disks) {
             final String file = metadata.diskFile(index, disk.prefix);
             if (file == null) {
-                throw new VSphereException("The disk " + disk.prefix + " was not in the VM when the snapshot \""
-                        + namedSnapshot + "\" was taken");
+                throw new VSphereException("The disk " + disk.prefix + " was not in the VM when the snapshot "
+                        + (named ? "\"" + namedSnapshot + "\"" : id) + " was taken");
             }
             frozen.put(disk.prefix, file);
         }

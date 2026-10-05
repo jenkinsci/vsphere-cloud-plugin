@@ -574,14 +574,13 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     }
 
     /**
-     * The resource pool a VM is in, as far as the host says: it prints {@code resourcePool = 'vim.ResourcePool:id'}
-     * in the configuration of the VM. A VM it says nothing of is taken to be in the top pool.
+     * The resource pool a VM is in: {@code pools.xml} has an entry for each VM saying so. A VM it has none for is
+     * taken to be in the top pool.
      */
     EsxiResourcePool resourcePoolOf(VmEntry vm) throws VSphereException {
-        final String config = vim(vmCommand(vm, "get.config")).stdoutOrThrow("Getting the configuration of " + vm);
-        final Matcher id = Pattern.compile("resourcePool\\s*=\\s*'vim\\.ResourcePool:([A-Za-z0-9._-]+)'")
-                .matcher(config);
-        final String wanted = id.find() ? id.group(1) : EsxiResourcePool.ROOT_ID;
+        final ShellResult xml = shell.run("cat /etc/vmware/hostd/pools.xml");
+        final String id = xml.succeeded() ? EsxiResourcePool.poolIdOfVm(xml.getStdout(), vm.getId()) : null;
+        final String wanted = id == null ? EsxiResourcePool.ROOT_ID : id;
         for (Map.Entry<String, String> pool : listResourcePools().entrySet()) {
             if (pool.getValue().equals(wanted)) {
                 return new EsxiResourcePool(pool.getKey(), wanted);
@@ -640,7 +639,8 @@ public class VSphereEsxiSsh extends AbstractVSphere {
                         extraConfigParameters,
                         vmSize,
                         namedSnapshot,
-                        resourcePoolId);
+                        resourcePoolId,
+                        useCurrentSnapshot);
     }
 
     private static void refuse(String what, String value) throws VSphereException {

@@ -73,6 +73,21 @@ class EsxiResourcePoolTest {
     }
 
     @Test
+    void readsWhichPoolAVmIsInFromThePoolsFileAsAnEsxi8HostWritesIt() {
+        final String xml = "<ConfigRoot>\n  <resourcePool id=\"0000\">\n    <name>Resources</name>\n"
+                + "    <objID>ha-root-pool</objID>\n    <path>host/user</path>\n  </resourcePool>\n"
+                + "  <vm id=\"0000\">\n    <lastModified>2026-10-04T19:12:28.567498Z</lastModified>\n"
+                + "    <objID>1</objID>\n    <resourcePool>ha-root-pool</resourcePool>\n  </vm>\n"
+                + "  <vm id=\"0001\">\n    <objID>12</objID>\n    <resourcePool>pool-3</resourcePool>\n  </vm>\n"
+                + "</ConfigRoot>";
+
+        assertThat(EsxiResourcePool.parse(xml), is(Map.of("Resources", "ha-root-pool")));
+        assertThat(EsxiResourcePool.poolIdOfVm(xml, 1), is("ha-root-pool"));
+        assertThat(EsxiResourcePool.poolIdOfVm(xml, 12), is("pool-3"));
+        assertThat(EsxiResourcePool.poolIdOfVm(xml, 2), is(nullValue())); // 12 is not 2, nor 1
+    }
+
+    @Test
     void theTopPoolIsAlwaysThere() throws Exception {
         assertThat(esxi.listResourcePools(), is(Map.of("Resources", "ha-root-pool")));
         assertThat(esxi.getResourcePoolByName("Resources").getId(), is("ha-root-pool"));
@@ -121,7 +136,7 @@ class EsxiResourcePoolTest {
         esxi.createResourcePool("ci");
         host.commands.clear();
 
-        esxi.cloneVm("c1", "master", false, "ci", "", "", "", false, "", log);
+        esxi.deployVm("c1", "master", false, "ci", "", "", "", false, "", log);
 
         assertThat(host.vmNamed("c1").pool, is("pool-1"));
         assertThat(ranQuotedOrNot("/bin/vim-cmd solo/registervm " + DS + "/c1/c1.vmx c1 pool-1"), is(true));
@@ -131,7 +146,7 @@ class EsxiResourcePoolTest {
 
     @Test
     void aPoolThatIsNotThereIsMadeForTheClone() throws Exception {
-        esxi.cloneVm("c1", "master", false, "fresh", "", "", "", false, "", log);
+        esxi.deployVm("c1", "master", false, "fresh", "", "", "", false, "", log);
 
         assertThat(host.pools.keySet(), contains("fresh"));
         assertThat(host.vmNamed("c1").pool, is("pool-1"));
@@ -139,8 +154,8 @@ class EsxiResourcePoolTest {
 
     @Test
     void theTopPoolIsTheDefaultAndNeedsNoArgument() throws Exception {
-        esxi.cloneVm("c1", "master", false, "Resources", "", "", "", false, "", log);
-        esxi.cloneVm("c2", "master", false, "", "", "", "", false, "", log);
+        esxi.deployVm("c1", "master", false, "Resources", "", "", "", false, "", log);
+        esxi.deployVm("c2", "master", false, "", "", "", "", false, "", log);
 
         assertThat(ranQuotedOrNot("/bin/vim-cmd solo/registervm " + DS + "/c1/c1.vmx c1"), is(true));
         assertThat(ranQuotedOrNot("/bin/vim-cmd solo/registervm " + DS + "/c2/c2.vmx c2"), is(true));
@@ -152,7 +167,7 @@ class EsxiResourcePoolTest {
     void aBadPoolNameStopsTheCloneBeforeAnythingIsMade() {
         assertThrows(
                 VSphereException.class,
-                () -> esxi.cloneVm("c1", "master", false, "bad'name", "", "", "", false, "", log));
+                () -> esxi.deployVm("c1", "master", false, "bad'name", "", "", "", false, "", log));
 
         assertThat(host.hasDirectory(DS + "/c1"), is(false));
     }
@@ -162,7 +177,7 @@ class EsxiResourcePoolTest {
         host.failing("solo/registervm", "Failed to register");
 
         assertThrows(
-                VSphereException.class, () -> esxi.cloneVm("c1", "master", false, "ci", "", "", "", false, "", log));
+                VSphereException.class, () -> esxi.deployVm("c1", "master", false, "ci", "", "", "", false, "", log));
 
         assertThat(host.hasDirectory(DS + "/c1"), is(false)); // what was made of the clone is removed
         assertThat(host.pools.keySet(), contains("ci")); // the pool was not the clone's alone

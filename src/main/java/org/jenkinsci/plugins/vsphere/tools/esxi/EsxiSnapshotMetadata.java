@@ -53,6 +53,13 @@ final class EsxiSnapshotMetadata {
         return -1;
     }
 
+    /** The number of the snapshot the VM is at now ({@code snapshot.current}), or null if it has none. */
+    @CheckForNull
+    String currentUid() {
+        final String current = file.get("snapshot.current");
+        return current == null || current.isEmpty() || current.equals("0") ? null : current;
+    }
+
     /** The disk file (as the entry names it) that held the disk on the node ({@code scsi0:0}), or null. */
     @CheckForNull
     String diskFile(int index, String node) {
