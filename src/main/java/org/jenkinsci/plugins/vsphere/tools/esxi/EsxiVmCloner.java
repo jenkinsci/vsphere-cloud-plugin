@@ -334,7 +334,8 @@ final class EsxiVmCloner {
         // What makes the master what it is, and not the clone: all of it is made new when the clone is started
         for (String key : vmx.keys()) {
             final String lower = key.toLowerCase(Locale.ROOT);
-            boolean identity = false;
+            // a VM deployed from a template is not one
+            boolean identity = lower.equals("template");
             for (String prefix : IDENTITY_PREFIXES) {
                 identity |= lower.startsWith(prefix);
             }

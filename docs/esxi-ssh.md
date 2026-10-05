@@ -40,6 +40,7 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Delete a VM                                                   | yes           |
 | Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
 | Reconfigure CPUs, memory, annotation, extra configuration, network adapters; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
+| Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
 | Revert to a snapshot, delete one                              | yes           |
 | Rename a snapshot                                             | no (`vim-cmd` cannot) |
 | Whatever needs vCenter: folders, clusters, templates, customization specs, distributed switches, choosing a host | no |
@@ -131,6 +132,23 @@ a host (or a host selection mode), and a named snapshot (the newest one that can
 are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
 note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
 `. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
+
+## Templates
+
+The steps *Convert to template* and *Convert to VM* work, but **what a "template" is differs from
+vCenter**. A standalone host has no kind of VM that is a template: it is a VM like any other, and
+the plugin marks it as one by putting `template = "TRUE"` in its `.vmx` file (and takes the mark
+out for *Convert to VM*).
+
+* The mark is a convention of this plugin, **not enforced by the host**: the VM stays registered
+  where it is, with its disks, snapshots and its place in the inventory, and can still be started
+  from the web interface of the host, or by anything else that does not look at the mark. The
+  plugin does not start a VM that has it (it says that the VM represents a template).
+* As on vCenter, the VM has to be powered off (or the step is told to force that, and then it is).
+* A VM deployed from a template is a normal VM: the mark is not copied. Deploying is a full copy
+  of the disks, as it is for any master that has no snapshot ([see cloning](#cloning)).
+* The resource pool and the cluster of *Convert to VM* are not used: there is no cluster, and the
+  VM stays in the resource pool it is in.
 
 ## Snapshots
 

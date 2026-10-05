@@ -47,6 +47,7 @@ import org.jenkinsci.plugins.vsphere.tools.AbstractVSphere;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
+import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
 
 /**
@@ -200,7 +201,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         final VirtualMachineConfigSummary config = new VirtualMachineConfigSummary();
         config.setName(vm.getName());
         config.setVmPathName(vm.getVmxPath());
-        config.setTemplate(false);
+        config.setTemplate(readConfigInfo(vm).isTemplate());
         summary.setConfig(config);
         return summary;
     }
@@ -538,14 +539,55 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         return names;
     }
 
+    /**
+     * "Template" is a mark in the configuration of the VM here ({@code template = "TRUE"} in the .vmx), as a
+     * standalone host has no kind of VM of that name: the plugin does not start a VM that has the mark (it says it
+     * represents a template), and deploying from it makes a VM that has not. Like vCenter, this needs the VM to be
+     * powered off (or powers it off, if forced).
+     */
     @Override
     public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
-        throw unsupported("markAsTemplate");
+        final EsxiVirtualMachine vm = (EsxiVirtualMachine) getVmByName(vmName);
+        if (vm == null) {
+            throw new VSphereNotFoundException("VM", vmName);
+        }
+        if (vm.getConfig().template) {
+            return;
+        }
+        if (!isPoweredOff(vm)) {
+            if (!force) {
+                throw new VSphereException("Could not mark as Template. Check its power state or select \"force.\"");
+            }
+            powerOffVm(vm, true, 0);
+        }
+        setTemplateMark(vm.getEntry(), true);
     }
 
+    /**
+     * The VM stops being a template. A standalone host has no cluster, and a resource pool is not used to put it
+     * in one (the VM stays in the pool it is in).
+     */
     @Override
     public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException {
-        throw unsupported("markAsVm");
+        final EsxiVirtualMachine vm = (EsxiVirtualMachine) getVmByName(name);
+        if (vm == null) {
+            throw new VSphereNotFoundException("VM", name);
+        }
+        if (vm.getConfig().template) {
+            setTemplateMark(vm.getEntry(), false);
+        }
+    }
+
+    private void setTemplateMark(VmEntry vm, boolean template) throws VSphereException {
+        final EsxiDatastoreFiles files = new EsxiDatastoreFiles(shell);
+        final VmxFile vmx = VmxFile.parse(files.read(vm.getVmxFileSystemPath()));
+        if (template) {
+            vmx.put("template", "TRUE");
+        } else {
+            vmx.remove("template");
+        }
+        files.replace(vm.getVmxFileSystemPath(), vmx.toString());
+        vim(vmCommand(vm, "reload")).stdoutOrThrow("Having the host read the configuration of " + vm + " again");
     }
 
     @Override

@@ -60,7 +60,7 @@ final class EsxiConfigInfo {
     static VirtualMachineConfigInfo build(VmEntry entry, VmxFile vmx) {
         final VirtualMachineConfigInfo config = new VirtualMachineConfigInfo();
         config.setName(VmxFile.unescape(vmx.get("displayName", entry.getName())));
-        config.setTemplate(false);
+        config.setTemplate(vmx.getBoolean("template"));
         config.setUuid(vmx.get("uuid.bios"));
         config.setGuestId(vmx.get("guestOS", entry.getGuestOs()));
         config.setVersion(entry.getVersion());
