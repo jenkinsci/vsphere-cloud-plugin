@@ -687,6 +687,9 @@ public class Clone extends VSphereBuildStep {
             items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
             items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
             items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+            items.add(
+                    "Fewest running VMs (ESXi hosts over SSH; vCenter ranks by load as for the least loaded host)",
+                    "FEWEST_RUNNING_VMS");
             return items;
         }
 

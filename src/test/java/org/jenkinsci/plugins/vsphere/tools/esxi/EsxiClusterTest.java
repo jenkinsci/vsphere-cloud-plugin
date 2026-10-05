@@ -29,6 +29,8 @@ import java.io.PrintStream;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
@@ -416,6 +418,159 @@ class EsxiClusterTest {
 
         assertThat(hostB.vmNamed("named"), is(notNullValue()));
         assertThat(hostA.file(SHARED + "/named/named-flat.vmdk"), is("COPY OF " + MASTER + "/master.vmdk"));
+    }
+
+    // -- where a clone goes by how busy the hosts really are --
+
+    private String cloneRanked(String mode, HostSelectionOptions options) throws Exception {
+        final ByteArrayOutputStream said = new ByteArrayOutputStream();
+        cluster()
+                .cloneOrDeployVm(
+                        "lc",
+                        "master",
+                        true,
+                        "",
+                        "",
+                        "",
+                        "",
+                        false,
+                        null,
+                        false,
+                        null,
+                        "",
+                        null,
+                        mode,
+                        null,
+                        options,
+                        VmSize.NONE,
+                        new PrintStream(said));
+        return said.toString();
+    }
+
+    private String where() {
+        return hostA.vmNamed("lc") != null ? "a" : hostB.vmNamed("lc") != null ? "b" : "nowhere";
+    }
+
+    /** a has nothing on but is nearly out of CPU; b has two VMs on and is nearly idle. */
+    private void aBusyButEmptyAndAnIdleButFull() {
+        hostA.cpuUsageMhz = 8000;
+        hostA.memoryUsageMB = 12000;
+        hostB.cpuUsageMhz = 300;
+        hostB.memoryUsageMB = 1500;
+        hostB.addVm(8, "r1", "shared", "r1/r1.vmx", "displayName = \"r1\"\n").power = "Powered on";
+        hostB.addVm(9, "r2", "shared", "r2/r2.vmx", "displayName = \"r2\"\n").power = "Powered on";
+    }
+
+    @Test
+    void byDefaultAndForFewestRunningVmsTheHostWithFewerVmsOnIsUsed() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+        cloneRanked(null, null);
+        assertThat(where(), is("a"));
+
+        hostA.files.keySet().removeIf(f -> f.startsWith(SHARED + "/lc/"));
+        hostA.removeVmRegistration("lc");
+        hostA.directories.remove(SHARED + "/lc");
+        cloneRanked(VSphereEsxiCluster.MODE_FEWEST_RUNNING_VMS, null);
+        assertThat(where(), is("a"));
+    }
+
+    @Test
+    void leastLoadedGoesByWhatTheHostsSayIsUsed() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+
+        final String said = cloneRanked("LEAST_LOADED", null);
+
+        assertThat(where(), is("b"));
+        assertThat(said, containsString("Ranked the ESXi hosts by the lower of free CPU and memory:"));
+        assertThat(said, containsString("b.example=0.9"));
+    }
+
+    @Test
+    void theWeightsOfTheOptionsDecideWhatCounts() throws Exception {
+        // a has the more free memory in MB (12 of 16 GB used vs. b's 1.5... so make b small on memory)
+        aBusyButEmptyAndAnIdleButFull();
+        hostB.memoryBytes = 4L * 1024 * 1024 * 1024;
+        hostB.memoryUsageMB = 3000;
+        hostA.cpuUsageMhz = 0;
+        hostA.memoryUsageMB = 4000;
+
+        // by free memory in MB alone: a (12 GB free) beats b (1 GB free)
+        cloneRanked("LEAST_LOADED", HostSelectionOptions.NONE.withWeights(new HostWeights(0, 0, 1, 0)));
+        assertThat(where(), is("a"));
+    }
+
+    @Test
+    void aHostInMaintenanceIsNotUsed() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+        hostB.inMaintenanceMode = true;
+
+        cloneRanked("LEAST_LOADED", null);
+
+        assertThat(where(), is("a"));
+    }
+
+    @Test
+    void aHostWithTooLittleFreeMemoryForTheVmIsLeftOutIfTheOptionsAskForThat() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+        hostB.memoryUsageMB = 15000;
+        hostA.cpuUsageMhz = 9000; // a is the busier by CPU, but b cannot hold the VM
+
+        final String said =
+                cloneRanked("LEAST_LOADED", new HostSelectionOptions(false, false, true).withVmSize(null, 4000L));
+
+        assertThat(where(), is("a"));
+        assertThat(said, containsString("Not using the ESXi host b.example"));
+    }
+
+    @Test
+    void whenNoHostSaysHowBusyItIsTheVmsThatAreOnDecide() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+        hostA.cpuUsageMhz = null;
+        hostB.cpuUsageMhz = null;
+
+        final String said = cloneRanked("LEAST_LOADED", null);
+
+        assertThat(where(), is("a"));
+        assertThat(said, containsString("choosing by the number of VMs that are on"));
+    }
+
+    @Test
+    void aStandaloneHostHasNoDrsAndSaysSo() throws Exception {
+        aBusyButEmptyAndAnIdleButFull();
+
+        final String said = cloneRanked("DRS_RECOMMENDED", null);
+
+        assertThat(where(), is("b"));
+        assertThat(said, containsString("has no DRS to ask"));
+    }
+
+    @Test
+    void whatTheHostSaysOfItselfIsRead() {
+        final EsxiHostStats stats = EsxiHostStats.parse(String.join(
+                "\n",
+                "(vim.host.Summary) {",
+                "   hardware = (vim.host.Hardware.Summary) {",
+                "      memorySize = 17104994304,",
+                "      cpuMhz = 2394,",
+                "      numCpuCores = 4,",
+                "   },",
+                "   runtime = (vim.host.RuntimeInfo) {",
+                "      inMaintenanceMode = true,",
+                "   },",
+                "   quickStats = (vim.host.Summary.QuickStats) {",
+                "      overallCpuUsage = 190,",
+                "      overallMemoryUsage = 3098,",
+                "   },",
+                "}"));
+
+        assertThat(stats.cpuMhz, is(2394));
+        assertThat(stats.cpuCores, is(4));
+        assertThat(stats.cpuUsageMhz, is(190));
+        assertThat(stats.memoryUsageMB, is(3098));
+        assertThat(stats.inMaintenanceMode, is(true));
+        assertThat(stats.asCandidate("x").getCpuCapacityMhz(), is(2394 * 4));
+        assertThat(stats.asCandidate("x").getMemCapacityMB(), is(16312L));
+        assertThat(EsxiHostStats.parse("nothing useful").asCandidate("x").loadFraction(), is(nullValue()));
     }
 
     // -- the guard for the disks that clones are made of --

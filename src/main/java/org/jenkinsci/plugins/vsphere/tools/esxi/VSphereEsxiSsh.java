@@ -50,6 +50,7 @@ import java.util.regex.Pattern;
 import org.jenkinsci.plugins.vsphere.tools.AbstractVSphere;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
@@ -124,6 +125,16 @@ public class VSphereEsxiSsh extends AbstractVSphere {
             }
         }
         return new long[] {on, vms.size()};
+    }
+
+    /**
+     * The host as a candidate for a placement: its size, and what is used of it now, as the host itself says (see
+     * {@link EsxiHostStats}). A host that does not say what is used is not ranked.
+     */
+    VSphereHostSelection.HostCandidate candidate() throws VSphereException {
+        return EsxiHostStats.parse(
+                        vim(VIM_CMD + " hostsvc/hostsummary").stdoutOrThrow("Asking the host how busy it is"))
+                .asCandidate(getLabel());
     }
 
     /**

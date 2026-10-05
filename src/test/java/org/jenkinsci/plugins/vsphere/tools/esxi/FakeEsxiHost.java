@@ -66,6 +66,14 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** What the host says of its size and load (vim-cmd hostsvc/hostsummary); a null number is left out. */
+    int cpuMhz = 2400;
+
+    int cpuCores = 4;
+    long memoryBytes = 16L * 1024 * 1024 * 1024;
+    Integer cpuUsageMhz = 300;
+    Integer memoryUsageMB = 2000;
+    boolean inMaintenanceMode;
     /** The resource pools that were made: name to id. */
     final Map<String, String> pools = new LinkedHashMap<>();
     /** The host does not take what is changed in a .vmsd when it reloads. */
@@ -338,6 +346,22 @@ final class FakeEsxiHost implements EsxiShell {
         }
         if (sub.equals("solo/registervm")) {
             return register(words.get(2), words.get(3), words.size() > 4 ? words.get(4) : null);
+        }
+        if (sub.equals("hostsvc/hostsummary")) {
+            return ok(
+                    "(vim.host.Summary) {\n   host = 'vim.HostSystem:ha-host',\n   hardware = (vim.host.Hardware.Summary) {\n"
+                            + "      vendor = \"Dell Inc.\",\n      memorySize = " + memoryBytes
+                            + ",\n      cpuModel = \"Intel(R) Xeon(R)\",\n"
+                            + "      cpuMhz = " + cpuMhz + ",\n      numCpuPkgs = 1,\n      numCpuCores = " + cpuCores
+                            + ",\n"
+                            + "      numCpuThreads = " + cpuCores * 2
+                            + ",\n   },\n   runtime = (vim.host.RuntimeInfo) {\n"
+                            + "      connectionState = \"connected\",\n      inMaintenanceMode = " + inMaintenanceMode
+                            + ",\n   },\n"
+                            + "   quickStats = (vim.host.Summary.QuickStats) {\n"
+                            + (cpuUsageMhz == null ? "" : "      overallCpuUsage = " + cpuUsageMhz + ",\n")
+                            + (memoryUsageMB == null ? "" : "      overallMemoryUsage = " + memoryUsageMB + ",\n")
+                            + "      uptime = 12345\n   },\n}\n");
         }
         if (sub.equals("hostsvc/rsrc/create")) {
             // --cpu-min-expandable=true ... ha-root-pool name

@@ -303,9 +303,18 @@ and the load of a host is not measured. What it does:
 * **Which host?** If the *host* of the step is given (as it is configured, or the name the host
   calls itself by), that one, if it can be used. Otherwise, of the hosts that can see the master (and
   the datastore the clone is asked to be on), and are in the list of *host selection candidates*, if there
-  is one: the host with the fewest VMs that are on, then the fewest registered, then the first as
-  configured. A host selection mode of `NONE` keeps the clone with the host of the master. Whatever
-  else is in the host selection options is not used.
+  is one: by the **host selection mode**:
+  * none, or `FEWEST_RUNNING_VMS`: the host with the fewest VMs that are on, then the fewest that
+    are registered, then the first as configured;
+  * `LEAST_LOADED`: the hosts are ranked by what they say is used of their CPU and memory
+    (`vim-cmd hostsvc/hostsummary`, whose `quickStats` are a few seconds old), by the weights of the host
+    selection options, as the hosts of a vCenter cluster are: by default the lower of free CPU and
+    free memory, as a share of what the host has. A host that is in maintenance mode is not used, and
+    the options to require enough cores, RAM or free RAM for the VM (the size of the master, or the one
+    that was announced) drop the hosts that cannot hold it. Where no host says how busy it is, the
+    count of VMs that are on decides;
+  * `DRS_RECOMMENDED`: a standalone host has no DRS, so it is ranked as `LEAST_LOADED`;
+  * `NONE`: the clone stays with the host of the master.
 * **A host that cannot be reached is left out**, and tried again after half a minute, or when the
   connection is checked (the connection pool does that each time it hands the connection out).
   The cluster is up as long as one host is. All the sessions are part of the one connection that the

@@ -452,7 +452,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         } else if (VSphereHostSelection.HOST_SELECTION_MODE_NONE.equals(hostSelectionMode)) {
             target = candidates.contains(owner) ? owner : candidates.get(0);
         } else {
-            target = leastBusy(candidates);
+            target = choose(candidates, hostSelectionMode, hostSelectionOptions, master, vmSize, jLogger);
         }
         if (jLogger != null) {
             VSphereLogger.vsLogger(
@@ -477,6 +477,98 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
                 customizationSpec,
                 vmSize,
                 jLogger);
+    }
+
+    /** The mode that asks for the host with the fewest VMs that are on. */
+    public static final String MODE_FEWEST_RUNNING_VMS = "FEWEST_RUNNING_VMS";
+
+    /**
+     * Picks the host to make the clone on, by the mode of host selection: {@code FEWEST_RUNNING_VMS}, which is also
+     * what no mode means, counts the VMs that are on (then the VMs that are registered); {@code LEAST_LOADED} (and
+     * {@code DRS_RECOMMENDED}, which a standalone host has no counterpart for) ranks the hosts by the CPU and
+     * memory that they say are used, with the weights of the host selection options, as it does for the hosts of a
+     * vCenter cluster, and drops those that are in maintenance mode or too small for the VM if the options ask for
+     * that; where no host says how busy it is, the count of VMs decides.
+     */
+    private VSphereEsxiSsh choose(
+            List<VSphereEsxiSsh> candidates,
+            @CheckForNull String mode,
+            @CheckForNull HostSelectionOptions options,
+            EsxiVirtualMachine master,
+            @CheckForNull VmSize vmSize,
+            @CheckForNull PrintStream log) {
+        if (mode == null || mode.isEmpty() || MODE_FEWEST_RUNNING_VMS.equals(mode)) {
+            return leastBusy(candidates);
+        }
+        if ("DRS_RECOMMENDED".equals(mode) && log != null) {
+            VSphereLogger.vsLogger(
+                    log, "A standalone ESXi host has no DRS to ask; ranking the hosts by how busy they are instead");
+        }
+        final HostSelectionOptions opts = options == null ? HostSelectionOptions.NONE : options;
+        final Map<VSphereHostSelection.HostCandidate, VSphereEsxiSsh> byCandidate = new LinkedHashMap<>();
+        for (VSphereEsxiSsh host : candidates) {
+            try {
+                byCandidate.put(host.candidate(), host);
+            } catch (VSphereException e) {
+                lost(host, e);
+            }
+        }
+        List<VSphereHostSelection.HostCandidate> usable =
+                VSphereHostSelection.filterCandidates(new ArrayList<>(byCandidate.keySet()), null);
+        Integer cpus = opts.getVmCpus();
+        Long memory = opts.getVmMemoryMB();
+        try {
+            if (cpus == null) {
+                cpus = master.getConfig().getHardware().getNumCPU();
+            }
+            if (memory == null) {
+                memory = (long) master.getConfig().getHardware().getMemoryMB();
+            }
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.FINE, "The size of the master is not known", e);
+        }
+        final List<VSphereHostSelection.HostCandidate> kept = new ArrayList<>();
+        for (VSphereHostSelection.HostCandidate candidate : usable) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate,
+                    opts.isRequireCores(),
+                    cpus,
+                    opts.isRequireMemory(),
+                    opts.isRequireAvailableMemory(),
+                    memory == null ? null : Integer.valueOf(memory.intValue()));
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (log != null) {
+                VSphereLogger.vsLogger(log, "Not using the ESXi host " + candidate.getName() + ": it " + shortfall);
+            }
+        }
+        final List<VSphereHostSelection.ScoredHost> ranked = VSphereHostSelection.rank(kept, opts.getWeights());
+        if (ranked.isEmpty()) {
+            if (log != null) {
+                VSphereLogger.vsLogger(
+                        log,
+                        "None of the ESXi hosts says how busy it is, or is fit for the VM; choosing by the number of"
+                                + " VMs that are on");
+            }
+            final List<VSphereEsxiSsh> fit = new ArrayList<>();
+            for (VSphereHostSelection.HostCandidate candidate : kept.isEmpty() ? usable : kept) {
+                fit.add(byCandidate.get(candidate));
+            }
+            return leastBusy(fit.isEmpty() ? candidates : fit);
+        }
+        if (log != null) {
+            final StringBuilder said = new StringBuilder("Ranked the ESXi hosts by ")
+                    .append(opts.getWeights().isDefault() ? "the lower of free CPU and memory" : "their weights")
+                    .append(":");
+            for (VSphereHostSelection.ScoredHost scored : ranked) {
+                said.append(' ')
+                        .append(scored.getHost().getName())
+                        .append('=')
+                        .append(String.format(java.util.Locale.ROOT, "%.2f", scored.getScore()));
+            }
+            VSphereLogger.vsLogger(log, said.toString());
+        }
+        return byCandidate.get(ranked.get(0).getHost());
     }
 
     private VSphereEsxiSsh leastBusy(List<VSphereEsxiSsh> candidates) {
