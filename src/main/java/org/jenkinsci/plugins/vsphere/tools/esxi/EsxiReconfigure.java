@@ -15,6 +15,8 @@
 package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import com.vmware.vim25.OptionValue;
+import com.vmware.vim25.ResourceAllocationInfo;
+import com.vmware.vim25.SharesInfo;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDeviceBackingInfo;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
@@ -48,10 +50,8 @@ final class EsxiReconfigure {
 
     /** Changes the settings as the specification says; fails, with nothing said to be done, if it cannot be. */
     static void apply(VmxFile vmx, VirtualMachineConfigSpec spec) throws VSphereException {
-        if (spec.getCpuAllocation() != null || spec.getMemoryAllocation() != null) {
-            throw new VSphereException("Reservations and limits of CPU and memory cannot be set over SSH to an ESXi"
-                    + " host (leave the CPU limit empty)");
-        }
+        applyAllocation(vmx, "cpu", spec.getCpuAllocation());
+        applyAllocation(vmx, "mem", spec.getMemoryAllocation());
         if (spec.getNumCPUs() != null) {
             if (spec.getNumCPUs() < 1) {
                 throw new VSphereException("The number of CPUs has to be at least 1, not " + spec.getNumCPUs());
@@ -91,6 +91,49 @@ final class EsxiReconfigure {
         }
         applyExtraConfig(vmx, spec.getExtraConfig());
         applyDeviceChanges(vmx, spec.getDeviceChange());
+    }
+
+    /**
+     * Reservation, limit and shares of CPU (in MHz) or memory (in MB), which the .vmx keeps as
+     * {@code sched.cpu.min}, {@code .max} and {@code .shares} (and {@code sched.mem...}). A limit of -1 is "unlimited".
+     */
+    private static void applyAllocation(VmxFile vmx, String what, ResourceAllocationInfo allocation)
+            throws VSphereException {
+        if (allocation == null) {
+            return;
+        }
+        final String prefix = "sched." + what + ".";
+        if (allocation.getReservation() != null) {
+            if (allocation.getReservation() < 0) {
+                throw new VSphereException("The " + what + " reservation cannot be negative");
+            }
+            vmx.put(prefix + "min", allocation.getReservation().toString());
+        }
+        if (allocation.getLimit() != null) {
+            if (allocation.getLimit() < -1) {
+                throw new VSphereException("The " + what + " limit has to be -1 (unlimited) or more");
+            }
+            vmx.put(
+                    prefix + "max",
+                    allocation.getLimit() == -1
+                            ? "unlimited"
+                            : allocation.getLimit().toString());
+        }
+        final SharesInfo shares = allocation.getShares();
+        if (shares != null && shares.getLevel() != null) {
+            switch (shares.getLevel()) {
+                case low:
+                case normal:
+                case high:
+                    vmx.put(prefix + "shares", shares.getLevel().toString());
+                    break;
+                default:
+                    if (shares.getShares() < 1) {
+                        throw new VSphereException("Custom " + what + " shares have to be at least 1");
+                    }
+                    vmx.put(prefix + "shares", Integer.toString(shares.getShares()));
+            }
+        }
     }
 
     /** What a VM may be called, as for the VMs that are made: nothing that is not plain. */

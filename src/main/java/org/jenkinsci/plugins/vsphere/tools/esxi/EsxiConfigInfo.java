@@ -15,6 +15,9 @@
 package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import com.vmware.vim25.Description;
+import com.vmware.vim25.ResourceAllocationInfo;
+import com.vmware.vim25.SharesInfo;
+import com.vmware.vim25.SharesLevel;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualDiskFlatVer2BackingInfo;
@@ -59,6 +62,9 @@ final class EsxiConfigInfo {
         final String annotation = vmx.get("annotation");
         config.setAnnotation(annotation == null ? entry.getAnnotation() : VmxFile.unescape(annotation));
 
+        config.setCpuAllocation(allocation(vmx, "cpu"));
+        config.setMemoryAllocation(allocation(vmx, "mem"));
+
         final VirtualHardware hardware = new VirtualHardware();
         hardware.setNumCPU(vmx.getInt("numvcpus", 1));
         hardware.setNumCoresPerSocket(vmx.getInt("cpuid.coresPerSocket", 1));
@@ -69,6 +75,39 @@ final class EsxiConfigInfo {
         hardware.setDevice(devices.toArray(new VirtualDevice[0]));
         config.setHardware(hardware);
         return config;
+    }
+
+    /** The reservation, limit and shares in the .vmx ({@code sched.cpu.min} and so on), or null if it has none. */
+    private static ResourceAllocationInfo allocation(VmxFile vmx, String what) {
+        final String prefix = "sched." + what + ".";
+        final String min = vmx.get(prefix + "min");
+        final String max = vmx.get(prefix + "max");
+        final String shares = vmx.get(prefix + "shares");
+        if (min == null && max == null && shares == null) {
+            return null;
+        }
+        final ResourceAllocationInfo info = new ResourceAllocationInfo();
+        info.setReservation(number(min, 0L));
+        info.setLimit("unlimited".equalsIgnoreCase(max) ? Long.valueOf(-1) : number(max, -1L));
+        final SharesInfo sharesInfo = new SharesInfo();
+        if (shares == null) {
+            sharesInfo.setLevel(SharesLevel.normal);
+        } else if (shares.matches("(?i)low|normal|high")) {
+            sharesInfo.setLevel(SharesLevel.valueOf(shares.toLowerCase()));
+        } else {
+            sharesInfo.setLevel(SharesLevel.custom);
+            sharesInfo.setShares((int) number(shares, 0L).longValue());
+        }
+        info.setShares(sharesInfo);
+        return info;
+    }
+
+    private static Long number(String text, long ifMissing) {
+        try {
+            return text == null ? Long.valueOf(ifMissing) : Long.valueOf(text.trim());
+        } catch (NumberFormatException e) {
+            return Long.valueOf(ifMissing);
+        }
     }
 
     private static void addDisks(List<VirtualDevice> devices, VmEntry entry, VmxFile vmx) {

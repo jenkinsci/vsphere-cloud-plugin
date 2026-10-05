@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.vmware.vim25.OptionValue;
 import com.vmware.vim25.ResourceAllocationInfo;
+import com.vmware.vim25.SharesInfo;
+import com.vmware.vim25.SharesLevel;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
 import com.vmware.vim25.VirtualDeviceConfigSpecOperation;
@@ -142,13 +144,62 @@ class EsxiReconfigureTest {
     }
 
     @Test
-    void reservationsAndLimitsAreRefused() {
+    void setsReservationsLimitsAndShares() throws Exception {
+        final ReconfigureCpu cpu = new ReconfigureCpu("2", "1");
+        cpu.setCpuLimitMHz("1000");
+
+        reconfigure(cpu);
+
+        assertThat(vmx().get("sched.cpu.min"), is("1000"));
         final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
-        spec.setCpuAllocation(new ResourceAllocationInfo());
+        final ResourceAllocationInfo memory = new ResourceAllocationInfo();
+        memory.setReservation(512L);
+        memory.setLimit(-1L);
+        final SharesInfo shares = new SharesInfo();
+        shares.setLevel(SharesLevel.custom);
+        shares.setShares(2000);
+        memory.setShares(shares);
+        spec.setMemoryAllocation(memory);
+        final ResourceAllocationInfo limited = new ResourceAllocationInfo();
+        limited.setLimit(3000L);
+        final SharesInfo high = new SharesInfo();
+        high.setLevel(SharesLevel.high);
+        limited.setShares(high);
+        spec.setCpuAllocation(limited);
+
+        esxi.reconfigureVm("web", spec);
+
+        assertThat(vmx().get("sched.mem.min"), is("512"));
+        assertThat(vmx().get("sched.mem.max"), is("unlimited"));
+        assertThat(vmx().get("sched.mem.shares"), is("2000"));
+        assertThat(vmx().get("sched.cpu.max"), is("3000"));
+        assertThat(vmx().get("sched.cpu.shares"), is("high"));
+        assertThat(vmx().get("sched.cpu.min"), is("1000")); // not touched
+        // and the VM tells them back
+        final VirtualMachine vm = esxi.getVmByName("web");
+        assertThat(vm.getConfig().getMemoryAllocation().getReservation(), is(512L));
+        assertThat(vm.getConfig().getMemoryAllocation().getLimit(), is(-1L));
+        assertThat(vm.getConfig().getMemoryAllocation().getShares().getLevel(), is(SharesLevel.custom));
+        assertThat(vm.getConfig().getMemoryAllocation().getShares().getShares(), is(2000));
+        assertThat(vm.getConfig().getCpuAllocation().getShares().getLevel(), is(SharesLevel.high));
+    }
+
+    @Test
+    void aVmWithoutReservationsHasNoAllocation() throws Exception {
+        assertThat(esxi.getVmByName("web").getConfig().getCpuAllocation(), is(nullValue()));
+    }
+
+    @Test
+    void badReservationsAreRefused() {
+        final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+        final ResourceAllocationInfo cpu = new ResourceAllocationInfo();
+        cpu.setLimit(-5L);
+        spec.setCpuAllocation(cpu);
 
         final VSphereException e = assertThrows(VSphereException.class, () -> esxi.reconfigureVm("web", spec));
 
-        assertThat(e.getMessage(), containsString("Reservations and limits"));
+        assertThat(e.getMessage(), containsString("-1 (unlimited) or more"));
+        assertThat(host.file(VMX_PATH), is(VMX));
     }
 
     @Test
