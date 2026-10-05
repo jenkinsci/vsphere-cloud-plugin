@@ -1,9 +1,30 @@
 # Standalone ESXi hosts over SSH
 
-Besides vCenter, which is reached through the vSphere API, the plugin can work with a
+Beside vCenter, which is reached through the vSphere SOAP API, the plugin can work with a
 **standalone ESXi host over SSH**: it logs in to the host and runs `vim-cmd` there. This is for
 ESXi hosts that have no vCenter, and whose own API either cannot be written to (as with the free
-license) or is too old to use.
+license) or is too old to use. Broadcom does still publish free editions without official support
+nor advanced features such as vCenter, vModion, DRS, HA etc., but with a constrained vSphere Host
+Client for Web-GUI and console/SSH logins for scripting, "ideal for home labs or dev/test
+environments". As of 2026, [VMWare ESXi 8.0U3e](https://knowledge.broadcom.com/external/article/399823/vmware-esxi-80-update-3e-now-available-a.html)
+version is available for download with a support site login. Older versions may also be available,
+but at this time there seem to be no ESXi 9.x free versions published.
+
+The Jenkins vSphere Cloud plugin offers limited and best-effort (as far as `vim-cmd`, `esxcli`
+and `vmkfstools` activity, outputs and exit codes are stable across versions) support for ESXi
+servers over SSH with a mix of official commands and direct `*.vmx`, `*.vmsd`, `*.vmdk` metadata
+file editing, to offer a common Jenkins interface and data model to both implementations and add
+some features, such as VM cloning from a snapshot, that are not directly supported by the free
+ESXi version but are technically possible.
+
+WARNING: As this code is based on educated guesses from a few available versions, and relies on
+unsupported hacks to do its job, there are no guarantees that it won't eat your data or lose VMs.
+You are strongly encouraged to first test this with a scratch instance of VMWare ESXi (which you
+can and may install for free, also in a VM with at least SATA drivers and VMWare-emulated NIC
+and video drivers). If you are using this for a Jenkins agent farm, it may be prudent to have
+the ESXi server and its storage location (e.g. a dedicated directory shared over NFS from LAN
+or physical host, if this ESXi is a VM itself) dedicated to this role, so any data loss is cheap
+and easy to recover from (a few template VM backups would be it)!
 
 Which of the two a cloud uses is its **Connection type**, chosen in the form of the cloud, and
 what the other settings are depends on it. A cloud that does not say is a vCenter, as always.
