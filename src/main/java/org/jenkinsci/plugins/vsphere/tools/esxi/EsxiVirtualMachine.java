@@ -149,6 +149,16 @@ public final class EsxiVirtualMachine extends VirtualMachine {
         }
     }
 
+    /** The resource pool the VM is in. */
+    @Override
+    public ResourcePool getResourcePool() {
+        try {
+            return host.resourcePoolOf(entry);
+        } catch (org.jenkinsci.plugins.vsphere.tools.VSphereException e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
     private static EsxiConstraintUnsupportedOperationException migration(String what) {
         return new EsxiConstraintUnsupportedOperationException(what
                 + " is not applicable to a standalone ESXi host: there is no other host to move a VM to or to"

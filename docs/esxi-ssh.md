@@ -134,9 +134,29 @@ of its own, which only the newest snapshot has. The disks of a snapshot are read
 file of the master.
 
 What a standalone host does not have is not available: a customization specification, choosing
-a host (or a host selection mode) are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
-note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
+a host (or a host selection mode) are refused where they are given (with an exception that is an `EsxiPlatformConstraint`, see below),
+and a cluster or a VM folder is ignored, with a note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
 `. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
+
+### Resource pools
+
+The *resource pool* of a clone (or deployment) is a resource pool of the host: the clone is
+registered in it. One that the host does not have is made, as the `esxi-linked-clone` scripts did
+(below the top pool, with expandable reservations and normal shares); the name has to be plain, as
+for a clone. "Resources" or nothing means the top pool, which every host has. Pools are listed in
+`/etc/vmware/hostd/pools.xml`, and made and removed with `vim-cmd hostsvc/rsrc/...`; the backend can
+list them, find one, make one and remove one, and a VM can tell which one it is in (the host is
+asked for `resourcePool` in the configuration of the VM, and one it does not name is the top pool).
+
+### What is not there on a standalone host
+
+What a standalone host has no counterpart for (folders, clusters, customization specifications,
+distributed switches, choosing among hosts, moving a VM to another host) is refused with an
+exception that implements `org.jenkinsci.plugins.vsphere.tools.esxi.EsxiPlatformConstraint`, so that
+code can tell, with `e instanceof EsxiPlatformConstraint`, that it is the platform and not a missing
+feature. There are two classes that do: `EsxiConstraintException` (a `VSphereException`) and
+`EsxiConstraintUnsupportedOperationException` (an `UnsupportedOperationException`, for the objects
+that stand in for the vSphere API). Anything else that is refused is an ordinary failure.
 
 ## Templates
 

@@ -41,6 +41,9 @@ final class FakeEsxiHost implements EsxiShell {
         String power = "Powered off";
         String ip;
         String toolsStatus = "toolsOk";
+        /** The id of the resource pool it is in; null for the top one. */
+        String pool;
+
         int nextSnapshotId = 1;
         /** What the last revert / remove of a snapshot was asked as: the words after the id of the VM. */
         String lastSnapshotAction;
@@ -63,6 +66,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The resource pools that were made: name to id. */
+    final Map<String, String> pools = new LinkedHashMap<>();
     /** The host does not take what is changed in a .vmsd when it reloads. */
     boolean ignoreVmsd;
     /** The -d type of the last disk made with vmkfstools -c. */
@@ -316,7 +321,20 @@ final class FakeEsxiHost implements EsxiShell {
             return ok(allVms());
         }
         if (sub.equals("solo/registervm")) {
-            return register(words.get(2), words.get(3));
+            return register(words.get(2), words.get(3), words.size() > 4 ? words.get(4) : null);
+        }
+        if (sub.equals("hostsvc/rsrc/create")) {
+            // --cpu-min-expandable=true ... ha-root-pool name
+            final String name = words.get(words.size() - 1);
+            final String id = "pool-" + (pools.size() + 1);
+            pools.put(name, id);
+            files.put("/etc/vmware/hostd/pools.xml", poolsXml());
+            return ok("'vim.ResourcePool:" + id + "'\n");
+        }
+        if (sub.equals("hostsvc/rsrc/destroy")) {
+            pools.values().remove(words.get(2));
+            files.put("/etc/vmware/hostd/pools.xml", poolsXml());
+            return ok("");
         }
         final FakeVm vm = vms.get(Integer.parseInt(words.get(2)));
         if (vm == null) {
@@ -338,6 +356,10 @@ final class FakeEsxiHost implements EsxiShell {
                 return ok("");
             case "vmsvc/power.reset":
                 return ok("");
+            case "vmsvc/get.config":
+                return ok("Vim.Vm.ConfigInfo {\n   name = \"" + vm.name + "\",\n"
+                        + (vm.pool == null ? "" : "   resourcePool = 'vim.ResourcePool:" + vm.pool + "',\n")
+                        + "}\n");
             case "vmsvc/get.guest":
                 return ok(guest(vm));
             case "vmsvc/snapshot.get":
@@ -571,7 +593,19 @@ final class FakeEsxiHost implements EsxiShell {
         return path;
     }
 
-    private ShellResult register(String vmxPath, String name) {
+    private String poolsXml() {
+        final StringBuilder xml = new StringBuilder("<?xml version=\"1.0\"?>\n<ConfigRoot>\n  <ResourcePools>\n");
+        for (Map.Entry<String, String> pool : pools.entrySet()) {
+            xml.append("    <ResourcePool>\n      <name>")
+                    .append(pool.getKey().replace("&", "&amp;"))
+                    .append("</name>\n      <objID>")
+                    .append(pool.getValue())
+                    .append("</objID>\n    </ResourcePool>\n");
+        }
+        return xml.append("  </ResourcePools>\n</ConfigRoot>\n").toString();
+    }
+
+    private ShellResult register(String vmxPath, String name, String pool) {
         if (!files.containsKey(vmxPath)) {
             return new ShellResult(1, "", "Failed to register: " + vmxPath + " does not exist");
         }
@@ -579,7 +613,10 @@ final class FakeEsxiHost implements EsxiShell {
         final String datastore = below.substring(0, below.indexOf('/'));
         final String relative = below.substring(below.indexOf('/') + 1);
         final int id = nextVmId++;
-        addVm(id, name, datastore, relative, files.get(vmxPath));
+        if (pool != null && !pool.equals("ha-root-pool") && !pools.containsValue(pool)) {
+            return new ShellResult(1, "", "Failed to register: no resource pool " + pool);
+        }
+        addVm(id, name, datastore, relative, files.get(vmxPath)).pool = pool;
         return ok(id + "\n");
     }
 

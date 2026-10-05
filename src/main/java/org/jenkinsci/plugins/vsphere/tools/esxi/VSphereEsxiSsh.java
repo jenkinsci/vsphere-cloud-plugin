@@ -39,10 +39,13 @@ import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.jenkinsci.plugins.vsphere.tools.AbstractVSphere;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -497,6 +500,96 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         return datastores;
     }
 
+    // -- resource pools --
+
+    /** The resource pools of the host, name to id, the top one ("Resources") included. */
+    public Map<String, String> listResourcePools() throws VSphereException {
+        final Map<String, String> pools = new LinkedHashMap<>();
+        pools.put(EsxiResourcePool.ROOT_NAME, EsxiResourcePool.ROOT_ID);
+        final ShellResult xml = shell.run("cat /etc/vmware/hostd/pools.xml");
+        if (xml.succeeded()) {
+            for (Map.Entry<String, String> pool :
+                    EsxiResourcePool.parse(xml.getStdout()).entrySet()) {
+                pools.putIfAbsent(pool.getKey(), pool.getValue());
+            }
+        }
+        return pools;
+    }
+
+    /** The pool with the name, or null if the host has none like that. */
+    public EsxiResourcePool getResourcePoolByName(String name) throws VSphereException {
+        final String id = listResourcePools().get(EsxiResourcePool.isRoot(name) ? EsxiResourcePool.ROOT_NAME : name);
+        return id == null
+                ? null
+                : new EsxiResourcePool(EsxiResourcePool.isRoot(name) ? EsxiResourcePool.ROOT_NAME : name, id);
+    }
+
+    /**
+     * Makes a resource pool (below the top one, with expandable reservations and normal shares, as the
+     * esxi-linked-clone scripts do), unless there is one by this name; returns it either way.
+     */
+    public EsxiResourcePool createResourcePool(String name) throws VSphereException {
+        final EsxiResourcePool known = getResourcePoolByName(name);
+        if (known != null) {
+            return known;
+        }
+        EsxiDatastoreFiles.checkName("The name of the resource pool", name);
+        final String output = vim(VIM_CMD
+                        + " hostsvc/rsrc/create --cpu-min-expandable=true --cpu-shares=normal"
+                        + " --mem-min-expandable=true --mem-shares=normal " + EsxiResourcePool.ROOT_ID + " "
+                        + ShellQuote.quote(name))
+                .stdoutOrThrow("Making the resource pool " + name);
+        final Matcher id =
+                Pattern.compile("vim\\.ResourcePool:([A-Za-z0-9._-]+)").matcher(output);
+        if (!id.find()) {
+            throw new VSphereException(
+                    "The host did not say what the id of the resource pool " + name + " is: " + output.trim());
+        }
+        return new EsxiResourcePool(name, id.group(1));
+    }
+
+    /** Removes the resource pool with the name (not the top one); VMs in it go to the top one. */
+    public void deleteResourcePool(String name) throws VSphereException {
+        if (EsxiResourcePool.isRoot(name)) {
+            throw new EsxiConstraintException("The top resource pool of a host cannot be deleted");
+        }
+        final EsxiResourcePool pool = getResourcePoolByName(name);
+        if (pool == null) {
+            throw new VSphereNotFoundException("Resource pool", name);
+        }
+        vim(VIM_CMD + " hostsvc/rsrc/destroy " + ShellQuote.quote(pool.getId()))
+                .stdoutOrThrow("Removing the resource pool " + name);
+    }
+
+    /** The pool a clone is to be put in: made, if the host has none by this name (the scripts did that too). */
+    private EsxiResourcePool poolForClone(String name, PrintStream log) throws VSphereException {
+        EsxiResourcePool pool = getResourcePoolByName(name);
+        if (pool == null) {
+            if (log != null) {
+                VSphereLogger.vsLogger(log, "Making the resource pool \"" + name + "\", which the host does not have");
+            }
+            pool = createResourcePool(name);
+        }
+        return pool;
+    }
+
+    /**
+     * The resource pool a VM is in, as far as the host says: it prints {@code resourcePool = 'vim.ResourcePool:id'}
+     * in the configuration of the VM. A VM it says nothing of is taken to be in the top pool.
+     */
+    EsxiResourcePool resourcePoolOf(VmEntry vm) throws VSphereException {
+        final String config = vim(vmCommand(vm, "get.config")).stdoutOrThrow("Getting the configuration of " + vm);
+        final Matcher id = Pattern.compile("resourcePool\\s*=\\s*'vim\\.ResourcePool:([A-Za-z0-9._-]+)'")
+                .matcher(config);
+        final String wanted = id.find() ? id.group(1) : EsxiResourcePool.ROOT_ID;
+        for (Map.Entry<String, String> pool : listResourcePools().entrySet()) {
+            if (pool.getValue().equals(wanted)) {
+                return new EsxiResourcePool(pool.getKey(), wanted);
+            }
+        }
+        return new EsxiResourcePool(wanted, wanted);
+    }
+
     // -- cloning, done on the files of the host --
 
     /**
@@ -534,9 +627,9 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
         ignored(jLogger, "cluster", cluster);
         ignored(jLogger, "folder", folderName);
-        if (resourcePoolName != null && !resourcePoolName.trim().isEmpty() && !"Resources".equals(resourcePoolName)) {
-            ignored(jLogger, "resource pool", resourcePoolName);
-        }
+        final String resourcePoolId = EsxiResourcePool.isRoot(resourcePoolName)
+                ? null
+                : poolForClone(resourcePoolName.trim(), jLogger).getId();
         new EsxiVmCloner(this, new EsxiDatastoreFiles(shell), jLogger)
                 .clone(
                         cloneName,
@@ -546,7 +639,8 @@ public class VSphereEsxiSsh extends AbstractVSphere {
                         powerOn,
                         extraConfigParameters,
                         vmSize,
-                        namedSnapshot);
+                        namedSnapshot,
+                        resourcePoolId);
     }
 
     private static void refuse(String what, String value) throws VSphereException {

@@ -133,8 +133,8 @@ class EsxiSnapshotNamesTest {
     void aRunningVmsSnapshotsAreNotRenamed() {
         host.vm(1).power = "Powered on";
 
-        final IllegalStateException e =
-                assertThrows(IllegalStateException.class, () -> esxi.renameVmSnapshot("master", "snap1", "first", "", true));
+        final IllegalStateException e = assertThrows(
+                IllegalStateException.class, () -> esxi.renameVmSnapshot("master", "snap1", "first", "", true));
         assertThat(e.getMessage(), containsString("powered off"));
         assertThat(host.file(VMSD_PATH), is(VMSD));
     }

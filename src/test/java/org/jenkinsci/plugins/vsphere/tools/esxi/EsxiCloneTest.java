@@ -349,14 +349,13 @@ class EsxiCloneTest {
     }
 
     @Test
-    void aClusterAFolderAndAResourcePoolAreIgnoredAndSaid() throws Exception {
-        esxi.cloneVm("clone-01", "master", true, "Pool", "Cluster1", "", "Folder/Sub", false, "", log);
+    void aClusterAndAFolderAreIgnoredAndSaid() throws Exception {
+        esxi.cloneVm("clone-01", "master", true, "", "Cluster1", "", "Folder/Sub", false, "", log);
 
         assertThat(host.vmNamed("clone-01"), is(notNullValue()));
         String said = logBytes.toString();
         assertThat(said, containsString("The cluster \"Cluster1\" is ignored"));
         assertThat(said, containsString("The folder \"Folder/Sub\" is ignored"));
-        assertThat(said, containsString("The resource pool \"Pool\" is ignored"));
     }
 
     @Test

@@ -121,6 +121,7 @@ final class EsxiVmCloner {
      *
      * @param datastoreName where the clone goes; blank for the datastore of the master, which a linked clone has
      *     to be on
+     * @param resourcePoolId the id of the resource pool to put the clone in; null for the top one
      * @param namedSnapshot clone the state of the master at this snapshot; blank for the newest one that can be read.
      *     A full clone can be made of any snapshot; a linked clone only of the newest, as it needs a disk that is a
      *     change of what the snapshot froze, with no changes of its own
@@ -133,7 +134,8 @@ final class EsxiVmCloner {
             boolean powerOn,
             @CheckForNull Map<String, String> extraConfigParameters,
             @CheckForNull VmSize vmSize,
-            @CheckForNull String namedSnapshot)
+            @CheckForNull String namedSnapshot,
+            @CheckForNull String resourcePoolId)
             throws VSphereException {
         EsxiDatastoreFiles.checkName("The name of the clone", cloneName);
         final List<VmEntry> vms = host.listVms();
@@ -191,7 +193,7 @@ final class EsxiVmCloner {
             files.write(cloneVmx, vmx.toString());
 
             say("Registering \"" + cloneName + "\" with the host");
-            registeredId = register(cloneVmx, cloneName);
+            registeredId = register(cloneVmx, cloneName, resourcePoolId);
             if (powerOn) {
                 say("Powering on \"" + cloneName + "\"");
                 host.vim(VIM_CMD + " vmsvc/power.on " + ShellQuote.id(registeredId))
@@ -251,9 +253,10 @@ final class EsxiVmCloner {
         }
     }
 
-    private int register(String vmxPath, String name) throws VSphereException {
-        final String output = host.vim(
-                        VIM_CMD + " solo/registervm " + ShellQuote.quote(vmxPath) + " " + ShellQuote.quote(name))
+    private int register(String vmxPath, String name, @CheckForNull String resourcePoolId) throws VSphereException {
+        final String output = host.vim(VIM_CMD + " solo/registervm " + ShellQuote.quote(vmxPath) + " "
+                        + ShellQuote.quote(name)
+                        + (resourcePoolId == null ? "" : " " + ShellQuote.quote(resourcePoolId)))
                 .stdoutOrThrow("Registering " + vmxPath);
         final Matcher m = Pattern.compile("(\\d+)\\s*$").matcher(output.trim());
         if (!m.find()) {
