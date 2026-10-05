@@ -263,7 +263,9 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             return "Standalone ESXi host over SSH";
         }
 
-        public ListBoxModel doFillHostKeyPolicyItems() {
+        @RequirePOST
+        public ListBoxModel doFillHostKeyPolicyItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             final ListBoxModel items = new ListBoxModel();
             items.add("Only the host key with the fingerprint below", EsxiHostKeyPolicy.FINGERPRINT.name());
             items.add(
@@ -299,18 +301,28 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                     .includeCurrentValue(credentialsId);
         }
 
-        public FormValidation doCheckCredentialsId(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckCredentialsId(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return Util.fixEmptyAndTrim(value) == null
                     ? FormValidation.error("Choose a username with password, or SSH username with private key")
                     : FormValidation.ok();
         }
 
-        public FormValidation doCheckPort(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckPort(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return FormValidation.validatePositiveInteger(value);
         }
 
+        @RequirePOST
         public FormValidation doCheckHostKeyFingerprint(
-                @QueryParameter String value, @QueryParameter String hostKeyPolicy) {
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String value,
+                @QueryParameter String hostKeyPolicy) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             final String fingerprint = Util.fixEmptyAndTrim(value);
             if (fingerprint == null) {
                 return EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(hostKeyPolicy)
@@ -328,7 +340,10 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             return FormValidation.ok();
         }
 
-        public FormValidation doCheckHostKeyPolicy(@QueryParameter String value) {
+        @RequirePOST
+        public FormValidation doCheckHostKeyPolicy(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String value) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             if (EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(value)) {
                 return FormValidation.warning("Warning: This is not secure.");
             }

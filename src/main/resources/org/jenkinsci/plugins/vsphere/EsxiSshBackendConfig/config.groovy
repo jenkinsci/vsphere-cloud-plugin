@@ -8,7 +8,7 @@ st = namespace("jelly:stapler")
 st.adjunct(includes:"org.jenkinsci.plugins.vsphere.esxiFirstUse")
 
 f.entry(title:_("SSH Port"), field:"port") {
-    f.number(clazz:"required", min:1, max:65535, step:1, default:22)
+    f.number(clazz:"required", min:1, max:65535, step:1, default:22, checkMethod:"post")
 }
 
 f.entry(title:_("Credentials"), field:"credentialsId") {
@@ -16,11 +16,11 @@ f.entry(title:_("Credentials"), field:"credentialsId") {
 }
 
 f.entry(title:_("Trust the host key"), field:"hostKeyPolicy") {
-    f.select(clazz:"esxi-host-key-policy")
+    f.select(clazz:"esxi-host-key-policy", checkMethod:"post")
 }
 
 f.entry(title:_("Host key fingerprint"), field:"hostKeyFingerprint") {
-    f.textbox()
+    f.textbox(checkMethod:"post")
 }
 
 f.advanced {

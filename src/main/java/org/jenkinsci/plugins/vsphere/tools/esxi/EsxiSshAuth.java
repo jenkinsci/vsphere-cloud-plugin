@@ -89,11 +89,11 @@ public abstract class EsxiSshAuth {
     }
 
     private static final class Password extends EsxiSshAuth {
-        private final String password;
+        private final Secret password;
 
         Password(String username, String password) {
             super(username);
-            this.password = password == null ? "" : password;
+            this.password = Secret.fromString(password == null ? "" : password);
         }
 
         @Override
@@ -106,14 +106,14 @@ public abstract class EsxiSshAuth {
             // Hosts differ in whether a password is taken as such or only when asked for by the
             // keyboard-interactive method, so what the server offers decides.
             if (connection.isAuthMethodAvailable(getUsername(), "password")
-                    && connection.authenticateWithPassword(getUsername(), password)) {
+                    && connection.authenticateWithPassword(getUsername(), password.getPlainText())) {
                 return;
             }
             if (connection.isAuthMethodAvailable(getUsername(), "keyboard-interactive")
                     && connection.authenticateWithKeyboardInteractive(
                             getUsername(), (name, instruction, numPrompts, prompt, echo) -> {
                                 final String[] answers = new String[numPrompts];
-                                Arrays.fill(answers, password);
+                                Arrays.fill(answers, password.getPlainText());
                                 return answers;
                             })) {
                 return;
@@ -124,12 +124,12 @@ public abstract class EsxiSshAuth {
 
     private static final class PrivateKey extends EsxiSshAuth {
         private final List<String> privateKeys;
-        private final String passphrase;
+        private final @CheckForNull Secret passphrase;
 
         PrivateKey(String username, List<String> privateKeys, @CheckForNull String passphrase) {
             super(username);
             this.privateKeys = privateKeys == null ? new ArrayList<>() : new ArrayList<>(privateKeys);
-            this.passphrase = passphrase;
+            this.passphrase = passphrase == null ? null : Secret.fromString(passphrase);
         }
 
         @Override
@@ -145,7 +145,8 @@ public abstract class EsxiSshAuth {
             String lastProblem = null;
             for (String key : privateKeys) {
                 try {
-                    if (connection.authenticateWithPublicKey(getUsername(), key.toCharArray(), passphrase)) {
+                    if (connection.authenticateWithPublicKey(
+                            getUsername(), key.toCharArray(), passphrase == null ? null : passphrase.getPlainText())) {
                         return;
                     }
                 } catch (IOException e) {
