@@ -163,6 +163,11 @@ final class EsxiDatastoreFiles {
         shell.run("rm -rf " + ShellQuote.quote(directory)).stdoutOrThrow("Removing " + directory);
     }
 
+    /** The shell that the files are reached through. */
+    EsxiShell shell() {
+        return shell;
+    }
+
     /** Runs a command that is made up of quoted parts, which the caller made safe. */
     ShellResult run(String command) throws VSphereException {
         return shell.run(command);

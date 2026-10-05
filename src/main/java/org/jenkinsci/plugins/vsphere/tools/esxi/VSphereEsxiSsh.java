@@ -784,6 +784,19 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    /**
+     * Runs a command that can take as long as it takes, such as the copy of a large disk: there is no limit to its
+     * time (as there is for the other commands), it is given up on when it has printed nothing for the idle time.
+     */
+    void runUntilIdle(String command, String what, int idleSeconds) throws VSphereException {
+        final ShellResult result = shell.stream(command, null, null, idleSeconds);
+        if (!result.succeeded()) {
+            final String why = result.getStderr().trim();
+            throw new VSphereException(
+                    what + " failed (exit code " + result.getExitCode() + ")" + (why.isEmpty() ? "" : ": " + why));
+        }
+    }
+
     /** Runs a command that takes a while, like the copy of a disk, within the time limit of commands. */
     void runLong(String command, String what) throws VSphereException {
         vim(command).stdoutOrThrow(what);

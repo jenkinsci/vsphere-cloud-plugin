@@ -220,7 +220,8 @@ final class FakeEsxiHost implements EsxiShell {
 
     /** True if the command moves data through its input or output, which only {@link #stream} can run. */
     boolean streams(String command) {
-        return PACK.matcher(command).matches()
+        return command.startsWith("vmkfstools ")
+                || PACK.matcher(command).matches()
                 || UNPACK.matcher(command).matches()
                 || command.equals(FakeEsxiSshServer.HANG);
     }
@@ -234,6 +235,18 @@ final class FakeEsxiHost implements EsxiShell {
     public ShellResult stream(
             String command, java.io.InputStream stdin, java.io.OutputStream stdout, int idleTimeoutSeconds)
             throws VSphereException {
+        if (command.startsWith("vmkfstools ")) {
+            // not a stream, but a command that takes long: what it prints is what it prints
+            final ShellResult result = run(command);
+            try {
+                if (stdout != null) {
+                    stdout.write(result.getStdout().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                }
+            } catch (java.io.IOException e) {
+                return new ShellResult(1, "", e.getMessage());
+            }
+            return new ShellResult(result.getExitCode(), "", result.getStderr());
+        }
         commands.add(command);
         try {
             for (Map.Entry<String, String> failure : failures.entrySet()) {
@@ -421,6 +434,15 @@ final class FakeEsxiHost implements EsxiShell {
         if (words.equals(List.of("hostname"))) {
             return ok(hostname + ".example.com\n");
         }
+        if (words.size() == 2 && words.get(0).equals("cksum")) {
+            final String text = files.get(words.get(1));
+            if (text == null) {
+                return new ShellResult(1, "", "cksum: " + words.get(1) + ": No such file or directory");
+            }
+            final java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+            crc.update(text.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+            return ok(crc.getValue() + " " + text.length() + " " + words.get(1) + "\n");
+        }
         if (words.size() == 2 && words.get(0).equals("which")) {
             return tools.contains(words.get(1)) ? ok("/bin/" + words.get(1) + "\n") : new ShellResult(1, "", "");
         }
@@ -603,6 +625,15 @@ final class FakeEsxiHost implements EsxiShell {
     private ShellResult onFiles(List<String> words) {
         switch (words.get(0)) {
             case "mkdir":
+                if (!words.get(1).equals("-p")) {
+                    // mkdir dir: not where it is already
+                    if (directories.contains(words.get(1))) {
+                        return new ShellResult(
+                                1, "", "mkdir: can't create directory '" + words.get(1) + "': File exists");
+                    }
+                    addDirectories(words.get(1));
+                    return ok("");
+                }
                 // mkdir -p dir
                 addDirectories(words.get(2));
                 return ok("");
@@ -682,19 +713,45 @@ final class FakeEsxiHost implements EsxiShell {
                 if (!words.get(1).equals("-i")) {
                     return vmkfstoolsOnDisk(words);
                 }
-                // vmkfstools -i source destination -d thin
+                // vmkfstools -i source destination -d thin   or   vmkfstools -i source -d 2gbsparse destination
                 final String source = words.get(2);
-                final String destination = words.get(3);
+                final int type = words.indexOf("-d");
+                final String format = type < 0 ? "thin" : words.get(type + 1);
+                final String destination = words.get(3).equals("-d") ? words.get(5) : words.get(3);
                 if (!files.containsKey(source)) {
                     return new ShellResult(1, "", "Failed to open disk '" + source + "'");
                 }
                 final String flat = destination.replace(".vmdk", "-flat.vmdk");
+                final String sparse = destination.replace(".vmdk", "-s001.vmdk");
+                final String sourceDescriptor = files.get(source);
+                final String sourceDirectory = source.substring(0, source.lastIndexOf('/'));
+                final java.util.regex.Matcher extent = java.util.regex.Pattern.compile("(?m)^RW \\d+ \\w+ \"([^\"]+)\"")
+                        .matcher(sourceDescriptor);
+                final String extentFile = extent.find() ? sourceDirectory + "/" + extent.group(1) : null;
+                final String content = extentFile != null && files.containsKey(extentFile)
+                        ? files.get(extentFile)
+                        : "COPY OF " + source;
+                if (format.equals("2gbsparse")) {
+                    files.put(
+                            destination,
+                            "# Disk DescriptorFile\nversion=1\nCID=11112222\ncreateType=\"twoGbMaxExtentSparse\"\n\n"
+                                    + "# Extent description\nRW 100 SPARSE \""
+                                    + sparse.substring(sparse.lastIndexOf('/') + 1)
+                                    + "\"\n");
+                    files.put(sparse, "SPARSE:" + (content.startsWith("SPARSE:") ? content.substring(7) : content));
+                    return ok("Destination disk format: sparse with 2GB maximum extent size\nClone: 100% done.\n");
+                }
                 files.put(
                         destination,
-                        "# Disk DescriptorFile\nversion=1\ncreateType=\"vmfs\"\n\n# Extent description\nRW 100 VMFS \""
+                        "# Disk DescriptorFile\nversion=1\nCID=33334444\ncreateType=\"vmfs\"\n\n# Extent description\nRW 100 VMFS \""
                                 + flat.substring(flat.lastIndexOf('/') + 1)
                                 + "\"\n");
-                files.put(flat, "COPY OF " + source);
+                // an import of a sparse export brings back what was in it; a copy of any other disk is "COPY OF" it
+                files.put(
+                        flat,
+                        sourceDescriptor.contains("twoGbMaxExtentSparse") && content.startsWith("SPARSE:")
+                                ? content.substring(7)
+                                : "COPY OF " + source);
                 return ok("Clone: 100% done.\n");
             default:
                 return null;

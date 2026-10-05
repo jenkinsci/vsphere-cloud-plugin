@@ -87,7 +87,7 @@ final class EsxiVmCloner {
     }
 
     /** A disk of the master: where the VM says it is. */
-    private static final class Disk {
+    static final class Disk {
         final String prefix;
         final String fileName;
 
@@ -310,7 +310,7 @@ final class EsxiVmCloner {
 
     // -- the disks --
 
-    private List<Disk> disksOf(VmxFile vmx) {
+    static List<Disk> disksOf(VmxFile vmx) {
         final List<Disk> disks = new ArrayList<>();
         for (int b = 0; b < BUSES.length; b++) {
             for (int controller = 0; controller < CONTROLLERS[b]; controller++) {
@@ -433,7 +433,7 @@ final class EsxiVmCloner {
 
     // -- the VM --
 
-    private void prepareVmx(
+    static void prepareVmx(
             VmxFile vmx,
             String cloneName,
             String sourceName,

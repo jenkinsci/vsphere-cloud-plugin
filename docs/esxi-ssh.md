@@ -178,6 +178,32 @@ compressed on the source. (Cloning does not use it yet; it is what it will be bu
 * **Time stamps** are carried over by `tar`, so that a file is as old on the target as on the source.
 * Only plain names in folders of datastores are accepted.
 
+## Replicas of a master on a host that does not see it
+
+A host can only clone a master whose files it can read. For a host that cannot (it has no datastore
+in common with the master's), a **replica** of the master can be made on it, and clones made of
+that. A replica is a VM of its own, always powered off:
+
+* It has the disks of the master, **as they were at a snapshot** (or as they are now, if the master
+  is not running), each as one thin disk, and **one snapshot**, `jenkins-replica-base`, which is what
+  linked clones of it are made of. Being made of a snapshot of its own, a linked clone can be made of
+  *any* snapshot of the master this way.
+* The disks are **exported on the source host in a sparse format** (`vmkfstools -d 2gbsparse`), which
+  holds only what is written on a disk, so that empty parts of thin disks are neither read, sent nor
+  written; they are sent through the controller by the relay (above), their **checksums** (`cksum`)
+  are compared on both hosts, and they are **imported as thin disks** (`vmkfstools -d thin`).
+* A replica **never changes**. Its name is `jenkins-replica-<master>-<digest>`, the digest being of where
+  the master is (its datastore's UUID and path), the snapshot, and the `CID` of each disk (which a disk
+  file changes when it is written). A master that has changed gets a **new replica**, and the old one
+  stays (for the clones that are made of it, which the check above protects too); remove the ones that are not wanted.
+  A replica that is there is used again, without looking at the master's data, only at its disks' `CID`s.
+* Where the replica is from is kept in its `.vmx`: `jenkins.replica.source`, `.state`, `.stamp` (the CIDs)
+  and `.created`.
+* Two builds that want the same replica make it once: the other waits, and says so in its log.
+* What is made of a replica that fails (the folder, the VM, the export on the source) is removed.
+* A replica is a copy of the data: it takes the space of what is written on the disks, on the datastore of
+  the target host that has the most room (or the one asked for).
+
 ## Linked clones and their master
 
 A linked clone is a change of the disks of its master, which it names by their path; the host keeps
