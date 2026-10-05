@@ -1,0 +1,7 @@
+<div>
+  For a cloud of several ESXi hosts: a host that does not have the datastore of a master may still make clones of
+  it, of a <i>replica</i> of the master that is made on it first (the disks are copied through the controller, as
+  thin disks, once, and the replica is used again as long as the master has not changed). This takes the
+  space and the time of copying what is written on the disks of the master; it is off, so that nothing is copied
+  that was not asked for. See the documentation of the plugin on ESXi hosts over SSH.
+</div>

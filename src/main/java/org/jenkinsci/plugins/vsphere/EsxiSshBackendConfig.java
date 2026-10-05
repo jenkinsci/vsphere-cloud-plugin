@@ -53,6 +53,7 @@ import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiConnectionTestResult;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyInfo;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyPolicy;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyStore;
+import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiRelay;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshAuth;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshSettings;
 import org.jenkinsci.plugins.vsphere.tools.esxi.TrileadEsxiShell;
@@ -78,6 +79,8 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
 
     private static final Logger LOGGER = Logger.getLogger(EsxiSshBackendConfig.class.getName());
 
+    static final int DEFAULT_TRANSFER_IDLE_SECONDS = 300;
+
     private @CheckForNull String credentialsId;
     private int port = EsxiSshSettings.DEFAULT_PORT;
     private EsxiHostKeyPolicy hostKeyPolicy = EsxiHostKeyPolicy.FINGERPRINT;
@@ -85,6 +88,9 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
     private int connectTimeoutSeconds = EsxiSshSettings.DEFAULT_CONNECT_TIMEOUT_SECONDS;
     private int commandTimeoutSeconds = EsxiSshSettings.DEFAULT_COMMAND_TIMEOUT_SECONDS;
     private List<EsxiSshHost> additionalHosts = new ArrayList<>();
+    private boolean replicateMasters;
+    private EsxiRelay.Compression relayCompression = EsxiRelay.Compression.PIGZ;
+    private int transferIdleSeconds = DEFAULT_TRANSFER_IDLE_SECONDS;
 
     @DataBoundConstructor
     public EsxiSshBackendConfig(@CheckForNull String credentialsId) {
@@ -156,6 +162,36 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 }
             }
         }
+    }
+
+    /** Whether a clone may be made on a host that does not see its master, of a replica that is made there. */
+    public boolean isReplicateMasters() {
+        return replicateMasters;
+    }
+
+    @DataBoundSetter
+    public void setReplicateMasters(boolean replicateMasters) {
+        this.replicateMasters = replicateMasters;
+    }
+
+    /** How the files of a replica are compressed on their way between hosts. */
+    public EsxiRelay.Compression getRelayCompression() {
+        return relayCompression == null ? EsxiRelay.Compression.PIGZ : relayCompression;
+    }
+
+    @DataBoundSetter
+    public void setRelayCompression(@CheckForNull EsxiRelay.Compression compression) {
+        this.relayCompression = compression == null ? EsxiRelay.Compression.PIGZ : compression;
+    }
+
+    /** How long nothing may move in a transfer between hosts, or in the long command of a copy, before it is given up on. */
+    public int getTransferIdleSeconds() {
+        return transferIdleSeconds > 0 ? transferIdleSeconds : DEFAULT_TRANSFER_IDLE_SECONDS;
+    }
+
+    @DataBoundSetter
+    public void setTransferIdleSeconds(int seconds) {
+        this.transferIdleSeconds = seconds > 0 ? seconds : DEFAULT_TRANSFER_IDLE_SECONDS;
     }
 
     protected Object readResolve() {
@@ -435,7 +471,9 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
                 }
             });
         }
-        return new VSphereEsxiCluster(connectors);
+        return new VSphereEsxiCluster(
+                connectors,
+                new VSphereEsxiCluster.Options(replicateMasters, getRelayCompression(), getTransferIdleSeconds()));
     }
 
     @Override
@@ -456,6 +494,17 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         public ListBoxModel doFillHostKeyPolicyItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return hostKeyPolicyItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillRelayCompressionItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            final ListBoxModel items = new ListBoxModel();
+            items.add("pigz (fast; the default)", EsxiRelay.Compression.PIGZ.name());
+            items.add("gzip", EsxiRelay.Compression.GZIP.name());
+            items.add("bzip2 (smaller, slower)", EsxiRelay.Compression.BZIP2.name());
+            items.add("None", EsxiRelay.Compression.NONE.name());
+            return items;
         }
 
         @RequirePOST

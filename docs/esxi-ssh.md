@@ -371,10 +371,19 @@ and the load of a host is not measured. What it does:
   see its files.
 * **Datastores** are those of all the hosts; one that several have under the same name is listed once.
 
+**Hosts that do not share a datastore with the master** can be used too, with the setting
+**Make replicas of masters** (`replicateMasters`, off by default so that nothing is copied that was not
+asked for): a clone that is to be made on such a host, one that is asked for or that the host selection
+picks, is made of a **replica** of the master that is made on that host the first time ([see
+replicas](#replicas-of-a-master-on-a-host-that-does-not-see-it)). The replica is made through the controller, with the
+compression that is set (`relayCompression`: `PIGZ`, the default, `GZIP`, `BZIP2` or `NONE`) and no time limit, only
+`transferIdleSeconds` (300) of nothing moving. Host selection does not weigh the cost of making a replica: to keep
+clones of a big master off hosts that have none yet, name the host or the candidates.
+
 What it does not do: moving a VM to another host (cold migration is possible by hand: power it off,
-unregister it on one host, register its `.vmx` on the other, from the same datastore), making a copy
-of a master on each host (where each has its own local datastore), or any use of hosts that do not share
-a datastore with the master. Without shared storage, each host is only good for the VMs that are on it.
+unregister it on one host, register its `.vmx` on the other, from the same datastore), or
+keeping replicas up to date (a master that has changed gets a new replica, and the old ones stay until
+they are removed).
 
 ## The layout of the settings of a connection
 

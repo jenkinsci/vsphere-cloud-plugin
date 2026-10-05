@@ -38,6 +38,7 @@ import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyPolicy;
+import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiRelay;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -139,6 +140,13 @@ class EsxiConfigurationAsCodeTest {
         assertThat(own.getCredentialsId(), is("esxi-c"));
         assertThat(own.getHostKeyPolicy(), is(EsxiHostKeyPolicy.ACCEPT_ANY));
         assertThat(own.getHostKeyFingerprint(), is("SHA256:cccccccccccccccccccccccccccccccccccccccccc"));
+        assertThat(esxi.isReplicateMasters(), is(true));
+        assertThat(esxi.getRelayCompression(), is(EsxiRelay.Compression.GZIP));
+        assertThat(esxi.getTransferIdleSeconds(), is(120));
+        // the hosts that have no more are as they were, and do not make replicas
+        assertThat(connectionOf(r, 0).getEsxiSsh().isReplicateMasters(), is(false));
+        assertThat(connectionOf(r, 0).getEsxiSsh().getRelayCompression(), is(EsxiRelay.Compression.PIGZ));
+        assertThat(connectionOf(r, 0).getEsxiSsh().getTransferIdleSeconds(), is(300));
         // a host that has none is on its own
         assertThat(connectionOf(r, 0).getEsxiSsh().getAdditionalHosts().isEmpty(), is(true));
     }
@@ -152,6 +160,11 @@ class EsxiConfigurationAsCodeTest {
         assertThat(exported, containsString("host: \"esxi-b.example.com\""));
         assertThat(exported, containsString("host: \"esxi-c.example.com\""));
         assertThat(exported.split("additionalHosts:", -1).length - 1, is(1));
+        // what is not the default is exported, and only where it is
+        assertThat(exported.split("replicateMasters:", -1).length - 1, is(1));
+        assertThat(exported, containsString("relayCompression: GZIP"));
+        assertThat(exported, containsString("transferIdleSeconds: 120"));
+        assertThat(exported.split("relayCompression:", -1).length - 1, is(1));
     }
 
     private static String exportedClouds() throws Exception {

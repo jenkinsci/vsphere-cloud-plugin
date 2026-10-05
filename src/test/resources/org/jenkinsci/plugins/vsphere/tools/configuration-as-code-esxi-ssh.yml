@@ -59,6 +59,9 @@ jenkins:
           backend:
             esxiSsh:
               credentialsId: "esxi-ssh"
+              replicateMasters: true
+              relayCompression: GZIP
+              transferIdleSeconds: 120
               additionalHosts:
                 - host: "esxi-b.example.com"
                 - host: "esxi-c.example.com"

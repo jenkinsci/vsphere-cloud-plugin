@@ -66,6 +66,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** Whether a snapshot also makes what a real one does: an entry in the .vmsd, and a delta that the VM then has. */
+    boolean realSnapshots;
     /** The tools that are in /bin, as far as which is asked. */
     final java.util.Set<String> tools = new java.util.HashSet<>(java.util.List.of("pigz", "gzip", "bzip2"));
     /** Volumes this host calls by another name than the files are kept under: its label, to the one they are under. */
@@ -310,6 +312,52 @@ final class FakeEsxiHost implements EsxiShell {
         }
     }
 
+    /**
+     * What taking a snapshot does to the files: its disks, as they are, are what the snapshot froze (the .vmsd says
+     * which they are), and each gets a delta that is empty, which the VM writes to from then on.
+     */
+    private void writeSnapshotFiles(FakeVm vm, String[] snapshot) {
+        final String vmxPath = "/vmfs/volumes/" + vm.datastore + "/" + vm.vmxRelativePath;
+        final String directory = vmxPath.substring(0, vmxPath.lastIndexOf('/'));
+        final String vmsdPath = vmxPath.replaceAll("\\.vmx$", ".vmsd");
+        final VmxFile vmx = VmxFile.parse(files.get(vmxPath));
+        final VmxFile vmsd = VmxFile.parse(files.getOrDefault(vmsdPath, ""));
+        int entry = 0;
+        while (vmsd.get("snapshot" + entry + ".uid") != null) {
+            entry++;
+        }
+        vmsd.put("snapshot" + entry + ".uid", snapshot[4]);
+        vmsd.put("snapshot" + entry + ".displayName", snapshot[0]);
+        int disk = 0;
+        for (String key : new ArrayList<>(vmx.keys())) {
+            final String lower = key.toLowerCase();
+            if (!lower.matches("(scsi|sata|ide|nvme)\\d+:\\d+\\.filename")
+                    || !vmx.get(key).endsWith(".vmdk")) {
+                continue;
+            }
+            final String prefix = key.substring(0, key.indexOf('.'));
+            final String current = vmx.get(key);
+            vmsd.put("snapshot" + entry + ".disk" + disk + ".fileName", current);
+            vmsd.put("snapshot" + entry + ".disk" + disk + ".node", prefix);
+            disk++;
+            final String base =
+                    current.substring(0, current.length() - ".vmdk".length()).replaceAll("-\\d{6}$", "");
+            final String delta = base + String.format("-%06d", Integer.parseInt(snapshot[4]));
+            files.put(
+                    directory + "/" + delta + ".vmdk",
+                    "# Disk DescriptorFile\nversion=1\nCID=5555666" + snapshot[4] + "\nparentCID=ffffffff\n"
+                            + "createType=\"seSparse\"\nparentFileNameHint=\"" + current + "\"\n\n"
+                            + "# Extent description\nRW 100 SESPARSE \"" + delta + "-sesparse.vmdk\"\n");
+            files.put(directory + "/" + delta + "-sesparse.vmdk", "HEAD");
+            vmx.put(key, delta + ".vmdk");
+        }
+        vmsd.put("snapshot.current", snapshot[4]);
+        vmsd.put("snapshot.numSnapshots", Integer.toString(entry + 1));
+        files.put(vmxPath, vmx.toString());
+        files.put(vmsdPath, vmsd.toString());
+        vm.vmx = vmx.toString();
+    }
+
     /** Has this host see the same datastores as the other: the same files, folders, locks and names for them. */
     void shareStorageWith(FakeEsxiHost other) {
         this.files = other.files;
@@ -536,6 +584,9 @@ final class FakeEsxiHost implements EsxiShell {
                 vm.snapshots.add(new String[] {
                     words.get(3), words.get(4), words.get(5), words.get(6), Integer.toString(vm.nextSnapshotId++)
                 });
+                if (realSnapshots) {
+                    writeSnapshotFiles(vm, vm.snapshots.get(vm.snapshots.size() - 1));
+                }
                 return ok("Create Snapshot:\n");
             case "vmsvc/snapshot.revert":
             case "vmsvc/snapshot.remove":

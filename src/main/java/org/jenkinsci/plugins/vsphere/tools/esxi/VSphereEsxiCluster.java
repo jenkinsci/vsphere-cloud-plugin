@@ -83,13 +83,35 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         }
     }
 
+    /** What is asked of the cluster besides the hosts. */
+    public static final class Options {
+        /** Nothing special: no replicas. */
+        public static final Options DEFAULT = new Options(false, EsxiRelay.Compression.PIGZ, 300);
+
+        private final boolean replicateMasters;
+        private final EsxiRelay.Compression compression;
+        private final int idleSeconds;
+
+        public Options(boolean replicateMasters, EsxiRelay.Compression compression, int idleSeconds) {
+            this.replicateMasters = replicateMasters;
+            this.compression = compression == null ? EsxiRelay.Compression.PIGZ : compression;
+            this.idleSeconds = idleSeconds > 0 ? idleSeconds : 300;
+        }
+    }
+
     private final List<Member> members = new ArrayList<>();
+    private final Options options;
     private boolean closed;
 
     /**
      * Connects to the hosts, those that can be reached at least; fails if none can.
      */
     public VSphereEsxiCluster(List<Connector> connectors) throws VSphereException {
+        this(connectors, Options.DEFAULT);
+    }
+
+    public VSphereEsxiCluster(List<Connector> connectors, Options options) throws VSphereException {
+        this.options = options == null ? Options.DEFAULT : options;
         for (Connector connector : connectors) {
             members.add(new Member(connector));
         }
@@ -404,6 +426,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
 
         // the hosts that see the files of the master, and the datastore the clone is to be on
         final List<VSphereEsxiSsh> able = new ArrayList<>();
+        final List<VSphereEsxiSsh> replicable = new ArrayList<>();
         final List<String> unable = new ArrayList<>();
         final Map<VSphereEsxiSsh, VmEntry> masterOn = new LinkedHashMap<>();
         // The datastore of the master is the same one for the hosts that have the volume with the same UUID, which
@@ -441,6 +464,9 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
                         || host.fileExists("/vmfs/volumes/" + datastoreName.trim());
                 if (seesMaster && seesDatastore) {
                     able.add(host);
+                } else if (options.replicateMasters && !seesMaster && seesDatastore) {
+                    // it can have a replica of the master, and make the clone of that
+                    replicable.add(host);
                 } else {
                     unable.add(host.getLabel()
                             + (seesMaster
@@ -453,17 +479,21 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
             }
         }
 
-        List<VSphereEsxiSsh> candidates = able;
+        final List<VSphereEsxiSsh> usable = new ArrayList<>(able);
+        usable.addAll(replicable);
+        List<VSphereEsxiSsh> candidates = usable;
         if (hostName != null && !hostName.trim().isEmpty()) {
-            final VSphereEsxiSsh asked = findHost(hostName, able);
+            final VSphereEsxiSsh asked = findHost(hostName, usable);
             if (asked == null) {
                 throw new VSphereException("The host \"" + hostName + "\" cannot be used for the clone of " + sourceName
-                        + ": it is not up, or does not see the files of " + sourceName + " (" + unable + ")");
+                        + ": it is not up, or does not see the files of " + sourceName
+                        + (options.replicateMasters ? "" : " (and replicas of masters are not made)") + " (" + unable
+                        + ")");
             }
             candidates = List.of(asked);
         } else if (hostSelectionCandidates != null && !hostSelectionCandidates.isEmpty()) {
             final List<VSphereEsxiSsh> allowed = new ArrayList<>();
-            for (VSphereEsxiSsh host : able) {
+            for (VSphereEsxiSsh host : usable) {
                 if (namedIn(host, hostSelectionCandidates)) {
                     allowed.add(host);
                 }
@@ -486,7 +516,42 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
             VSphereLogger.vsLogger(
                     jLogger,
                     "Making the clone \"" + cloneName + "\" of \"" + sourceName + "\" on the ESXi host "
-                            + target.getLabel() + (target == owner ? "" : ", where it is not registered"));
+                            + target.getLabel()
+                            + (target == owner
+                                    ? ""
+                                    : replicable.contains(target)
+                                            ? ", from a replica"
+                                            : ", where it is not registered"));
+        }
+        if (replicable.contains(target)) {
+            final EsxiVirtualMachine replica = EsxiReplica.ensure(
+                    owner,
+                    masterEntry,
+                    stateToReplicate(owner, masterEntry, namedSnapshot, useCurrentSnapshot),
+                    target,
+                    datastoreName,
+                    options.compression,
+                    options.idleSeconds,
+                    jLogger);
+            // the replica is what the clone is of, at its one snapshot, which is the state that was asked for
+            target.cloneFrom(
+                    null,
+                    null,
+                    cloneName,
+                    replica.getName(),
+                    linkedClone,
+                    resourcePoolName,
+                    cluster,
+                    datastoreName,
+                    folderName,
+                    true,
+                    null,
+                    powerOn,
+                    extraConfigParameters,
+                    customizationSpec,
+                    vmSize,
+                    jLogger);
+            return;
         }
         target.cloneFrom(
                 target == owner ? null : owner,
@@ -505,6 +570,40 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
                 customizationSpec,
                 vmSize,
                 jLogger);
+    }
+
+    /**
+     * The snapshot of the master (by the number the host that has it knows it by) whose state a replica is to have: the
+     * one that is named, or the one that the master is at if the clone is of that; none, for the state it has now.
+     */
+    @CheckForNull
+    private static String stateToReplicate(
+            VSphereEsxiSsh owner, VmEntry master, @CheckForNull String namedSnapshot, boolean useCurrentSnapshot)
+            throws VSphereException {
+        final boolean named = namedSnapshot != null && !namedSnapshot.trim().isEmpty();
+        if (named && useCurrentSnapshot) {
+            throw new VSphereException("It is not valid to name the snapshot \"" + namedSnapshot
+                    + "\" to clone AND also say that the latest snapshot is to be used: choose one, or neither");
+        }
+        if (named) {
+            final String id = owner.snapshotIdByName(master, namedSnapshot);
+            if (id == null) {
+                throw new VSphereNotFoundException("Snapshot", namedSnapshot);
+            }
+            return id;
+        }
+        if (!useCurrentSnapshot) {
+            return null;
+        }
+        final String vmsd = EsxiSnapshotMetadata.pathFor(master.getVmxFileSystemPath());
+        final String current = owner.files().exists(vmsd)
+                ? EsxiSnapshotMetadata.parse(owner.files().read(vmsd)).currentUid()
+                : null;
+        if (current == null) {
+            throw new VSphereNotFoundException(
+                    "Snapshot", null, "Source VM \"" + master.getName() + "\" requires at least one snapshot.");
+        }
+        return current;
     }
 
     /** The mode that asks for the host with the fewest VMs that are on. */

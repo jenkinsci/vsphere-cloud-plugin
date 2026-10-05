@@ -28,6 +28,15 @@ f.entry(title:_("More ESXi hosts"), field:"additionalHosts") {
 }
 
 f.advanced {
+    f.entry(title:_("Make replicas of masters"), field:"replicateMasters") {
+        f.checkbox()
+    }
+    f.entry(title:_("Compression of copies between hosts"), field:"relayCompression") {
+        f.select()
+    }
+    f.entry(title:_("Idle time of a transfer in seconds"), field:"transferIdleSeconds") {
+        f.number(clazz:"required", min:1, step:1, default:300)
+    }
     f.entry(title:_("Connect timeout in seconds"), field:"connectTimeoutSeconds") {
         f.number(clazz:"required", min:1, step:1, default:30)
     }
