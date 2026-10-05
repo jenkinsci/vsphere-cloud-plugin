@@ -358,6 +358,15 @@ class VSphereEsxiSshTest {
     }
 
     @Test
+    void deletingASnapshotWithConsolidationWorks() throws Exception {
+        esxi.takeSnapshot("kube-master", "one", "", false);
+
+        esxi.deleteSnapshot("kube-master", "one", true, true);
+
+        assertThat(esxi.getSnapshotInTree(esxi.getVmByName("kube-master"), "one"), is(nullValue()));
+    }
+
+    @Test
     void aSnapshotThatIsNotThereIsNotFound() {
         assertThrows(VSphereException.class, () -> esxi.revertToSnapshot("kube-master", "nope"));
     }

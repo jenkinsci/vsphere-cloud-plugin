@@ -39,7 +39,8 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Take a snapshot                                               | yes           |
 | Delete a VM                                                   | yes           |
 | Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
-| Reconfigure CPUs, memory, annotation, extra configuration, network adapters; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
+| Reconfigure CPUs, memory, reservations and limits, annotation, extra configuration, network adapters, disks and SCSI controllers; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
+| List datastores and resource pools, tell which ones hold a VM, tell whether a name is the host's own | yes |
 | Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
 | Revert to a snapshot, delete one                              | yes           |
 | Rename a snapshot (in the `.vmsd` file, VM powered off)       | yes           |
@@ -200,8 +201,22 @@ powered off** (a running VM is refused, with a message saying so).
   say which it has, the name is taken as it is. A MAC address that is set is a static one: the host
   only takes one in the range `00:50:56:00:00:00` to `00:50:56:3F:FF:FF` unless the VM also has
   `ethernet0.checkMACAddress = "FALSE"` (as an extra configuration parameter, for the adapter in question).
-* **Not available**: disks (adding, growing, removing), reservations and limits of CPU and memory,
-  distributed switches.
+* **Reservations, limits and shares** of CPU (MHz) and memory (MB): the `sched.cpu.*` and
+  `sched.mem.*` settings. The CPU limit of the reconfigure CPU step is a reservation.
+* **Disks and SCSI controllers**, which `vmkfstools` manages (it makes disks, makes them larger and
+  deletes them; it is not only for datastores). A disk is added in a folder of a datastore (made
+  if needed), thick (lazily zeroed) unless the request says thin, and the datastore is one that
+  the host lists; an existing disk file can be attached instead of making one. A disk can be made
+  larger but not smaller. A disk that has snapshots is neither made larger nor deleted: remove the
+  snapshots first. Removing a disk deletes its files, unless the request only detaches it. The
+  files are made (or enlarged) before the `.vmx` is changed, and those that were made are deleted
+  again if that fails; the files of a removed disk are deleted after it has been changed. A SCSI
+  controller (LSI Logic, LSI Logic SAS, BusLogic, VMware Paravirtual) can be added, or removed if no
+  disk is on it. The disk step adds a controller by itself when the VM has none.
+* **Not available**: distributed switches, and devices other than network adapters, disks and SCSI
+  controllers.
+* There is no command to consolidate disks apart from removing snapshots, which consolidates what
+  they held; asking for a consolidation is therefore taken as done.
 
 ### Configuration as Code
 

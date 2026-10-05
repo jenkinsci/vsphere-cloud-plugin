@@ -149,6 +149,15 @@ public final class EsxiVirtualMachine extends VirtualMachine {
         }
     }
 
+    /**
+     * There is no command to consolidate the disks of a VM on a host; removing a snapshot consolidates what it
+     * held already (as does removing all of them), so this has nothing more to do and is done.
+     */
+    @Override
+    public Task consolidateVMDisks_Task() {
+        return new EsxiTask("consolidateVMDisks", null);
+    }
+
     /** The resource pool the VM is in. */
     @Override
     public ResourcePool getResourcePool() {
