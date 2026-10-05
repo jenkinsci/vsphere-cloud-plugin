@@ -41,6 +41,10 @@ final class FakeEsxiHost implements EsxiShell {
         String power = "Powered off";
         String ip;
         String toolsStatus = "toolsOk";
+        int nextSnapshotId = 1;
+        /** What the last revert / remove of a snapshot was asked as: the words after the id of the VM. */
+        String lastSnapshotAction;
+
         final List<String[]> snapshots = new ArrayList<>(); // name, description, memory, quiesce
 
         FakeVm(int id, String name, String datastore, String vmxRelativePath, String vmx) {
@@ -230,8 +234,23 @@ final class FakeEsxiHost implements EsxiShell {
                 if (words.size() != 7) {
                     throw new AssertionError("snapshot.create got " + words.size() + " words: " + words);
                 }
-                vm.snapshots.add(new String[] {words.get(3), words.get(4), words.get(5), words.get(6)});
+                vm.snapshots.add(new String[] {
+                    words.get(3), words.get(4), words.get(5), words.get(6), Integer.toString(vm.nextSnapshotId++)
+                });
                 return ok("Create Snapshot:\n");
+            case "vmsvc/snapshot.revert":
+            case "vmsvc/snapshot.remove":
+                if (words.size() < 4 || vm.snapshots.stream().noneMatch(sn -> sn[4].equals(words.get(3)))) {
+                    return new ShellResult(1, "", "Snapshot " + (words.size() < 4 ? "" : words.get(3)) + " not found");
+                }
+                vm.lastSnapshotAction = sub.substring("vmsvc/snapshot.".length()) + " "
+                        + String.join(" ", words.subList(3, words.size()));
+                if (sub.endsWith("remove")) {
+                    vm.snapshots.removeIf(sn -> sn[4].equals(words.get(3)));
+                } else if (words.get(4).equals("no")) {
+                    vm.power = "Powered on";
+                }
+                return ok("Done:\n" + snapshots(vm));
             case "vmsvc/snapshot.removeall":
                 vm.snapshots.clear();
                 return ok("");
@@ -425,10 +444,9 @@ final class FakeEsxiHost implements EsxiShell {
             return "Get Snapshot:\n";
         }
         final StringBuilder out = new StringBuilder("Get Snapshot:\n|-ROOT\n");
-        int id = 1;
         for (String[] snapshot : vm.snapshots) {
             out.append("--Snapshot Name        : ").append(snapshot[0]).append('\n');
-            out.append("--Snapshot Id        : ").append(id++).append('\n');
+            out.append("--Snapshot Id        : ").append(snapshot[4]).append('\n');
             out.append("--Snapshot Desciption  : ").append(snapshot[1]).append('\n');
             out.append("--Snapshot Created On  : 10/4/2026 18:59:44\n");
             out.append("--Snapshot State       : powered off\n");

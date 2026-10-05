@@ -333,12 +333,68 @@ class VSphereEsxiSshTest {
     }
 
     @Test
-    void actingOnAnExistingSnapshotIsNotSupportedYetAndSays() throws Exception {
-        esxi.takeSnapshot("kube-master", "snap", "", false);
+    void revertsToASnapshotByItsNumber() throws Exception {
+        esxi.takeSnapshot("kube-master", "one", "", false);
+        esxi.takeSnapshot("kube-master", "two", "", false);
 
-        VSphereException e = assertThrows(VSphereException.class, () -> esxi.revertToSnapshot("kube-master", "snap"));
+        esxi.revertToSnapshot("kube-master", "two", true);
+        assertThat(host.vm(1).lastSnapshotAction, is("revert 2 yes"));
+        esxi.revertToSnapshot("kube-master", "one");
+        assertThat(host.vm(1).lastSnapshotAction, is("revert 1 no"));
+    }
 
-        assertThat(e.getMessage(), containsString("not supported by the ESXi SSH backend"));
+    @Test
+    void deletesASnapshotWithoutItsChildren() throws Exception {
+        esxi.takeSnapshot("kube-master", "one", "", false);
+        esxi.takeSnapshot("kube-master", "two", "", false);
+
+        esxi.deleteSnapshot("kube-master", "one", false, true);
+
+        assertThat(host.vm(1).lastSnapshotAction, is("remove 1 no"));
+        assertThat(esxi.getSnapshotInTree(esxi.getVmByName("kube-master"), "one"), is(nullValue()));
+        assertThat(esxi.getSnapshotInTree(esxi.getVmByName("kube-master"), "two"), is(notNullValue()));
+    }
+
+    @Test
+    void aSnapshotThatIsNotThereIsNotFound() {
+        assertThrows(VSphereException.class, () -> esxi.revertToSnapshot("kube-master", "nope"));
+    }
+
+    @Test
+    void aFailureOfTheHostWhenRevertingIsReported() throws Exception {
+        esxi.takeSnapshot("kube-master", "one", "", false);
+        host.failing("snapshot.revert", "Snapshot is busy");
+
+        VSphereException e = assertThrows(VSphereException.class, () -> esxi.revertToSnapshot("kube-master", "one"));
+
+        assertThat(e.getMessage(), containsString("Snapshot is busy"));
+    }
+
+    @Test
+    void aSnapshotThatIsNotANumberIsNotPassedOn() throws Exception {
+        final EsxiVirtualMachineSnapshot snapshot = new EsxiVirtualMachineSnapshot(
+                esxi, ((EsxiVirtualMachine) esxi.getVmByName("kube-master")).getEntry(), mor("1; reboot"));
+
+        assertThat(snapshot.revertToSnapshot_Task(null).waitForTask(), is("error"));
+        assertThat(host.ran("/bin/vim-cmd vmsvc/snapshot.revert 1 '1; reboot' no"), is(false));
+    }
+
+    private static com.vmware.vim25.ManagedObjectReference mor(String value) {
+        final com.vmware.vim25.ManagedObjectReference mor = new com.vmware.vim25.ManagedObjectReference();
+        mor.setType("VirtualMachineSnapshot");
+        mor.setVal(value);
+        return mor;
+    }
+
+    @Test
+    void renamingASnapshotIsNotSupported() throws Exception {
+        esxi.takeSnapshot("kube-master", "one", "", false);
+
+        UnsupportedOperationException e = assertThrows(
+                UnsupportedOperationException.class,
+                () -> esxi.renameVmSnapshot("kube-master", "one", "uno", "", true));
+
+        assertThat(e.getMessage(), containsString("vim-cmd cannot do it"));
     }
 
     // -- what is not supported --

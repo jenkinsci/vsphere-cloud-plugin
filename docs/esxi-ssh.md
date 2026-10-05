@@ -19,7 +19,8 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Delete a VM                                                   | yes           |
 | Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
 | Reconfigure CPUs, memory, annotation, extra configuration, network adapters; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
-| Revert to / delete / rename a snapshot                        | not yet       |
+| Revert to a snapshot, delete one                              | yes           |
+| Rename a snapshot                                             | no (`vim-cmd` cannot) |
 | Whatever needs vCenter: folders, clusters, templates, customization specs, distributed switches, choosing a host | no |
 
 What is not available says so with a message, when it is used.
@@ -109,6 +110,15 @@ a host (or a host selection mode), and a named snapshot (the newest one that can
 are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
 note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
 `. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
+
+## Snapshots
+
+Snapshots are taken, reverted to and deleted with `vim-cmd` (the host knows them by number; the
+plugin looks the number up by the name). A snapshot taken while the VM was running (with its
+memory) powers the VM on when it is reverted to, as it does on vCenter. A snapshot is deleted
+without its children, and its disks are consolidated by the host. `vim-cmd` has no command to
+rename a snapshot, so that is refused. (On an ESXi 7 host, asking `snapshot.remove` to remove the
+children too was seen to leave them in place; the plugin never asks for that.)
 
 ## Reconfiguring
 

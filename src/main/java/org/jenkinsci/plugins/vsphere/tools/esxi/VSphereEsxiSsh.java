@@ -138,7 +138,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
 
     @Override
     protected VirtualMachineSnapshot newSnapshotProxy(VirtualMachine vm, ManagedObjectReference mor) {
-        return new EsxiVirtualMachineSnapshot(mor);
+        return new EsxiVirtualMachineSnapshot(this, ((EsxiVirtualMachine) vm).getEntry(), mor);
     }
 
     // -- what the VM objects are made of --
@@ -215,6 +215,15 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         } catch (VSphereException e) {
             return new EsxiTask(description, e.getMessage());
         }
+    }
+
+    /** Reverts to or removes a snapshot, which the host knows by its number. */
+    EsxiTask snapshotTask(String description, VmEntry vm, String subcommand, String snapshotId, String flag) {
+        if (!snapshotId.matches("[0-9]{1,9}")) {
+            return new EsxiTask(description, "\"" + snapshotId + "\" is not the number of a snapshot");
+        }
+        // both are plain words by now, so this is not about what they hold
+        return vmTask(description, vm, subcommand, snapshotId, flag);
     }
 
     EsxiTask createSnapshotTask(VmEntry vm, String name, String description, boolean memory, boolean quiesce) {

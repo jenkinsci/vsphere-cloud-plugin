@@ -20,35 +20,49 @@ import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 /**
- * A snapshot of a VM on a standalone ESXi host. Taking snapshots is supported by {@link EsxiVirtualMachine};
- * acting on an existing one (revert, remove, rename) is not yet, and says so.
+ * A snapshot of a VM on a standalone ESXi host, which {@code vim-cmd} knows by a number. Reverting to it and
+ * removing it are done by {@code vim-cmd}; it has no command to rename one, so that says it is not supported.
  */
 public final class EsxiVirtualMachineSnapshot extends VirtualMachineSnapshot {
 
-    private static final String NOT_YET = " of a snapshot is not supported by the ESXi SSH backend (yet)";
+    private final VSphereEsxiSsh host;
+    private final VmEntry vm;
 
-    EsxiVirtualMachineSnapshot(ManagedObjectReference mor) {
+    EsxiVirtualMachineSnapshot(VSphereEsxiSsh host, VmEntry vm, ManagedObjectReference mor) {
         super(null, mor);
+        this.host = host;
+        this.vm = vm;
+    }
+
+    private static String yesNo(boolean value) {
+        return value ? "yes" : "no";
     }
 
     @Override
     public Task revertToSnapshot_Task(HostSystem host) {
-        return new EsxiTask("revertToSnapshot", "Reverting" + NOT_YET);
+        return revertToSnapshot_Task(host, Boolean.FALSE);
     }
 
+    /** The VM is powered on afterwards if the snapshot was taken while it ran (with its memory), unless suppressed. */
     @Override
-    public Task revertToSnapshot_Task(HostSystem host, Boolean suppressPowerOn) {
-        return new EsxiTask("revertToSnapshot", "Reverting" + NOT_YET);
+    public Task revertToSnapshot_Task(HostSystem unused, Boolean suppressPowerOn) {
+        return host.snapshotTask(
+                "revertToSnapshot",
+                vm,
+                "snapshot.revert",
+                getMOR().getVal(),
+                yesNo(Boolean.TRUE.equals(suppressPowerOn)));
     }
 
     @Override
     public Task removeSnapshot_Task(boolean removeChildren) {
-        return new EsxiTask("removeSnapshot", "Removing" + NOT_YET);
+        return host.snapshotTask("removeSnapshot", vm, "snapshot.remove", getMOR().getVal(), yesNo(removeChildren));
     }
 
+    /** The host always consolidates the disks of what it removes, so there is nothing to ask for. */
     @Override
     public Task removeSnapshot_Task(boolean removeChildren, Boolean consolidate) {
-        return new EsxiTask("removeSnapshot", "Removing" + NOT_YET);
+        return removeSnapshot_Task(removeChildren);
     }
 
     /** The default one asks the (missing) connection for its URL. */
@@ -59,6 +73,7 @@ public final class EsxiVirtualMachineSnapshot extends VirtualMachineSnapshot {
 
     @Override
     public void rename(String name, String description) {
-        throw new UnsupportedOperationException("Renaming" + NOT_YET);
+        throw new UnsupportedOperationException(
+                "Renaming a snapshot is not supported by the ESXi SSH backend: vim-cmd cannot do it");
     }
 }
