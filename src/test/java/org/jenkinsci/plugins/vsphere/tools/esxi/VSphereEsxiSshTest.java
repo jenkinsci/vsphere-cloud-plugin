@@ -397,6 +397,28 @@ class VSphereEsxiSshTest {
         assertThat(e.getMessage(), containsString("vim-cmd cannot do it"));
     }
 
+    // -- the host --
+
+    @Test
+    void knowsItsOwnNameAndNoOthers() throws Exception {
+        assertThat(esxi.hostExists("esxi7"), is(true));
+        assertThat(esxi.hostExists("ESXI7.example.com"), is(true));
+        assertThat(esxi.hostExists("esxi8"), is(false));
+        assertThat(esxi.hostExists("example.com"), is(false));
+        assertThat(esxi.hostExists(" "), is(false));
+        assertThat(esxi.hostExists(null), is(false));
+    }
+
+    @Test
+    void asksTheHostnameCommandWhenEsxcliIsNotThere() throws Exception {
+        host.hostname = null;
+        host.failing("esxcli", "esxcli: not found");
+        host.hostname = "plain";
+
+        assertThat(esxi.hostExists("plain"), is(true));
+        assertThat(esxi.hostExists("plain.example.com"), is(true));
+    }
+
     // -- what is not supported --
 
     @Test
@@ -427,7 +449,6 @@ class VSphereEsxiSshTest {
         VSphereException e = assertThrows(VSphereException.class, () -> esxi.folderExists("folder"));
         assertThat(e.getMessage(), containsString("folderExists is not applicable to a standalone ESXi host"));
         assertThat(e, instanceOf(EsxiPlatformConstraint.class));
-        assertThrows(VSphereException.class, () -> esxi.hostExists("host"));
         assertThrows(VSphereException.class, () -> esxi.getDatastores());
     }
 

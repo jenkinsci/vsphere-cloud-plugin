@@ -35,6 +35,7 @@ import com.vmware.vim25.mo.Network;
 import com.vmware.vim25.mo.VirtualMachine;
 import com.vmware.vim25.mo.VirtualMachineSnapshot;
 import java.io.PrintStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -377,9 +378,49 @@ public class VSphereEsxiSsh extends AbstractVSphere {
 
     // -- what needs vCenter, or is not there yet --
 
+    /**
+     * Whether the name is that of this host: its host name, with or without the domain, as the host itself says
+     * (a standalone host knows no others). Names are compared without regard to case.
+     */
     @Override
     public boolean hostExists(final String hostName) throws VSphereException {
-        throw unsupported("hostExists");
+        if (hostName == null || hostName.trim().isEmpty()) {
+            return false;
+        }
+        final String wanted = hostName.trim();
+        for (String name : ownNames()) {
+            if (name.equalsIgnoreCase(wanted)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The names this host calls itself: host name, domain name, and both together. */
+    List<String> ownNames() throws VSphereException {
+        final List<String> names = new ArrayList<>();
+        final ShellResult esxcli = shell.run("esxcli system hostname get");
+        if (esxcli.succeeded()) {
+            for (String line : esxcli.getStdout().split("\\R")) {
+                final int colon = line.indexOf(':');
+                if (colon > 0 && !line.substring(colon + 1).trim().isEmpty()) {
+                    final String label = line.substring(0, colon).trim();
+                    if (label.equals("Host Name") || label.equals("Fully Qualified Domain Name")) {
+                        names.add(line.substring(colon + 1).trim());
+                    }
+                }
+            }
+        }
+        if (names.isEmpty()) {
+            names.add(shell.run("hostname")
+                    .stdoutOrThrow("Asking the host for its name")
+                    .trim());
+        }
+        final String first = names.get(0);
+        if (first.contains(".")) {
+            names.add(first.substring(0, first.indexOf('.')));
+        }
+        return names;
     }
 
     @Override

@@ -63,6 +63,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The short name of the host; null makes esxcli unknown. */
+    String hostname = "esxi7";
     /** The port groups of the standard switches; null makes "esxcli" unknown, as on a host that has none. */
     java.util.List<String> portGroups =
             new java.util.ArrayList<>(java.util.List.of("VM Network", "Management Network"));
@@ -176,6 +178,15 @@ final class FakeEsxiHost implements EsxiShell {
                 table.append(String.format("%-19s  vSwitch0                       1        0%n", group));
             }
             return ok(table.toString());
+        }
+        if (words.equals(List.of("esxcli", "system", "hostname", "get"))) {
+            return hostname == null
+                    ? new ShellResult(127, "", "esxcli: not found")
+                    : ok("   Domain Name: example.com\n   Fully Qualified Domain Name: " + hostname
+                            + ".example.com\n   Host Name: " + hostname + "\n");
+        }
+        if (words.equals(List.of("hostname"))) {
+            return ok(hostname + ".example.com\n");
         }
         if (words.equals(List.of("vmware", "-v"))) {
             return ok(esxiVersion + "\n");
