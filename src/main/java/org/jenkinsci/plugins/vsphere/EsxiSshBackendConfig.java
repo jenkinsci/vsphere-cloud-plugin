@@ -119,12 +119,12 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         this.hostKeyPolicy = hostKeyPolicy == null ? EsxiHostKeyPolicy.FINGERPRINT : hostKeyPolicy;
     }
 
-    public @CheckForNull String getHostKeyFingerprint() {
+    public synchronized @CheckForNull String getHostKeyFingerprint() {
         return hostKeyFingerprint;
     }
 
     @DataBoundSetter
-    public void setHostKeyFingerprint(@CheckForNull String hostKeyFingerprint) {
+    public synchronized void setHostKeyFingerprint(@CheckForNull String hostKeyFingerprint) {
         this.hostKeyFingerprint = Util.fixEmptyAndTrim(hostKeyFingerprint);
     }
 
@@ -328,8 +328,9 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         config.setHostKeyFingerprint(hostKeyFingerprint);
         config.setConnectTimeoutSeconds(parse(connectTimeoutSeconds, 0));
         try {
-            config.setHostKeyPolicy(EsxiHostKeyPolicy.valueOf(hostKeyPolicy));
-        } catch (IllegalArgumentException | NullPointerException e) {
+            config.setHostKeyPolicy(
+                    hostKeyPolicy == null ? EsxiHostKeyPolicy.FINGERPRINT : EsxiHostKeyPolicy.valueOf(hostKeyPolicy));
+        } catch (IllegalArgumentException e) {
             config.setHostKeyPolicy(EsxiHostKeyPolicy.FINGERPRINT);
         }
         final EsxiConnectionTestResult result;
@@ -403,7 +404,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             throw new VSphereException("ESXi host is not specified");
         }
         return new EsxiSshSettings(host, port, resolveAuth(host))
-                .withHostKeyFingerprint(hostKeyFingerprint)
+                .withHostKeyFingerprint(getHostKeyFingerprint())
                 .withHostKeyPolicy(hostKeyPolicy)
                 .withHostKeyStore(this)
                 .withConnectTimeoutSeconds(connectTimeoutSeconds)

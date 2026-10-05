@@ -119,9 +119,9 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             List<vSphereCloud> clouds = vSphereCloud.findAllVsphereClouds(null);
             if (!clouds.isEmpty()) {
                 VSphereConnectionConfig firstConfig = clouds.get(0).getVsConnectionConfig();
-                if (firstConfig != null && firstConfig.getVCenter() != null) {
-                    VSphereConnectionConfig.httpClientClass =
-                            httpClientNameToClass(firstConfig.getVCenter().getHttpClientClassName());
+                final VCenterBackendConfig first = firstConfig == null ? null : firstConfig.getVCenter();
+                if (first != null) {
+                    VSphereConnectionConfig.httpClientClass = httpClientNameToClass(first.getHttpClientClassName());
                 }
             }
         }
@@ -136,8 +136,9 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
     static void applyHttpClientClassNameToAll(String httpClientClassName) {
         for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
             VSphereConnectionConfig config = cloud.getVsConnectionConfig();
-            if (config != null && config.getVCenter() != null) {
-                config.getVCenter().setHttpClientClassNameQuietly(httpClientClassName);
+            final VCenterBackendConfig vcenter = config == null ? null : config.getVCenter();
+            if (vcenter != null) {
+                vcenter.setHttpClientClassNameQuietly(httpClientClassName);
             }
         }
         VSphereConnectionConfig.httpClientClass = httpClientNameToClass(httpClientClassName);
@@ -278,8 +279,8 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         if (vsHost == null) {
             return null;
         }
-        return DescriptorImpl.lookupCredentials(
-                getVCenter() == null ? null : getVCenter().getCredentialsId(), vsHost);
+        final VCenterBackendConfig vcenter = getVCenter();
+        return DescriptorImpl.lookupCredentials(vcenter == null ? null : vcenter.getCredentialsId(), vsHost);
     }
 
     public @CheckForNull String getPassword() {

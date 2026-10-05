@@ -297,6 +297,9 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
 
     @Override
     public Network getNetworkPortGroupByName(VirtualMachine virtualMachine, String name) throws VSphereException {
+        if (!(virtualMachine instanceof EsxiVirtualMachine)) {
+            throw new VSphereException("The VM " + virtualMachine + " is not one of an ESXi host reached over SSH");
+        }
         return ((EsxiVirtualMachine) virtualMachine).getHost().getNetworkPortGroupByName(virtualMachine, name);
     }
 

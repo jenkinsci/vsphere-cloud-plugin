@@ -89,16 +89,16 @@ public class EsxiSshHost extends AbstractDescribableImpl<EsxiSshHost> implements
         this.hostKeyPolicy = hostKeyPolicy;
     }
 
-    public @CheckForNull String getHostKeyFingerprint() {
+    public synchronized @CheckForNull String getHostKeyFingerprint() {
         return hostKeyFingerprint;
     }
 
     @DataBoundSetter
-    public void setHostKeyFingerprint(@CheckForNull String hostKeyFingerprint) {
+    public synchronized void setHostKeyFingerprint(@CheckForNull String hostKeyFingerprint) {
         this.hostKeyFingerprint = Util.fixEmptyAndTrim(hostKeyFingerprint);
     }
 
-    void setOwner(@CheckForNull EsxiSshBackendConfig owner) {
+    synchronized void setOwner(@CheckForNull EsxiSshBackendConfig owner) {
         this.owner = owner;
     }
 

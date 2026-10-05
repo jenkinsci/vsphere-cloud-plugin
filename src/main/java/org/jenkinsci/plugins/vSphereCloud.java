@@ -35,6 +35,7 @@ import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
@@ -645,9 +646,11 @@ public class vSphereCloud extends Cloud {
     }
 
     public boolean getAllowUntrustedCertificate() {
-        return vsConnectionConfig != null
-                && vsConnectionConfig.getVCenter() != null
-                && vsConnectionConfig.getVCenter().getAllowUntrustedCertificate();
+        if (vsConnectionConfig == null) {
+            return false;
+        }
+        final VCenterBackendConfig vcenter = vsConnectionConfig.getVCenter();
+        return vcenter != null && vcenter.getAllowUntrustedCertificate();
     }
 
     public @CheckForNull VSphereConnectionConfig getVsConnectionConfig() {

@@ -346,6 +346,9 @@ final class EsxiVmCloner {
 
     private static String parentPath(Located disk) {
         final String hint = disk.descriptor.getParentHint();
+        if (hint == null) {
+            throw new IllegalStateException("The disk " + disk.name + " is not a change of another disk");
+        }
         return hint.startsWith("/") ? hint : disk.directory + "/" + hint;
     }
 
@@ -466,17 +469,21 @@ final class EsxiVmCloner {
         vmx.put("guestinfo.hostname", cloneName.replaceAll("[^A-Za-z0-9-]", ""));
 
         if (vmSize != null && !vmSize.isEmpty()) {
-            if (vmSize.getCpuCores() != null) {
-                vmx.put("numvcpus", Integer.toString(vmSize.getCpuCores()));
+            final Integer cores = vmSize.getCpuCores();
+            final Integer coresPerSocket = vmSize.getCoresPerSocket();
+            final Integer memory = vmSize.getMemorySize();
+            final Integer cpuLimit = vmSize.getCpuLimitMHz();
+            if (cores != null) {
+                vmx.put("numvcpus", Integer.toString(cores));
             }
-            if (vmSize.getCoresPerSocket() != null) {
-                vmx.put("cpuid.coresPerSocket", Integer.toString(vmSize.getCoresPerSocket()));
+            if (coresPerSocket != null) {
+                vmx.put("cpuid.coresPerSocket", Integer.toString(coresPerSocket));
             }
-            if (vmSize.getMemorySize() != null) {
-                vmx.put("memSize", Integer.toString(vmSize.getMemorySize()));
+            if (memory != null) {
+                vmx.put("memSize", Integer.toString(memory));
             }
-            if (vmSize.getCpuLimitMHz() != null) {
-                vmx.put("sched.cpu.min", Integer.toString(vmSize.getCpuLimitMHz()));
+            if (cpuLimit != null) {
+                vmx.put("sched.cpu.min", Integer.toString(cpuLimit));
             }
         }
         if (extraConfigParameters != null) {

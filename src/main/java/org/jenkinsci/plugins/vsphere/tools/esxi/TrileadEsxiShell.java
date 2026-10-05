@@ -147,8 +147,8 @@ public final class TrileadEsxiShell implements EsxiShell {
         if (!trusted) {
             return new EsxiConnectionTestResult(hostKey, false, false, null, verifier.getRejection());
         }
-        final boolean willBeRemembered = settings.getHostKeyFingerprint() == null
-                        || settings.getHostKeyFingerprint().trim().isEmpty()
+        final String given = settings.getHostKeyFingerprint();
+        final boolean willBeRemembered = given == null || given.trim().isEmpty()
                 ? settings.getHostKeyPolicy() == EsxiHostKeyPolicy.TRUST_FIRST_USE
                         && settings.getHostKeyStore().get(settings.getHost(), settings.getPort()) == null
                 : false;

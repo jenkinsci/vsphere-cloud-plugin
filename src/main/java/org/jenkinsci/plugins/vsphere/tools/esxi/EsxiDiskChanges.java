@@ -309,7 +309,7 @@ final class EsxiDiskChanges {
 
     private void editDisk(VirtualDisk disk) throws VSphereException {
         final String prefix = existingDisk(disk);
-        final String path = resolve(VmxFile.unescape(vmx.get(prefix + ".fileName")));
+        final String path = resolve(VmxFile.unescape(vmx.get(prefix + ".fileName", "")));
         final VmdkDescriptor descriptor = inspector.descriptor(path);
         final long current = descriptor.getCapacityKb();
         final long wanted = disk.getCapacityInKB();
@@ -329,7 +329,7 @@ final class EsxiDiskChanges {
 
     private void removeDisk(VirtualDisk disk, boolean destroy) throws VSphereException {
         final String prefix = existingDisk(disk);
-        final String path = resolve(VmxFile.unescape(vmx.get(prefix + ".fileName")));
+        final String path = resolve(VmxFile.unescape(vmx.get(prefix + ".fileName", "")));
         if (destroy) {
             if (inspector.descriptor(path).isSnapshotDisk()) {
                 throw new VSphereException("The disk " + path + " has snapshots, so its files cannot be deleted:"

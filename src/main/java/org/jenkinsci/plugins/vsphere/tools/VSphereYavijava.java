@@ -62,6 +62,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import org.apache.commons.lang3.StringUtils;
+import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
 
@@ -94,11 +95,12 @@ public class VSphereYavijava extends AbstractVSphere {
      */
     public static VSphereYavijava connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
         final String server = connectionDetails.getVsHost() + "/sdk";
-        if (connectionDetails.getVCenter() == null) {
+        final VCenterBackendConfig vcenter = connectionDetails.getVCenter();
+        if (vcenter == null) {
             throw new VSphereException(
                     "The connection to " + connectionDetails.getVsHost() + " is not set up for vCenter");
         }
-        final boolean ignoreCert = connectionDetails.getVCenter().getAllowUntrustedCertificate();
+        final boolean ignoreCert = vcenter.getAllowUntrustedCertificate();
         final String user = connectionDetails.getUsername();
         final String pw = connectionDetails.getPassword();
         if (user == null) {

@@ -328,6 +328,9 @@ public final class EsxiRelay {
                 if (unpackingFailure != null) {
                     throw unpackingFailure;
                 }
+                if (packed == null || unpacked == null) {
+                    throw new IllegalStateException("A copy that did not fail has no outcome");
+                }
                 // A source that was cut off by a target that failed says only that its pipe is closed
                 final boolean cutOff = packed.getStderr().contains("Pipe closed")
                         || packed.getStderr().contains("Broken pipe")
