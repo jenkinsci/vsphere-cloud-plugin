@@ -16,11 +16,14 @@ package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.vmware.vim25.mo.VirtualMachine;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.util.List;
@@ -30,6 +33,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +102,11 @@ class EsxiClusterTest {
         hostA.addFile(MASTER + "/master-000001-sesparse.vmdk", "HEAD");
         hostA.vm(1).snapshots.add(new String[] {"snap", "", "0", "0", "1"});
         hostB.addVm(2, "on-b", "shared", "on-b/on-b.vmx", "displayName = \"on-b\"\n");
+    }
+
+    @AfterEach
+    void tearDown() {
+        System.clearProperty(EsxiCloneGuard.PROPERTY);
     }
 
     private VSphereEsxiCluster.Connector connector(String label, Supplier<VSphereEsxiSsh> session) {
@@ -407,5 +416,163 @@ class EsxiClusterTest {
 
         assertThat(hostB.vmNamed("named"), is(notNullValue()));
         assertThat(hostA.file(SHARED + "/named/named-flat.vmdk"), is("COPY OF " + MASTER + "/master.vmdk"));
+    }
+
+    // -- the guard for the disks that clones are made of --
+
+    private void linkedCloneOnB() throws Exception {
+        hostB.addVm(5, "busy", "shared", "busy/busy.vmx", "displayName = \"busy\"\n").power = "Powered on";
+        hostA.addVm(6, "busy2", "shared", "busy2/busy2.vmx", "displayName = \"busy2\"\n").power = "Powered on";
+        hostA.addVm(7, "busy3", "shared", "busy3/busy3.vmx", "displayName = \"busy3\"\n").power = "Powered on";
+        clone(cluster(), "lc", true, "esxib", null);
+        assertThat(hostB.vmNamed("lc"), is(notNullValue()));
+    }
+
+    @Test
+    void theSnapshotsOfAMasterThatHasALinkedCloneOnAnotherHostAreNotRemoved() throws Exception {
+        linkedCloneOnB();
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> cluster().deleteSnapshot("master", "snap", false, true));
+
+        assertThat(e.getMessage(), containsString("Refusing to remove the snapshot of the VM master"));
+        assertThat(e.getMessage(), containsString("lc [" + REAL + "/lc/lc.vmx]"));
+        assertThat(hostA.vm(1).snapshots.size(), is(1));
+    }
+
+    @Test
+    void theMasterIsNotDeletedNorItsDisksChangedEither() throws Exception {
+        linkedCloneOnB();
+        final VSphereEsxiCluster cluster = cluster();
+
+        assertThat(
+                assertThrows(VSphereException.class, () -> cluster.destroyVm("master", true))
+                        .getMessage(),
+                containsString("delete the VM master"));
+        assertThat(hostA.vmNamed("master"), is(notNullValue()));
+        final VirtualMachine master = cluster.getVmByName("master");
+        assertThat(
+                ((EsxiTask) master.removeAllSnapshots_Task())
+                        .getTaskInfo()
+                        .getError()
+                        .getLocalizedMessage(),
+                containsString("remove all the snapshots of the VM master"));
+    }
+
+    @Test
+    void aCloneThatIsNotRegisteredAnywhereIsFoundOnTheSharedDatastore() throws Exception {
+        linkedCloneOnB();
+        // unregistered, but its files are there
+        hostB.removeVmRegistration("lc");
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> cluster().deleteSnapshot("master", "snap", false, true));
+
+        assertThat(e.getMessage(), containsString("lc ["));
+    }
+
+    @Test
+    void whenTheHostWithTheCloneIsDownItIsFoundByTheDatastoresTheOthersSeeToo() throws Exception {
+        linkedCloneOnB();
+        final VSphereEsxiCluster cluster = cluster();
+        bIsUp = false;
+        hostB.closed = true;
+        cluster.getVmByName("lc"); // b is found to be gone
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> cluster.deleteSnapshot("master", "snap", false, true));
+
+        assertThat(e.getMessage(), containsString("lc ["));
+    }
+
+    @Test
+    void aCloneOnStorageOnlyADownHostSeesIsNotKnown() throws Exception {
+        // the caveat: the definition is on a datastore that only host b has
+        hostA.addFile("/vmfs/volumes/localB/lc/lc.vmx", "displayName = \"lc\"\nscsi0:0.fileName = \"lc.vmdk\"\n");
+        hostA.addFile("/vmfs/volumes/localB/lc/lc.vmdk", descriptor(REAL + "/master/master.vmdk", "lc-delta.vmdk"));
+        final VSphereEsxiCluster up = cluster();
+
+        // asked while b is up, it is found there
+        assertThat(
+                assertThrows(VSphereException.class, () -> up.deleteSnapshot("master", "snap", false, true))
+                        .getMessage(),
+                containsString("lc ["));
+
+        // b gone: nothing that can be asked has it
+        bIsUp = false;
+        final VSphereEsxiCluster down = cluster();
+        down.deleteSnapshot("master", "snap", false, true);
+        assertThat(hostA.vm(1).snapshots.isEmpty(), is(true));
+    }
+
+    @Test
+    void whenAHostCannotBeAskedTheRefusalSaysSo() throws Exception {
+        linkedCloneOnB();
+        final VSphereEsxiCluster cluster = cluster();
+        hostB.failing("esxcli storage filesystem list", "esxcli broke");
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> cluster.deleteSnapshot("master", "snap", false, true));
+
+        assertThat(e.getMessage(), containsString("Hosts that could not be asked"));
+        assertThat(e.getMessage(), containsString("b.example"));
+    }
+
+    @Test
+    void onceTheCloneIsGoneTheSnapshotCanBeRemoved() throws Exception {
+        linkedCloneOnB();
+        final VSphereEsxiCluster cluster = cluster();
+        cluster.destroyVm("lc", true);
+
+        cluster.deleteSnapshot("master", "snap", false, true);
+
+        assertThat(hostA.vm(1).snapshots.isEmpty(), is(true));
+    }
+
+    @Test
+    void theGuardCanBeTurnedOff() throws Exception {
+        linkedCloneOnB();
+        System.setProperty(EsxiCloneGuard.PROPERTY, "false");
+
+        cluster().deleteSnapshot("master", "snap", false, true);
+
+        assertThat(hostA.vm(1).snapshots.isEmpty(), is(true));
+    }
+
+    @Test
+    void aMasterWithNoClonesIsFreeToChange() throws Exception {
+        cluster().deleteSnapshot("master", "snap", false, true);
+
+        assertThat(hostA.vm(1).snapshots.isEmpty(), is(true));
+    }
+
+    @Test
+    void theGuardWorksForASingleHostToo() throws Exception {
+        final VSphereEsxiSsh single = new VSphereEsxiSsh(hostA);
+        single.cloneOrDeployVm(
+                "lc",
+                "master",
+                true,
+                "",
+                "",
+                "",
+                "",
+                false,
+                null,
+                false,
+                null,
+                "",
+                "",
+                "",
+                null,
+                null,
+                VmSize.NONE,
+                log);
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> single.deleteSnapshot("master", "snap", false, true));
+
+        assertThat(e.getMessage(), containsString("lc ["));
+        assertThat(e, not(instanceOf(EsxiPlatformConstraint.class)));
     }
 }

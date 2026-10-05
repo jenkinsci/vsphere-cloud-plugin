@@ -56,7 +56,11 @@ public final class EsxiVirtualMachineSnapshot extends VirtualMachineSnapshot {
 
     @Override
     public Task removeSnapshot_Task(boolean removeChildren) {
-        return host.snapshotTask("removeSnapshot", vm, "snapshot.remove", getMOR().getVal(), yesNo(removeChildren));
+        return host.guardedTask(
+                "remove the snapshot of the VM",
+                vm,
+                () -> host.snapshotTask(
+                        "removeSnapshot", vm, "snapshot.remove", getMOR().getVal(), yesNo(removeChildren)));
     }
 
     /** The host always consolidates the disks of what it removes, so there is nothing to ask for. */

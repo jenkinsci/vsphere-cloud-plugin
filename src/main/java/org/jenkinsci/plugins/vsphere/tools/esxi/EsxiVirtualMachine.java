@@ -119,7 +119,7 @@ public final class EsxiVirtualMachine extends VirtualMachine {
 
     @Override
     public Task destroy_Task() {
-        return host.vmTask("destroy", entry, "destroy");
+        return host.guardedTask("delete the VM", entry, () -> host.vmTask("destroy", entry, "destroy"));
     }
 
     @Override
@@ -129,7 +129,10 @@ public final class EsxiVirtualMachine extends VirtualMachine {
 
     @Override
     public Task removeAllSnapshots_Task() {
-        return host.vmTask("removeAllSnapshots", entry, "snapshot.removeall");
+        return host.guardedTask(
+                "remove all the snapshots of the VM",
+                entry,
+                () -> host.vmTask("removeAllSnapshots", entry, "snapshot.removeall"));
     }
 
     @Override

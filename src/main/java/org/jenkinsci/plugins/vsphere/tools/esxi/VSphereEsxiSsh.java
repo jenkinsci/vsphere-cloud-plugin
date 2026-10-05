@@ -126,6 +126,23 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         return new long[] {on, vms.size()};
     }
 
+    /**
+     * Does what is asked of a VM unless that would break linked clones of it, see {@link EsxiCloneGuard}: then the
+     * task has failed, with the reason.
+     */
+    EsxiTask guardedTask(String action, VmEntry vm, java.util.function.Supplier<EsxiTask> task) {
+        try {
+            final String refusal = EsxiCloneGuard.check(this, vm, action + " " + vm.getName());
+            if (refusal != null) {
+                return new EsxiTask("guard", refusal);
+            }
+        } catch (VSphereException e) {
+            return new EsxiTask(
+                    "guard", "Could not check whether linked clones depend on " + vm.getName() + ": " + e.getMessage());
+        }
+        return task.get();
+    }
+
     @Override
     protected void closeSession() {
         shell.close();
@@ -412,6 +429,13 @@ public class VSphereEsxiSsh extends AbstractVSphere {
                             return files.exists(path);
                         }
                     });
+            if (disks.after().size() > 0
+                    || disks.before().stream().anyMatch(step -> step.kind == EsxiDiskChanges.Step.Kind.EXTEND)) {
+                final String refusal = EsxiCloneGuard.check(this, vm, "change the disks of " + vm.getName());
+                if (refusal != null) {
+                    throw new VSphereException(refusal);
+                }
+            }
             final List<String> made = new ArrayList<>();
             try {
                 for (EsxiDiskChanges.Step step : disks.before()) {

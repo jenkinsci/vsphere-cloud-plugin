@@ -159,6 +159,35 @@ feature. There are two classes that do: `EsxiConstraintException` (a `VSphereExc
 `EsxiConstraintUnsupportedOperationException` (an `UnsupportedOperationException`, for the objects
 that stand in for the vSphere API). Anything else that is refused is an ordinary failure.
 
+## Linked clones and their master
+
+A linked clone is a change of the disks of its master, which it names by their path; the host keeps
+no list of the clones of a VM. Removing a snapshot of the master (or all of them) merges disks, which
+changes or deletes the files that clones rely on, and so does deleting the master, deleting one of
+its disks, or making one larger. A clone that is running keeps its parents locked, so the host
+refuses; **a clone that is not running is broken without a word.**
+
+So the plugin looks before it does any of those: it finds the VMs that have a disk with a disk of the
+master as a parent (anywhere up the chain), and **refuses to go on while there are any**, naming
+them. Delete the clones first. (The same goes for a master on its own host, with no cluster.)
+
+Where it looks, on each host that can be asked (all the hosts of a cluster that are up):
+
+1. the VMs that are registered with the host;
+2. and, in case they are not registered anywhere that can be asked, every `.vmx` file in the folders
+   of the datastores that the host has, so that a clone that is registered with a host that is down
+   is found all the same **if it is on a datastore that a host which is up has too** (a shared one).
+
+What it **cannot** see: a clone whose definition is on a datastore that no host that can be asked has,
+such as the local datastore of a host that is down, or one that is registered nowhere and is
+elsewhere on a datastore (not in a folder of its own at the top). The message that refuses says which
+hosts could not be asked. And it looks at VMs and disks as the hosts say they are, so a
+clone that was copied away by hand, with its parents' paths changed, or a master whose disks are
+used by a clone through some other name of the datastore, is not recognised.
+
+The check can be turned off by starting Jenkins with
+`-Dorg.jenkinsci.plugins.vsphere.tools.esxi.protectLinkedCloneParents=false`.
+
 ## Templates
 
 The steps *Convert to template* and *Convert to VM* work, but **what a "template" is differs from
