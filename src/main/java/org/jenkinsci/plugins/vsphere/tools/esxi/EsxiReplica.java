@@ -240,6 +240,59 @@ final class EsxiReplica {
         return m.group(1) + " " + m.group(2);
     }
 
+    /** What is to be done with one disk of the master. */
+    private static final class Plan {
+        final Frozen disk;
+        final int index;
+        final String directory;
+        final String descriptorName;
+        final EsxiDiskSizes sizes;
+        /** True if its files are sent as they are, false if it is exported in a sparse format and imported. */
+        boolean asIs;
+
+        Plan(Frozen disk, int index, EsxiDiskSizes sizes) {
+            this.disk = disk;
+            this.index = index;
+            this.directory = parent(disk.path);
+            this.descriptorName = disk.path.substring(disk.path.lastIndexOf('/') + 1);
+            this.sizes = sizes;
+            // its own files have to be plain names in the folder it is in, and it has to be a disk of its own
+            boolean plain = true;
+            for (String file : sizes.ownFiles) {
+                plain &= !file.contains("/");
+            }
+            this.asIs = plain && !sizes.chained && sizes.isDense();
+        }
+
+        String why() {
+            if (sizes.chained) {
+                return "it is a change of other disks, which are exported as one";
+            }
+            if (sizes.allocatedKb < 0) {
+                return "how much of it is written is not known";
+            }
+            return asIs
+                    ? "most of it is written: its files are sent as they are"
+                    : "little of it is written: it is exported in a format that has only that";
+        }
+    }
+
+    private static void checkRoom(
+            VSphereEsxiSsh host, String datastore, long neededKb, String what, @CheckForNull PrintStream log)
+            throws VSphereException {
+        for (EsxiDatastoreEntry entry : host.listDatastores()) {
+            if (entry.getName().equals(datastore)) {
+                if (entry.getFree() / 1024 < neededKb) {
+                    throw new VSphereException("Not enough room for " + what + ": about " + neededKb / 1024
+                            + " MB are needed on " + datastore + " of " + host.getLabel() + ", which has "
+                            + entry.getFree() / (1024 * 1024) + " MB free");
+                }
+                return;
+            }
+        }
+        say(log, "Cannot tell how much room " + datastore + " of " + host.getLabel() + " has, for " + what);
+    }
+
     private static EsxiVirtualMachine make(
             VSphereEsxiSsh source,
             VmEntry master,
@@ -272,6 +325,42 @@ final class EsxiReplica {
             }
         }
         EsxiDatastoreFiles.checkName("The datastore", where);
+
+        // how much of each disk is written decides how it is copied, and whether there is room for it
+        final List<Plan> plans = new ArrayList<>();
+        final java.util.Set<String> taken = new java.util.HashSet<>();
+        long needed = 0;
+        long exportNeeded = 0;
+        for (int i = 0; i < frozen.size(); i++) {
+            final Plan plan = new Plan(frozen.get(i), i, EsxiDiskSizes.measure(sourceFiles, frozen.get(i).path));
+            // the files of a disk keep their names, which two disks must not share
+            if (plan.asIs && !taken.addAll(plan.sizes.ownFiles)) {
+                plan.asIs = false;
+            }
+            plans.add(plan);
+            say(
+                    log,
+                    "The disk " + plan.disk.prefix + " of " + master.getName() + " has "
+                            + (plan.sizes.allocatedKb < 0 ? "an unknown amount" : plan.sizes.allocatedKb / 1024 + " MB")
+                            + " written of " + plan.sizes.logicalKb / 1024 + " MB: " + plan.why());
+            if (plan.sizes.allocatedKb >= 0) {
+                needed += plan.sizes.allocatedKb;
+                if (!plan.asIs) {
+                    exportNeeded += plan.sizes.allocatedKb;
+                }
+            }
+        }
+        if (needed > 0) {
+            checkRoom(target, where, EsxiDiskSizes.withMargin(needed), "the replica " + name, log);
+        }
+        if (exportNeeded > 0) {
+            checkRoom(
+                    source,
+                    master.getDatastore(),
+                    EsxiDiskSizes.withMargin(exportNeeded),
+                    "the export of the disks of " + master.getName(),
+                    log);
+        }
         final String replicaDir = "/vmfs/volumes/" + where + "/" + name;
         final String importDir = replicaDir + "/export";
         final String exportDir = parent(masterPathOf(master)) + "/.jenkins-export-"
@@ -289,67 +378,99 @@ final class EsxiReplica {
         }
         Integer registered = null;
         try {
-            sourceFiles.mkdirs(exportDir);
-            targetFiles.mkdirs(importDir);
-
-            // export, in a format that has what is written and not the rest
-            final List<String> names = new ArrayList<>();
-            for (int i = 0; i < frozen.size(); i++) {
-                say(
-                        log,
-                        "Exporting the disk " + frozen.get(i).prefix + " of " + master.getName() + " on "
-                                + source.getLabel());
-                source.runUntilIdle(
-                        "vmkfstools -i " + ShellQuote.quote(frozen.get(i).path) + " -d 2gbsparse "
-                                + ShellQuote.quote(exportDir + "/d" + i + ".vmdk"),
-                        "Exporting the disk " + frozen.get(i).path,
-                        idleSeconds);
-            }
-            final String listed =
-                    sourceFiles.run("ls -1 " + ShellQuote.quote(exportDir)).stdoutOrThrow("Listing " + exportDir);
-            for (String line : listed.split("\\R")) {
-                if (!line.trim().isEmpty()) {
-                    names.add(line.trim());
-                }
-            }
-            final List<String> checksums = new ArrayList<>();
-            for (String file : names) {
-                checksums.add(cksum(sourceFiles.shell(), exportDir + "/" + file));
-            }
-
-            EsxiRelay.copy(
-                    sourceFiles.shell(),
-                    source.getLabel(),
-                    targetFiles.shell(),
-                    target.getLabel(),
-                    exportDir,
-                    names,
-                    importDir,
-                    compression,
-                    idleSeconds,
-                    log);
-            for (int i = 0; i < names.size(); i++) {
-                final String there = cksum(targetFiles.shell(), importDir + "/" + names.get(i));
-                if (!there.equals(checksums.get(i))) {
-                    throw new VSphereException("The copy of " + names.get(i) + " on " + target.getLabel()
-                            + " has the checksum and size " + there + ", not the " + checksums.get(i)
-                            + " that it has on " + source.getLabel());
-                }
-            }
-
-            // import, as thin disks
             final VmxFile vmx = VmxFile.parse(masterVmx.toString());
-            for (int i = 0; i < frozen.size(); i++) {
-                say(log, "Importing the disk " + frozen.get(i).prefix + " on " + target.getLabel());
-                final String imported = name + "_" + i + ".vmdk";
-                target.runUntilIdle(
-                        "vmkfstools -i " + ShellQuote.quote(importDir + "/d" + i + ".vmdk") + " -d thin "
-                                + ShellQuote.quote(replicaDir + "/" + imported),
-                        "Importing the disk " + frozen.get(i).prefix,
-                        idleSeconds);
-                vmx.put(frozen.get(i).prefix + ".fileName", imported);
+            final List<Plan> exported = new ArrayList<>();
+            for (Plan plan : plans) {
+                if (plan.asIs) {
+                    // its files, as they are: a descriptor and the extents it names
+                    say(log, "Sending the files of the disk " + plan.disk.prefix + " as they are");
+                    EsxiRelay.copy(
+                            sourceFiles.shell(),
+                            source.getLabel(),
+                            targetFiles.shell(),
+                            target.getLabel(),
+                            plan.directory,
+                            plan.sizes.ownFiles,
+                            replicaDir,
+                            compression,
+                            idleSeconds,
+                            log);
+                    // the extents are as large as they were (and sent by a stream that checks itself); the descriptor
+                    // is small, and is compared whole
+                    final String descriptorHere = cksum(sourceFiles.shell(), plan.disk.path);
+                    final String descriptorThere = cksum(targetFiles.shell(), replicaDir + "/" + plan.descriptorName);
+                    if (!descriptorHere.equals(descriptorThere)) {
+                        throw new VSphereException("The copy of " + plan.descriptorName + " on " + target.getLabel()
+                                + " has the checksum and size " + descriptorThere + ", not the " + descriptorHere
+                                + " that it has on " + source.getLabel());
+                    }
+                    vmx.put(plan.disk.prefix + ".fileName", plan.descriptorName);
+                } else {
+                    exported.add(plan);
+                }
             }
-            targetFiles.removeFolder(importDir);
+            if (!exported.isEmpty()) {
+                sourceFiles.mkdirs(exportDir);
+                targetFiles.mkdirs(importDir);
+
+                // export, in a format that has what is written and not the rest
+                for (Plan plan : exported) {
+                    say(
+                            log,
+                            "Exporting the disk " + plan.disk.prefix + " of " + master.getName() + " on "
+                                    + source.getLabel());
+                    source.runUntilIdle(
+                            "vmkfstools -i " + ShellQuote.quote(plan.disk.path) + " -d 2gbsparse "
+                                    + ShellQuote.quote(exportDir + "/d" + plan.index + ".vmdk"),
+                            "Exporting the disk " + plan.disk.path,
+                            idleSeconds);
+                }
+                final List<String> names = new ArrayList<>();
+                final String listed =
+                        sourceFiles.run("ls -1 " + ShellQuote.quote(exportDir)).stdoutOrThrow("Listing " + exportDir);
+                for (String line : listed.split("\\R")) {
+                    if (!line.trim().isEmpty()) {
+                        names.add(line.trim());
+                    }
+                }
+                final List<String> checksums = new ArrayList<>();
+                for (String file : names) {
+                    checksums.add(cksum(sourceFiles.shell(), exportDir + "/" + file));
+                }
+
+                EsxiRelay.copy(
+                        sourceFiles.shell(),
+                        source.getLabel(),
+                        targetFiles.shell(),
+                        target.getLabel(),
+                        exportDir,
+                        names,
+                        importDir,
+                        compression,
+                        idleSeconds,
+                        log);
+                for (int i = 0; i < names.size(); i++) {
+                    final String there = cksum(targetFiles.shell(), importDir + "/" + names.get(i));
+                    if (!there.equals(checksums.get(i))) {
+                        throw new VSphereException("The copy of " + names.get(i) + " on " + target.getLabel()
+                                + " has the checksum and size " + there + ", not the " + checksums.get(i)
+                                + " that it has on " + source.getLabel());
+                    }
+                }
+
+                // import, as thin disks
+                for (Plan plan : exported) {
+                    say(log, "Importing the disk " + plan.disk.prefix + " on " + target.getLabel());
+                    final String imported = name + "_" + plan.index + ".vmdk";
+                    target.runUntilIdle(
+                            "vmkfstools -i " + ShellQuote.quote(importDir + "/d" + plan.index + ".vmdk") + " -d thin "
+                                    + ShellQuote.quote(replicaDir + "/" + imported),
+                            "Importing the disk " + plan.disk.prefix,
+                            idleSeconds);
+                    vmx.put(plan.disk.prefix + ".fileName", imported);
+                }
+                targetFiles.removeFolder(importDir);
+            }
 
             // the VM: what the master is, with the disks that were made, and where it is from
             EsxiVmCloner.prepareVmx(vmx, name, master.getName(), null, null);

@@ -190,6 +190,9 @@ final class EsxiVmCloner {
         final Map<String, String> frozen =
                 frozenDisks(source, sourceVmx, disks, namedSnapshot, useCurrentSnapshot, linkedClone);
 
+        if (!linkedClone) {
+            checkRoomForCopies(disks, sourceDirectory, frozen, datastore, cloneName);
+        }
         say("Making " + (linkedClone ? "a linked clone" : "a full clone") + " \"" + cloneName + "\" of \"" + sourceName
                 + "\" in " + cloneDirectory);
         files.mkdirs(cloneDirectory);
@@ -223,6 +226,41 @@ final class EsxiVmCloner {
             throw e;
         }
         say("\"" + cloneName + "\" was cloned from \"" + sourceName + "\"");
+    }
+
+    /**
+     * A full clone has to hold what is written on the disks of the master (a thin copy holds no more), so it is not
+     * started if the datastore has less than that free. Where that cannot be told, it is started anyway.
+     */
+    private void checkRoomForCopies(
+            List<Disk> disks, String sourceDirectory, Map<String, String> frozen, String datastore, String cloneName)
+            throws VSphereException {
+        long needed = 0;
+        List<EsxiDatastoreEntry> datastores;
+        try {
+            for (Disk disk : disks) {
+                final String frozenFile = frozen.get(disk.prefix);
+                final Located chosen = frozenFile != null
+                        ? locate(sourceDirectory, frozenFile)
+                        : newestReadableDisk(disk, sourceDirectory);
+                final long kb = EsxiDiskSizes.measure(files, chosen.path()).allocatedKb;
+                if (kb > 0) {
+                    needed += kb;
+                }
+            }
+            datastores = needed > 0 ? host.listDatastores() : List.of();
+        } catch (VSphereException e) {
+            say("Could not tell how much room the clone \"" + cloneName + "\" needs: " + e.getMessage());
+            return;
+        }
+        final long wanted = EsxiDiskSizes.withMargin(needed);
+        for (EsxiDatastoreEntry entry : datastores) {
+            if (entry.getName().equals(datastore) && entry.getFree() / 1024 < wanted) {
+                throw new VSphereException("Not enough room for the clone \"" + cloneName + "\": about "
+                        + needed / 1024 + " MB are written on the disks of the master, and " + datastore + " has "
+                        + entry.getFree() / (1024 * 1024) + " MB free");
+            }
+        }
     }
 
     /**

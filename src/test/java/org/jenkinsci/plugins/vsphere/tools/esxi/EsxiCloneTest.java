@@ -308,6 +308,32 @@ class EsxiCloneTest {
     }
 
     @Test
+    void aFullCloneThatWouldNotFitIsNotStartedAndALinkedOneIsNotAffected() throws Exception {
+        // what is written on the base disk of the master is more than the datastore has free
+        host.allocatedKb.put(MASTER + "/master-flat.vmdk", 700_000_000L);
+
+        VSphereException e = assertThrows(VSphereException.class, () -> clone("clone-01", false, false));
+
+        assertThat(e.getMessage(), containsString("Not enough room for the clone \"clone-01\""));
+        assertThat(e.getMessage(), containsString("datastore1 has"));
+        assertThat(host.hasDirectory(DS + "/clone-01"), is(false));
+        assertThat(host.commands.stream().anyMatch(c -> c.startsWith("vmkfstools -i")), is(false));
+        // a linked clone is a small delta, which is not about what the master has written
+        clone("linked-01", true, false);
+        assertThat(host.vmNamed("linked-01"), is(notNullValue()));
+    }
+
+    @Test
+    void aFullCloneIsStartedWhenItsRoomCannotBeTold() throws Exception {
+        host.allocatedKb.put(MASTER + "/master-flat.vmdk", 700_000_000L);
+        host.failing("esxcli storage filesystem list", "esxcli broke");
+
+        clone("clone-01", false, false);
+
+        assertThat(host.vmNamed("clone-01"), is(notNullValue()));
+    }
+
+    @Test
     void aFullCloneOfARunningMasterIsMadeFromTheDiskBeforeTheOneInUse() throws Exception {
         host.locked.add(MASTER + "/master-000002-sesparse.vmdk");
 

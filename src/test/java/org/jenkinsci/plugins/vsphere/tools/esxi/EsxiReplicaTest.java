@@ -287,6 +287,123 @@ class EsxiReplicaTest {
                 is(1L));
     }
 
+    // -- how a disk is copied, and whether there is room --
+
+    private static String descriptorOf(String cid, long sectors, String parentHint, String extent) {
+        return "# Disk DescriptorFile\nversion=1\nCID=" + cid + "\nparentCID=ffffffff\ncreateType=\"vmfs\"\n"
+                + (parentHint == null ? "" : "parentFileNameHint=\"" + parentHint + "\"\n")
+                + "\n# Extent description\nRW " + sectors + " VMFS \"" + extent + "\"\n";
+    }
+
+    @Test
+    void aDiskThatIsMostlyWrittenIsSentAsItIsWithNoExport() throws Exception {
+        // 4 KB disk, 3 KB of it written
+        hostA.addFile(MASTER_DIR + "/master.vmdk", descriptorOf("aaaa1111", 8, null, "master-flat.vmdk"));
+        hostA.addFile(MASTER_DIR + "/master-flat.vmdk", "x".repeat(3000));
+
+        final EsxiVirtualMachine replica = replicate("1", "datastore1");
+
+        assertThat(hostA.commands.stream().anyMatch(c -> c.contains("2gbsparse")), is(false));
+        assertThat(hostB.commands.stream().anyMatch(c -> c.contains("-d thin")), is(false));
+        final String dir = dirOf(replica, "datastore1");
+        assertThat(hostB.file(dir + "/master-flat.vmdk"), is("x".repeat(3000)));
+        assertThat(hostB.file(dir + "/master.vmdk"), is(descriptorOf("aaaa1111", 8, null, "master-flat.vmdk")));
+        assertThat(
+                VmxFile.parse(hostB.file(dir + "/" + replica.getName() + ".vmx"))
+                        .get("scsi0:0.fileName"),
+                is("master.vmdk"));
+        assertThat(said.toString(), containsString("most of it is written: its files are sent as they are"));
+        assertThat(leftOver(hostA, ".jenkins-export-"), is(false));
+    }
+
+    @Test
+    void aDiskThatIsMostlyNotWrittenIsExportedInTheSparseFormat() throws Exception {
+        // 4 GB disk of which 1 KB is written, as the x8 disk of an NFS datastore is
+        hostA.addFile(MASTER_DIR + "/master.vmdk", descriptorOf("aaaa1111", 8388608, null, "master-flat.vmdk"));
+        hostA.allocatedKb.put(MASTER_DIR + "/master-flat.vmdk", 1L);
+
+        replicate("1", "datastore1");
+
+        assertThat(hostA.commands.stream().anyMatch(c -> c.contains("-d 2gbsparse")), is(true));
+        assertThat(said.toString(), containsString("has 0 MB written of 4096 MB"));
+        assertThat(said.toString(), containsString("little of it is written"));
+    }
+
+    @Test
+    void aDiskThatIsAChangeOfAnotherIsExportedWhateverIsWritten() throws Exception {
+        hostA.addFile(MASTER_DIR + "/master.vmdk", descriptorOf("aaaa1111", 8, null, "master-flat.vmdk"));
+        hostA.addFile(MASTER_DIR + "/master-flat.vmdk", "x".repeat(3000));
+        hostA.addFile(
+                MASTER_DIR + "/master-000001.vmdk", descriptorOf("cccc3333", 8, "master.vmdk", "master-000001-s.vmdk"));
+        hostA.addFile(MASTER_DIR + "/master-000001-s.vmdk", "y".repeat(3000));
+        hostA.addFile(
+                MASTER_DIR + "/master.vmsd",
+                String.join(
+                        "\n",
+                        "snapshot.current = \"1\"",
+                        "snapshot0.uid = \"1\"",
+                        "snapshot0.disk0.fileName = \"master-000001.vmdk\"",
+                        "snapshot0.disk0.node = \"scsi0:0\"",
+                        ""));
+
+        replicate("1", "datastore1");
+
+        assertThat(hostA.commands.stream().anyMatch(c -> c.contains("-d 2gbsparse")), is(true));
+        assertThat(said.toString(), containsString("it is a change of other disks, which are exported as one"));
+    }
+
+    @Test
+    void whenTheHostCannotSayHowMuchIsWrittenTheDiskIsExportedAndTheRoomIsNotChecked() throws Exception {
+        hostA.failing("du -k", "du: not available");
+
+        replicate("1", "datastore1");
+
+        assertThat(hostA.commands.stream().anyMatch(c -> c.contains("-d 2gbsparse")), is(true));
+        assertThat(said.toString(), containsString("has an unknown amount written"));
+        assertThat(said.toString(), containsString("how much of it is written is not known"));
+    }
+
+    @Test
+    void aReplicaThatWouldNotFitOnTheTargetIsNotStarted() {
+        hostA.allocatedKb.put(MASTER_DIR + "/master-flat.vmdk", 10_000_000L); // about 10 GB written
+        hostB.datastoreTable = FakeEsxiHost.datastoreTable(new String[][] {
+            {"/vmfs/volumes/uuid-small", "datastore1", "uuid-small", "true", "VMFS-6", "50000000000", "5000000000"}
+        });
+
+        final VSphereException e = assertThrows(VSphereException.class, () -> replicate("1", "datastore1"));
+
+        assertThat(e.getMessage(), containsString("Not enough room for the replica jenkins-replica-master-"));
+        assertThat(e.getMessage(), containsString("datastore1"));
+        assertThat(leftOver(hostB, "jenkins-replica"), is(false));
+        assertThat(hostA.commands.stream().anyMatch(c -> c.startsWith("vmkfstools")), is(false));
+    }
+
+    @Test
+    void anExportThatWouldNotFitOnTheSourceIsNotStarted() {
+        // a 50 GB disk of which about 10 GB are written: exported, not sent as it is
+        hostA.addFile(MASTER_DIR + "/master.vmdk", descriptorOf("aaaa1111", 100_000_000, null, "master-flat.vmdk"));
+        hostA.allocatedKb.put(MASTER_DIR + "/master-flat.vmdk", 10_000_000L);
+        hostA.datastoreTable = FakeEsxiHost.datastoreTable(new String[][] {
+            {"/vmfs/volumes/uuid-ds1", "ds1", "uuid-ds1", "true", "VMFS-6", "50000000000", "5000000000"}
+        });
+
+        final VSphereException e = assertThrows(VSphereException.class, () -> replicate("1", "datastore1"));
+
+        assertThat(e.getMessage(), containsString("the export of the disks of master"));
+        assertThat(hostA.commands.stream().anyMatch(c -> c.startsWith("vmkfstools")), is(false));
+    }
+
+    @Test
+    void whenTheRoomOfTheTargetIsNotKnownTheCopyGoesOnAndSaysSo() throws Exception {
+        hostB.datastoreTable = FakeEsxiHost.datastoreTable(new String[][] {
+            {"/vmfs/volumes/uuid-x", "elsewhere", "uuid-x", "true", "VMFS-6", "50000000000", "5000000000"}
+        });
+
+        replicate("1", "datastore1");
+
+        assertThat(said.toString(), containsString("Cannot tell how much room datastore1 of"));
+    }
+
     @Test
     void theNameHasADigestOfWhereItIsFromAndWhatTheDisksAre() {
         final String a = EsxiReplica.replicaName("master", "uuid:master/master.vmx", "snapshot-1", "scsi0:0=aaaa;");

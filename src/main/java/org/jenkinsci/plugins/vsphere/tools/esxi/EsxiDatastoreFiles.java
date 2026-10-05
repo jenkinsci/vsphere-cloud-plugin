@@ -163,6 +163,23 @@ final class EsxiDatastoreFiles {
         shell.run("rm -rf " + ShellQuote.quote(directory)).stdoutOrThrow("Removing " + directory);
     }
 
+    /**
+     * The space that a file takes on the datastore, in KB, as {@code du -k} says (not the size it presents: a thin or
+     * sparse file takes what is written to it), or -1 if that could not be told.
+     */
+    long allocatedKb(String path) throws VSphereException {
+        final ShellResult result = shell.run("du -k " + ShellQuote.quote(path));
+        if (!result.succeeded()) {
+            return -1;
+        }
+        final String[] columns = result.getStdout().trim().split("\\s+", 2);
+        try {
+            return Long.parseLong(columns[0]);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
     /** The shell that the files are reached through. */
     EsxiShell shell() {
         return shell;

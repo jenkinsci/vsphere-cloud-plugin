@@ -66,6 +66,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** What du says of a file, where it is not the size of what the fake keeps in it (in KB). */
+    final Map<String, Long> allocatedKb = new LinkedHashMap<>();
     /** Whether a snapshot also makes what a real one does: an entry in the .vmsd, and a delta that the VM then has. */
     boolean realSnapshots;
     /** The tools that are in /bin, as far as which is asked. */
@@ -481,6 +483,16 @@ final class FakeEsxiHost implements EsxiShell {
         }
         if (words.equals(List.of("hostname"))) {
             return ok(hostname + ".example.com\n");
+        }
+        if (words.size() == 3 && words.get(0).equals("du") && words.get(1).equals("-k")) {
+            final String text = files.get(words.get(2));
+            if (text == null) {
+                return new ShellResult(1, "", "du: " + words.get(2) + ": No such file or directory");
+            }
+            final long kb = allocatedKb.containsKey(words.get(2))
+                    ? allocatedKb.get(words.get(2))
+                    : Math.max(1, (text.length() + 1023) / 1024);
+            return ok(kb + "\t" + words.get(2) + "\n");
         }
         if (words.size() == 2 && words.get(0).equals("cksum")) {
             final String text = files.get(words.get(1));

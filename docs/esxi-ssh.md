@@ -188,10 +188,21 @@ that. A replica is a VM of its own, always powered off:
   is not running), each as one thin disk, and **one snapshot**, `jenkins-replica-base`, which is what
   linked clones of it are made of. Being made of a snapshot of its own, a linked clone can be made of
   *any* snapshot of the master this way.
-* The disks are **exported on the source host in a sparse format** (`vmkfstools -d 2gbsparse`), which
-  holds only what is written on a disk, so that empty parts of thin disks are neither read, sent nor
-  written; they are sent through the controller by the relay (above), their **checksums** (`cksum`)
-  are compared on both hosts, and they are **imported as thin disks** (`vmkfstools -d thin`).
+* **How a disk is copied depends on how much of it is written**, which the host says with `du -k`
+  (the space that its files take), against the size that the disk presents in its descriptor. On the
+  NFS datastore of the test hosts, the 4 GB disk of a VM that had only been set up took 1 KB, a 512 MB
+  memory file 8.6 MB.
+  * A disk that is **mostly written** (at least half) and is not a change of another disk is sent **as it
+    is**: its descriptor and its extents, through the relay, with no extra pass. The extents are checked
+    by their sizes (and by the compression, which checks itself), the small descriptor by its checksum.
+  * A disk that is **mostly not written**, or is a **change of other disks** (a snapshot's), or of which
+    that cannot be told, is **exported on the source host in a sparse format** (`vmkfstools -d
+    2gbsparse`), which holds only what is written, flattening the disks it is a change of; the export is
+    sent through the relay, its **checksums** (`cksum`) are compared on both hosts, and it is **imported
+    as a thin disk** (`vmkfstools -d thin`).
+  * On a file system that **compresses** (a ZFS dataset behind NFS), `du` shows what the server stores,
+    which is less than has to be read: it is a guide to what is copied, not a promise. A mistaken choice
+    costs time (or an extra pass), not correctness, as both ways are checked.
 * A replica **never changes**. Its name is `jenkins-replica-<master>-<digest>`, the digest being of where
   the master is (its datastore's UUID and path), the snapshot, and the `CID` of each disk (which a disk
   file changes when it is written). A master that has changed gets a **new replica**, and the old one
@@ -203,6 +214,10 @@ that. A replica is a VM of its own, always powered off:
 * What is made of a replica that fails (the folder, the VM, the export on the source) is removed.
 * A replica is a copy of the data: it takes the space of what is written on the disks, on the datastore of
   the target host that has the most room (or the one asked for).
+* **Room is checked first.** What is written on the disks (plus 5% and 64 MB) has to fit in the datastore of the
+  target, and, for the disks that are exported, in that of the master, where the export is made, for a
+  short time; if not, nothing is started, and the message says how much is needed and how much is free.
+  If a host cannot say, the copy goes on, and the log says that the room could not be told.
 
 ## Linked clones and their master
 
@@ -370,6 +385,9 @@ and the load of a host is not measured. What it does:
   found (the clone fails as it does for a VM that does not exist), though the hosts that are up could
   see its files.
 * **Datastores** are those of all the hosts; one that several have under the same name is listed once.
+* **A full clone** (on any host) is not started if the datastore has less room than what is written on the disks of its
+  master (plus 5% and 64 MB): it would fail halfway, after the copy has taken its time. A linked clone is a small
+  delta, and is not checked.
 
 **Hosts that do not share a datastore with the master** can be used too, with the setting
 **Make replicas of masters** (`replicateMasters`, off by default so that nothing is copied that was not
