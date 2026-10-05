@@ -334,6 +334,17 @@ class EsxiCloneTest {
     }
 
     @Test
+    void aCloneOnAnOlderHostGetsTheNewestHardwareVersionThatHostHas() throws Exception {
+        host.addFile(MASTER + "/master.vmx", MASTER_VMX + "virtualHW.version = \"20\"\n");
+        host.esxiVersion = "VMware ESXi 7.0.3 build-20036589";
+
+        clone("clone-01", true, false);
+
+        assertThat(VmxFile.parse(host.file(DS + "/clone-01/clone-01.vmx")).get("virtualHW.version"), is("19"));
+        assertThat(logBytes.toString(), containsString("made 19, the newest that it has"));
+    }
+
+    @Test
     void aFullCloneOfARunningMasterIsMadeFromTheDiskBeforeTheOneInUse() throws Exception {
         host.locked.add(MASTER + "/master-000002-sesparse.vmdk");
 

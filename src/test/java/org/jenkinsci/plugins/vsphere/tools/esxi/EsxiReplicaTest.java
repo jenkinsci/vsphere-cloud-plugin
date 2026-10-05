@@ -405,6 +405,33 @@ class EsxiReplicaTest {
     }
 
     @Test
+    void aReplicaOnAnOlderHostGetsTheNewestHardwareVersionThatHostHas() throws Exception {
+        hostA.addFile(MASTER_DIR + "/master.vmx", MASTER_VMX + "virtualHW.version = \"20\"\n");
+        hostB.esxiVersion = "VMware ESXi 7.0.3 build-20036589";
+
+        final EsxiVirtualMachine replica = replicate("1", "datastore1");
+
+        assertThat(
+                VmxFile.parse(hostB.file(dirOf(replica, "datastore1") + "/" + replica.getName() + ".vmx"))
+                        .get("virtualHW.version"),
+                is("19"));
+        assertThat(said.toString(), containsString("is 20, which the host does not have; it is made 19"));
+    }
+
+    @Test
+    void aReplicaOnAHostThatHasTheVersionKeepsIt() throws Exception {
+        hostA.addFile(MASTER_DIR + "/master.vmx", MASTER_VMX + "virtualHW.version = \"20\"\n");
+        hostB.esxiVersion = "VMware ESXi 8.0.1 build-21813344";
+
+        final EsxiVirtualMachine replica = replicate("1", "datastore1");
+
+        assertThat(
+                VmxFile.parse(hostB.file(dirOf(replica, "datastore1") + "/" + replica.getName() + ".vmx"))
+                        .get("virtualHW.version"),
+                is("20"));
+    }
+
+    @Test
     void theNameHasADigestOfWhereItIsFromAndWhatTheDisksAre() {
         final String a = EsxiReplica.replicaName("master", "uuid:master/master.vmx", "snapshot-1", "scsi0:0=aaaa;");
 

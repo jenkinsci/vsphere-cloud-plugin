@@ -474,6 +474,10 @@ final class EsxiReplica {
 
             // the VM: what the master is, with the disks that were made, and where it is from
             EsxiVmCloner.prepareVmx(vmx, name, master.getName(), null, null);
+            final String adapted = target.adaptHardwareVersion(vmx);
+            if (adapted != null) {
+                say(log, adapted);
+            }
             vmx.put(KEY_SOURCE, sourceKey);
             vmx.put(KEY_STATE, state);
             vmx.put(KEY_STAMP, stamp);
@@ -492,6 +496,12 @@ final class EsxiReplica {
 
             // the snapshot that clones are linked to
             final com.vmware.vim25.mo.VirtualMachine replica = target.getVmByName(name);
+            if (!(replica instanceof EsxiVirtualMachine)) {
+                throw new VSphereException("The host does not list the replica " + name + " after registering "
+                        + replicaVmx + " (it said: " + output.trim() + "), which is what it does for a VM that it takes"
+                        + " for invalid, such as one of a virtual hardware version that it does not have (the master has "
+                        + masterVmx.get("virtualHW.version", "no version") + "); it lists: " + target.listVms());
+            }
             final EsxiTask snapshot = target.createSnapshotTask(
                     ((EsxiVirtualMachine) replica).getEntry(),
                     BASE_SNAPSHOT,

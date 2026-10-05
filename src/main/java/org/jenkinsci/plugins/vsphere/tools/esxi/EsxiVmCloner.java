@@ -212,6 +212,10 @@ final class EsxiVmCloner {
                 index++;
             }
             prepareVmx(vmx, cloneName, sourceName, extraConfigParameters, vmSize);
+            final String adapted = host.adaptHardwareVersion(vmx);
+            if (adapted != null) {
+                say(adapted);
+            }
             files.write(cloneVmx, vmx.toString());
 
             say("Registering \"" + cloneName + "\" with the host");

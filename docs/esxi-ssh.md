@@ -385,6 +385,13 @@ and the load of a host is not measured. What it does:
   found (the clone fails as it does for a VM that does not exist), though the hosts that are up could
   see its files.
 * **Datastores** are those of all the hosts; one that several have under the same name is listed once.
+* **Hosts of different versions.** A host takes a VM of a virtual hardware version that it does not have for
+  invalid: it registers it, and does not list it (the clone of a master from ESXi 8, hardware version 20, on an
+  ESXi 7.0.3 host, which has 19 at most, was seen so). A clone or replica that is made for a host is therefore given
+  the newest version that host has (from its version, by a table of what VMware documents: ESXi 6.0 11, 6.5 13,
+  6.7 14/15, 7.0 17 to 19, 8.0 20/21), if the master's is newer, and the log says so; a host whose version is not in
+  the table is not changed. A guest mostly does not mind, but it is a change of the hardware of the copy: mind it for
+  a guest that uses what the newer version added.
 * **A full clone** (on any host) is not started if the datastore has less room than what is written on the disks of its
   master (plus 5% and 64 MB): it would fail halfway, after the copy has taken its time. A linked clone is a small
   delta, and is not checked.

@@ -127,6 +127,26 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         return new long[] {on, vms.size()};
     }
 
+    private @CheckForNull Integer maxHardwareVersion;
+    private boolean maxHardwareVersionKnown;
+
+    /**
+     * Gives a VM that is to be registered with this host the newest virtual hardware version that the host has, if the
+     * VM has a newer one (the host would take it for invalid). Returns what was done, to say, or null if nothing was.
+     */
+    synchronized @CheckForNull String adaptHardwareVersion(VmxFile vmx) {
+        if (!maxHardwareVersionKnown) {
+            try {
+                final ShellResult version = shell.run("vmware -v");
+                maxHardwareVersion = EsxiHardwareVersion.maxFor(version.succeeded() ? version.getStdout() : null);
+            } catch (VSphereException e) {
+                LOGGER.log(Level.FINE, "Asking " + getLabel() + " for its version", e);
+            }
+            maxHardwareVersionKnown = true;
+        }
+        return EsxiHardwareVersion.lowerTo(vmx, maxHardwareVersion);
+    }
+
     /**
      * The host as a candidate for a placement: its size, and what is used of it now, as the host itself says (see
      * {@link EsxiHostStats}). A host that does not say what is used is not ranked.
