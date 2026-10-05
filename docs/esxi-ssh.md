@@ -159,6 +159,25 @@ feature. There are two classes that do: `EsxiConstraintException` (a `VSphereExc
 `EsxiConstraintUnsupportedOperationException` (an `UnsupportedOperationException`, for the objects
 that stand in for the vSphere API). Anything else that is refused is an ordinary failure.
 
+## Copying files between hosts: the relay
+
+For hosts that do not share a datastore, files of a datastore folder can be copied from one host to
+another **through the controller** (`EsxiRelay`): `tar` on the source writes the files, compressed
+there, to a stream that Jenkins passes on, as it is, to `tar` on the target. It needs nothing of the
+hosts but the SSH session that each of them already has: no trust between the hosts, no firewall to
+open, nothing unencrypted. It is the slowest way, as the bytes make two trips, which is why they are
+compressed on the source. (Cloning does not use it yet; it is what it will be built on.)
+
+* **Compression** is `pigz` (the default; it is on ESXi 7 and 8), `gzip`, `bzip2` or none. If a host
+  does not have the one that is asked for, the next is used, ending with none, and the log says so.
+* **Time**: there is no limit to how long a copy takes, as files can be large. A copy is given up
+  on when **nothing has moved, in either direction, for the idle time**.
+* **What is left behind**: the files are unpacked in a folder of their own next to where they are going
+  (`.jenkins-incoming-...`), checked for their sizes, and only then moved in place; a copy that fails
+  leaves nothing in the folder, and the folder is removed. A file that is there already is replaced.
+* **Time stamps** are carried over by `tar`, so that a file is as old on the target as on the source.
+* Only plain names in folders of datastores are accepted.
+
 ## Linked clones and their master
 
 A linked clone is a change of the disks of its master, which it names by their path; the host keeps

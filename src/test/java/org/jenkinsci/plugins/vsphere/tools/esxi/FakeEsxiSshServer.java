@@ -83,7 +83,10 @@ final class FakeEsxiSshServer implements AutoCloseable {
                     if (getCommand().equals(HANG)) {
                         Thread.sleep(30_000);
                     }
-                    final ShellResult result = host.run(getCommand());
+                    final ShellResult result =
+                            host.streams(getCommand()) && !getCommand().equals(HANG)
+                                    ? host.stream(getCommand(), getInputStream(), getOutputStream(), 60)
+                                    : host.run(getCommand());
                     getOutputStream().write(result.getStdout().getBytes(StandardCharsets.UTF_8));
                     getOutputStream().flush();
                     getErrorStream().write(result.getStderr().getBytes(StandardCharsets.UTF_8));

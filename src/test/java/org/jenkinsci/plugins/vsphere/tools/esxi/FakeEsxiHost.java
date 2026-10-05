@@ -66,6 +66,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The tools that are in /bin, as far as which is asked. */
+    final java.util.Set<String> tools = new java.util.HashSet<>(java.util.List.of("pigz", "gzip", "bzip2"));
     /** Volumes this host calls by another name than the files are kept under: its label, to the one they are under. */
     final Map<String, String> volumeAliases = new LinkedHashMap<>();
     /** What the host says of its size and load (vim-cmd hostsvc/hostsummary); a null number is left out. */
@@ -211,6 +213,90 @@ final class FakeEsxiHost implements EsxiShell {
         return mapped;
     }
 
+    private static final java.util.regex.Pattern PACK = java.util.regex.Pattern.compile(
+            "(?s)^\\(tar cf - -C (.+?) \\|\\| echo TAR-FAILED >&2\\)(?: \\| (pigz|gzip|bzip2) -1)?$|^tar cf - -C (.+?) \\|\\| echo TAR-FAILED >&2$");
+    private static final java.util.regex.Pattern UNPACK =
+            java.util.regex.Pattern.compile("^(?:(pigz|gzip|bzip2) -d \\| )?tar xf - -C (.+)$");
+
+    /** True if the command moves data through its input or output, which only {@link #stream} can run. */
+    boolean streams(String command) {
+        return PACK.matcher(command).matches()
+                || UNPACK.matcher(command).matches()
+                || command.equals(FakeEsxiSshServer.HANG);
+    }
+
+    /**
+     * What a tar that packs files, and one that unpacks them, make of each other: the files are sent as a header
+     * that says how they were compressed, and then their names, sizes and contents. A tool that is not the one that
+     * packed them cannot unpack them, as with the real ones.
+     */
+    @Override
+    public ShellResult stream(
+            String command, java.io.InputStream stdin, java.io.OutputStream stdout, int idleTimeoutSeconds)
+            throws VSphereException {
+        commands.add(command);
+        try {
+            for (Map.Entry<String, String> failure : failures.entrySet()) {
+                if (command.contains(failure.getKey())) {
+                    return new ShellResult(
+                            1, "", failure.getValue() + (command.contains("tar cf") ? "\nTAR-FAILED\n" : ""));
+                }
+            }
+            final java.util.regex.Matcher pack = PACK.matcher(command);
+            if (pack.matches()) {
+                final List<String> words = unaliased(split(pack.group(1) != null ? pack.group(1) : pack.group(3)));
+                final String tool = pack.group(2) == null ? "" : pack.group(2);
+                final java.io.DataOutputStream out = new java.io.DataOutputStream(stdout);
+                final List<String> names = words.subList(1, words.size());
+                for (String name : names) {
+                    if (!files.containsKey(words.get(0) + "/" + name)) {
+                        return new ShellResult(1, "", "tar: " + name + ": No such file or directory\nTAR-FAILED\n");
+                    }
+                }
+                out.writeUTF(tool);
+                out.writeInt(names.size());
+                for (String name : names) {
+                    final byte[] data =
+                            files.get(words.get(0) + "/" + name).getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+                    out.writeUTF(name);
+                    out.writeInt(data.length);
+                    out.write(data);
+                }
+                out.flush();
+                return ok("");
+            }
+            final java.util.regex.Matcher unpack = UNPACK.matcher(command);
+            if (unpack.matches()) {
+                final String directory = unalias(split(unpack.group(2)).get(0));
+                final java.io.DataInputStream in = new java.io.DataInputStream(stdin);
+                final String tool = in.readUTF();
+                final String wanted = unpack.group(1) == null ? "" : unpack.group(1);
+                if (!tool.equals(wanted)) {
+                    return new ShellResult(
+                            1, "", (wanted.isEmpty() ? "tar" : wanted) + ": not in the format that it reads");
+                }
+                final int count = in.readInt();
+                for (int i = 0; i < count; i++) {
+                    final String name = in.readUTF();
+                    final byte[] data = new byte[in.readInt()];
+                    in.readFully(data);
+                    if (!directories.contains(directory)) {
+                        return new ShellResult(1, "", "tar: can't create " + directory + "/" + name);
+                    }
+                    files.put(directory + "/" + name, new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
+                }
+                return ok("");
+            }
+            if (command.equals(FakeEsxiSshServer.HANG)) {
+                Thread.sleep(30_000);
+                return ok("");
+            }
+            throw new AssertionError("Unexpected command to stream: " + command);
+        } catch (java.io.IOException | InterruptedException e) {
+            return new ShellResult(1, "", "tar: " + e.getMessage());
+        }
+    }
+
     /** Has this host see the same datastores as the other: the same files, folders, locks and names for them. */
     void shareStorageWith(FakeEsxiHost other) {
         this.files = other.files;
@@ -334,6 +420,9 @@ final class FakeEsxiHost implements EsxiShell {
         }
         if (words.equals(List.of("hostname"))) {
             return ok(hostname + ".example.com\n");
+        }
+        if (words.size() == 2 && words.get(0).equals("which")) {
+            return tools.contains(words.get(1)) ? ok("/bin/" + words.get(1) + "\n") : new ShellResult(1, "", "");
         }
         if (words.equals(List.of("vmware", "-v"))) {
             return ok(esxiVersion + "\n");
@@ -527,6 +616,24 @@ final class FakeEsxiHost implements EsxiShell {
                 files.put(words.get(2), files.get(words.get(1)));
                 return ok("");
             case "ls":
+                if (words.get(1).equals("-ln")) {
+                    // ls -ln path...: a line for each, as busybox prints them
+                    final StringBuilder listing = new StringBuilder();
+                    final StringBuilder missing = new StringBuilder();
+                    for (String path : words.subList(2, words.size())) {
+                        if (files.containsKey(path)) {
+                            listing.append("-rw-r--r--    1 0        0        ")
+                                    .append(String.format(
+                                            "%11d", files.get(path).length()))
+                                    .append(" Oct  5 06:51 ")
+                                    .append(path)
+                                    .append('\n');
+                        } else {
+                            missing.append("ls: ").append(path).append(": No such file or directory\n");
+                        }
+                    }
+                    return new ShellResult(missing.length() == 0 ? 0 : 1, listing.toString(), missing.toString());
+                }
                 if (words.get(1).equals("-1d")) {
                     // ls -1d 'dir'/*/*.vmx: what a shell would have made of the pattern
                     final java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(

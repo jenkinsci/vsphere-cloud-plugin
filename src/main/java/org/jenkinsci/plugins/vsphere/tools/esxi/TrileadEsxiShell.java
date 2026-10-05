@@ -22,7 +22,11 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 
@@ -215,6 +219,104 @@ public final class TrileadEsxiShell implements EsxiShell {
             throw new VSphereException("Interrupted while running a command on " + settings, e);
         } finally {
             session.close();
+        }
+    }
+
+    @Override
+    public ShellResult stream(
+            String command, @CheckForNull InputStream stdin, @CheckForNull OutputStream stdout, int idleTimeoutSeconds)
+            throws VSphereException {
+        final Session session;
+        try {
+            session = connection.openSession();
+        } catch (IOException | IllegalStateException e) {
+            throw new VSphereException("Could not open an SSH session to " + settings + ": " + rootMessage(e), e);
+        }
+        final AtomicLong lastMoved = new AtomicLong(System.nanoTime());
+        final AtomicBoolean idle = new AtomicBoolean();
+        final AtomicReference<Throwable> pumpFailure = new AtomicReference<>();
+        final long idleNanos = TimeUnit.SECONDS.toNanos(Math.max(1, idleTimeoutSeconds));
+        final Thread watchdog = new Thread(
+                () -> {
+                    try {
+                        while (!Thread.currentThread().isInterrupted()) {
+                            Thread.sleep(250);
+                            if (System.nanoTime() - lastMoved.get() > idleNanos) {
+                                idle.set(true);
+                                session.close();
+                                return;
+                            }
+                        }
+                    } catch (InterruptedException e) {
+                        // the command is over
+                    }
+                },
+                "esxi-stream-watchdog");
+        watchdog.setDaemon(true);
+        Thread feeder = null;
+        try {
+            session.execCommand(command);
+            final InputStream errors = new StreamGobbler(session.getStderr());
+            watchdog.start();
+            if (stdin != null) {
+                feeder = new Thread(
+                        () -> {
+                            try (OutputStream toCommand = session.getStdin()) {
+                                final byte[] buffer = new byte[64 * 1024];
+                                int n;
+                                while ((n = stdin.read(buffer)) != -1) {
+                                    toCommand.write(buffer, 0, n);
+                                    lastMoved.set(System.nanoTime());
+                                }
+                            } catch (IOException e) {
+                                pumpFailure.compareAndSet(null, e);
+                            }
+                        },
+                        "esxi-stream-feeder");
+                feeder.setDaemon(true);
+                feeder.start();
+            } else {
+                session.getStdin().close();
+            }
+            final InputStream fromCommand = session.getStdout();
+            final byte[] buffer = new byte[64 * 1024];
+            int n;
+            while ((n = fromCommand.read(buffer)) != -1) {
+                if (stdout != null) {
+                    stdout.write(buffer, 0, n);
+                }
+                lastMoved.set(System.nanoTime());
+            }
+            if (stdout != null) {
+                stdout.flush();
+            }
+            if (idle.get()) {
+                throw new IOException("idle");
+            }
+            session.waitForCondition(
+                    ChannelCondition.EXIT_STATUS | ChannelCondition.EXIT_SIGNAL | ChannelCondition.CLOSED,
+                    EXIT_STATUS_WAIT_MILLIS);
+            final String err = read(errors);
+            final Integer status = session.getExitStatus();
+            if (pumpFailure.get() != null && (status == null || status == 0)) {
+                throw new IOException(pumpFailure.get());
+            }
+            return new ShellResult(status == null ? -1 : status, "", err);
+        } catch (IOException e) {
+            if (idle.get()) {
+                throw new VSphereException("Nothing moved for " + idleTimeoutSeconds + " seconds in a command on "
+                        + settings + ": " + abbreviate(command));
+            }
+            throw new VSphereException("Streaming data in a command on " + settings + " failed: " + rootMessage(e), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new VSphereException("Interrupted while streaming data in a command on " + settings, e);
+        } finally {
+            watchdog.interrupt();
+            session.close();
+            if (feeder != null) {
+                feeder.interrupt();
+            }
         }
     }
 
