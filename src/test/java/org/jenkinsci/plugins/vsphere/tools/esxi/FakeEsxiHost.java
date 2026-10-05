@@ -63,6 +63,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** What esxcli storage filesystem list prints, as seen on an ESXi 7 host. */
+    String datastoreTable = datastoreTable(DATASTORE_ROWS);
     /** The short name of the host; null makes esxcli unknown. */
     String hostname = "esxi7";
     /** The port groups of the standard switches; null makes "esxcli" unknown, as on a host that has none. */
@@ -76,6 +78,98 @@ final class FakeEsxiHost implements EsxiShell {
     final java.util.Set<String> locked = new java.util.HashSet<>();
     /** Where a datastore really is: /vmfs/volumes/name is a link to /vmfs/volumes/uuid. */
     final Map<String, String> datastoreUuids = new LinkedHashMap<>();
+
+    /** What esxcli storage filesystem list prints on an ESXi 7 host: mount point, name, UUID, mounted, type, size, free. */
+    static final String[][] DATASTORE_ROWS = {
+        {
+            "/vmfs/volumes/5f1a2b3c-aaaaaaaa-bbbb-001122334455",
+            "datastore1",
+            "5f1a2b3c-aaaaaaaa-bbbb-001122334455",
+            "true",
+            "VMFS-6",
+            "1000204886016",
+            "500102443008"
+        },
+        {
+            "/vmfs/volumes/5f1a2b3c-cccccccc-dddd-001122334455",
+            "datastore 2",
+            "5f1a2b3c-cccccccc-dddd-001122334455",
+            "true",
+            "VMFS-6",
+            "250000000000",
+            "100000000000"
+        },
+        {
+            "/vmfs/volumes/6a6a6a6a-11111111-2222-001122334455",
+            "nfs-share",
+            "6a6a6a6a-11111111-2222-001122334455",
+            "true",
+            "NFS",
+            "2000000000000",
+            "1999999999999"
+        },
+        {
+            "/vmfs/volumes/6a6a6a6a-33333333-4444-001122334455",
+            "offline",
+            "6a6a6a6a-33333333-4444-001122334455",
+            "false",
+            "NFS",
+            "2000000000000",
+            "1999999999999"
+        },
+        {
+            "/vmfs/volumes/6b6b6b6b-55555555-6666-001122334455",
+            "OSDATA-6b6b6b6b-5555",
+            "6b6b6b6b-55555555-6666-001122334455",
+            "true",
+            "VMFS-L",
+            "128580583424",
+            "118380036096"
+        },
+        {
+            "/vmfs/volumes/6b6b6b6b-77777777-8888-001122334455",
+            "",
+            "6b6b6b6b-77777777-8888-001122334455",
+            "true",
+            "vfat",
+            "4293591040",
+            "4277207040"
+        },
+    };
+
+    static String datastoreTable(String[][] rows) {
+        final String[] titles = {"Mount Point", "Volume Name", "UUID", "Mounted", "Type", "Size", "Free"};
+        final int[] widths = new int[titles.length];
+        for (int c = 0; c < titles.length; c++) {
+            widths[c] = titles[c].length();
+            for (String[] row : rows) {
+                widths[c] = Math.max(widths[c], row[c].length());
+            }
+        }
+        final StringBuilder out = new StringBuilder();
+        final StringBuilder rule = new StringBuilder();
+        for (int c = 0; c < titles.length; c++) {
+            final boolean right = c >= 3 && c != 4;
+            out.append(String.format(right ? "%" + widths[c] + "s" : "%-" + widths[c] + "s", titles[c]));
+            rule.append("-".repeat(widths[c]));
+            if (c < titles.length - 1) {
+                out.append("  ");
+                rule.append("  ");
+            }
+        }
+        out.append('\n').append(rule).append('\n');
+        for (String[] row : rows) {
+            for (int c = 0; c < titles.length; c++) {
+                final boolean right = c >= 3 && c != 4;
+                out.append(String.format(right ? "%" + widths[c] + "s" : "%-" + widths[c] + "s", row[c]));
+                if (c < titles.length - 1) {
+                    out.append("  ");
+                }
+            }
+            out.append('\n');
+        }
+        return out.toString();
+    }
 
     private int nextVmId = 100;
     private final Map<String, String> failures = new LinkedHashMap<>();
@@ -178,6 +272,9 @@ final class FakeEsxiHost implements EsxiShell {
                 table.append(String.format("%-19s  vSwitch0                       1        0%n", group));
             }
             return ok(table.toString());
+        }
+        if (words.equals(List.of("esxcli", "storage", "filesystem", "list"))) {
+            return ok(datastoreTable);
         }
         if (words.equals(List.of("esxcli", "system", "hostname", "get"))) {
             return hostname == null

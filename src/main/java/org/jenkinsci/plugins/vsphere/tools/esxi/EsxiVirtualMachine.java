@@ -20,6 +20,7 @@ import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.VirtualMachineMovePriority;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineRelocateSpec;
+import com.vmware.vim25.mo.Datastore;
 import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.HostSystem;
 import com.vmware.vim25.mo.ResourcePool;
@@ -136,6 +137,16 @@ public final class EsxiVirtualMachine extends VirtualMachine {
         final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
         spec.setName(newName);
         return host.reconfigureTask("rename", entry, spec);
+    }
+
+    /** The datastores that hold the files of the VM. */
+    @Override
+    public Datastore[] getDatastores() {
+        try {
+            return host.datastoresOf(entry).toArray(new Datastore[0]);
+        } catch (org.jenkinsci.plugins.vsphere.tools.VSphereException e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
     }
 
     private static EsxiConstraintUnsupportedOperationException migration(String what) {

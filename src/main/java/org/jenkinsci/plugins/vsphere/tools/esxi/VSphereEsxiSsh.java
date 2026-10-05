@@ -17,6 +17,9 @@ package org.jenkinsci.plugins.vsphere.tools.esxi;
 import com.vmware.vim25.CustomizationSpecItem;
 import com.vmware.vim25.GuestInfo;
 import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.VirtualDevice;
+import com.vmware.vim25.VirtualDeviceFileBackingInfo;
+import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualMachineConfigInfo;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.VirtualMachineConfigSummary;
@@ -310,6 +313,65 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         return new EsxiConstraintException(operation + " is not applicable to a standalone ESXi host: " + reason);
     }
 
+    // -- datastores --
+
+    /** The places on the host where VMs can be kept, with their size and free space. */
+    List<EsxiDatastoreEntry> listDatastores() throws VSphereException {
+        final String output =
+                shell.run("esxcli storage filesystem list").stdoutOrThrow("Listing the datastores of the host");
+        final List<EsxiDatastoreEntry> all = EsxiDatastoreEntry.parse(output);
+        if (all == null) {
+            throw new VSphereException("Could not make out the datastores from: " + output.trim());
+        }
+        final List<EsxiDatastoreEntry> usable = new ArrayList<>();
+        for (EsxiDatastoreEntry entry : all) {
+            if (entry.isForVms() && entry.isMounted()) {
+                usable.add(entry);
+            }
+        }
+        return usable;
+    }
+
+    @Override
+    public ManagedEntity[] getDatastores() throws VSphereException {
+        final List<ManagedEntity> datastores = new ArrayList<>();
+        for (EsxiDatastoreEntry entry : listDatastores()) {
+            datastores.add(new EsxiDatastore(entry));
+        }
+        return datastores.toArray(new ManagedEntity[0]);
+    }
+
+    /** The datastore with the name, or null if the host has none like that. */
+    public EsxiDatastore getDatastoreByName(String name) throws VSphereException {
+        for (EsxiDatastoreEntry entry : listDatastores()) {
+            if (entry.getName().equals(name)) {
+                return new EsxiDatastore(entry);
+            }
+        }
+        return null;
+    }
+
+    /** The datastores that hold the files of the VM (its configuration and its disks). */
+    List<EsxiDatastore> datastoresOf(VmEntry vm) throws VSphereException {
+        final java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        names.add(vm.getDatastore());
+        final VirtualMachineConfigInfo config = readConfigInfo(vm);
+        for (VirtualDevice device : config.getHardware().getDevice()) {
+            if (device instanceof VirtualDisk && device.getBacking() instanceof VirtualDeviceFileBackingInfo) {
+                final String file = ((VirtualDeviceFileBackingInfo) device.getBacking()).getFileName();
+                if (file.startsWith("[") && file.indexOf(']') > 0) {
+                    names.add(file.substring(1, file.indexOf(']')));
+                }
+            }
+        }
+        final List<EsxiDatastore> datastores = new ArrayList<>();
+        for (String name : names) {
+            final EsxiDatastore known = getDatastoreByName(name);
+            datastores.add(known != null ? known : new EsxiDatastore(name));
+        }
+        return datastores;
+    }
+
     // -- cloning, done on the files of the host --
 
     /**
@@ -447,11 +509,6 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     public CustomizationSpecItem getCustomizationSpecByName(final String customizationSpecName)
             throws VSphereException {
         throw notApplicable("getCustomizationSpecByName", "customization specifications are kept by vCenter");
-    }
-
-    @Override
-    public ManagedEntity[] getDatastores() throws VSphereException {
-        throw unsupported("getDatastores");
     }
 
     @Override

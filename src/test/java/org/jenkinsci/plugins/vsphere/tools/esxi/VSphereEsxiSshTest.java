@@ -28,6 +28,8 @@ import com.vmware.vim25.VirtualEthernetCard;
 import com.vmware.vim25.VirtualMachineConfigSpec;
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineToolsStatus;
+import com.vmware.vim25.mo.Datastore;
+import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.VirtualMachine;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
@@ -178,7 +180,7 @@ class VSphereEsxiSshTest {
     void propertiesThatAreNotProvidedSayWhy() throws Exception {
         VirtualMachine vm = esxi.getVmByName("kube-master");
 
-        UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class, () -> vm.getDatastores());
+        UnsupportedOperationException e = assertThrows(UnsupportedOperationException.class, () -> vm.getParent());
         assertThat(e.getMessage(), containsString("not available from an ESXi host over SSH"));
     }
 
@@ -397,6 +399,49 @@ class VSphereEsxiSshTest {
         assertThat(e.getMessage(), containsString("vim-cmd cannot do it"));
     }
 
+    // -- datastores --
+
+    @Test
+    void listsTheDatastoresWhereVmsCanBeKept() throws Exception {
+        final ManagedEntity[] datastores = esxi.getDatastores();
+
+        // not the one that is not mounted, nor the system volumes of the host
+        assertThat(datastores.length, is(3));
+        final Datastore second = (Datastore) datastores[1];
+        assertThat(second.getName(), is("datastore 2"));
+        assertThat(second.getSummary().getFreeSpace(), is(100000000000L));
+        assertThat(second.getSummary().getCapacity(), is(250000000000L));
+        assertThat(second.getSummary().getType(), is("VMFS-6"));
+        assertThat(((Datastore) datastores[2]).getSummary().getMultipleHostAccess(), is(true));
+    }
+
+    @Test
+    void findsADatastoreByName() throws Exception {
+        assertThat(esxi.getDatastoreByName("nfs-share").getSummary().getType(), is("NFS"));
+        assertThat(esxi.getDatastoreByName("offline"), is(nullValue()));
+        assertThat(esxi.getDatastoreByName("nope"), is(nullValue()));
+    }
+
+    @Test
+    void saysWhichDatastoresHoldAVm() throws Exception {
+        final Datastore[] held = esxi.getVmByName("kube-master").getDatastores();
+
+        assertThat(held.length, is(1));
+        assertThat(held[0].getName(), is("datastore1"));
+        assertThat(held[0].getSummary().getFreeSpace(), is(500102443008L));
+        // one that the host does not list is known by its name
+        assertThat(esxi.getVmByName("my vm").getDatastores()[0].getName(), is("datastore 2"));
+    }
+
+    @Test
+    void anOutputThatIsNotTheTableIsReported() {
+        host.datastoreTable = "something else\n";
+
+        final VSphereException e = assertThrows(VSphereException.class, () -> esxi.getDatastores());
+
+        assertThat(e.getMessage(), containsString("Could not make out the datastores"));
+    }
+
     // -- the host --
 
     @Test
@@ -449,7 +494,6 @@ class VSphereEsxiSshTest {
         VSphereException e = assertThrows(VSphereException.class, () -> esxi.folderExists("folder"));
         assertThat(e.getMessage(), containsString("folderExists is not applicable to a standalone ESXi host"));
         assertThat(e, instanceOf(EsxiPlatformConstraint.class));
-        assertThrows(VSphereException.class, () -> esxi.getDatastores());
     }
 
     @Test
