@@ -239,6 +239,77 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    /** The number the host knows the snapshot of the VM with this name by, or null if there is none. */
+    String snapshotIdByName(VmEntry vm, String name) throws VSphereException {
+        final VirtualMachineSnapshotInfo info = readSnapshotInfo(vm);
+        if (info == null || info.getRootSnapshotList() == null) {
+            return null;
+        }
+        final ManagedObjectReference mor = findSnapshotInTree(info.getRootSnapshotList(), name);
+        return mor == null ? null : mor.getVal();
+    }
+
+    /**
+     * Gives a snapshot another name and description, in the .vmsd file of the VM (a powered off one, as for any
+     * change of its files). The host is told to read it again, and asked whether it now has the new name: if not, the
+     * file is put back as it was.
+     */
+    void renameSnapshot(VmEntry vm, String snapshotId, String name, String description) throws VSphereException {
+        if (name == null || name.isEmpty() || name.chars().anyMatch(c -> c < 0x20 && c != '\n' && c != '\t')) {
+            throw new VSphereException("The new name of the snapshot is empty or has control characters in it");
+        }
+        final VirtualMachinePowerState state = readRuntime(vm).getPowerState();
+        if (state != VirtualMachinePowerState.poweredOff) {
+            throw new VSphereException("The VM has to be powered off for a snapshot of it to be renamed over SSH to an"
+                    + " ESXi host, but it is " + state);
+        }
+        final EsxiDatastoreFiles files = new EsxiDatastoreFiles(shell);
+        final String path = EsxiSnapshotMetadata.pathFor(vm.getVmxFileSystemPath());
+        final String before = files.read(path);
+        final EsxiSnapshotMetadata metadata = EsxiSnapshotMetadata.parse(before);
+        final int index = metadata.indexOfUid(snapshotId);
+        if (index < 0) {
+            throw new VSphereException("The snapshot " + snapshotId + " is not in " + path);
+        }
+        metadata.rename(index, name, description);
+        files.replace(path, metadata.toString());
+        try {
+            vim(vmCommand(vm, "reload")).stdoutOrThrow("Having the host read the snapshots of " + vm + " again");
+            if (!name.equals(snapshotNameById(vm, snapshotId))) {
+                throw new VSphereException("The host did not take the new name of the snapshot");
+            }
+        } catch (VSphereException e) {
+            files.replace(path, before);
+            try {
+                vim(vmCommand(vm, "reload"));
+            } catch (VSphereException again) {
+                e.addSuppressed(again);
+            }
+            throw e;
+        }
+    }
+
+    private String snapshotNameById(VmEntry vm, String id) throws VSphereException {
+        final VirtualMachineSnapshotInfo info = readSnapshotInfo(vm);
+        return info == null ? null : nameInTree(info.getRootSnapshotList(), id);
+    }
+
+    private static String nameInTree(VirtualMachineSnapshotTree[] trees, String id) {
+        if (trees == null) {
+            return null;
+        }
+        for (VirtualMachineSnapshotTree tree : trees) {
+            if (tree.getSnapshot() != null && id.equals(tree.getSnapshot().getVal())) {
+                return tree.getName();
+            }
+            final String found = nameInTree(tree.getChildSnapshotList(), id);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
+    }
+
     /** Reverts to or removes a snapshot, which the host knows by its number. */
     EsxiTask snapshotTask(String description, VmEntry vm, String subcommand, String snapshotId, String flag) {
         if (!snapshotId.matches("[0-9]{1,9}")) {
@@ -461,16 +532,21 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         if (hostSelectionCandidates != null && !hostSelectionCandidates.isEmpty()) {
             refuse("choosing a host", hostSelectionCandidates.toString());
         }
-        if (namedSnapshot != null && !namedSnapshot.trim().isEmpty()) {
-            throw unsupported("Cloning from the named snapshot \"" + namedSnapshot + "\"");
-        }
         ignored(jLogger, "cluster", cluster);
         ignored(jLogger, "folder", folderName);
         if (resourcePoolName != null && !resourcePoolName.trim().isEmpty() && !"Resources".equals(resourcePoolName)) {
             ignored(jLogger, "resource pool", resourcePoolName);
         }
         new EsxiVmCloner(this, new EsxiDatastoreFiles(shell), jLogger)
-                .clone(cloneName, sourceName, linkedClone, datastoreName, powerOn, extraConfigParameters, vmSize);
+                .clone(
+                        cloneName,
+                        sourceName,
+                        linkedClone,
+                        datastoreName,
+                        powerOn,
+                        extraConfigParameters,
+                        vmSize,
+                        namedSnapshot);
     }
 
     private static void refuse(String what, String value) throws VSphereException {

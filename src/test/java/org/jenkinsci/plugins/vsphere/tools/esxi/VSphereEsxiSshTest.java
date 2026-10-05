@@ -388,17 +388,6 @@ class VSphereEsxiSshTest {
         return mor;
     }
 
-    @Test
-    void renamingASnapshotIsNotSupported() throws Exception {
-        esxi.takeSnapshot("kube-master", "one", "", false);
-
-        UnsupportedOperationException e = assertThrows(
-                UnsupportedOperationException.class,
-                () -> esxi.renameVmSnapshot("kube-master", "one", "uno", "", true));
-
-        assertThat(e.getMessage(), containsString("vim-cmd cannot do it"));
-    }
-
     // -- datastores --
 
     @Test

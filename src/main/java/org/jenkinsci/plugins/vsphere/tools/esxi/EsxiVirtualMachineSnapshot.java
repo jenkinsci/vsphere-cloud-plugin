@@ -21,7 +21,7 @@ import com.vmware.vim25.mo.VirtualMachineSnapshot;
 
 /**
  * A snapshot of a VM on a standalone ESXi host, which {@code vim-cmd} knows by a number. Reverting to it and
- * removing it are done by {@code vim-cmd}; it has no command to rename one, so that says it is not supported.
+ * removing it are done by {@code vim-cmd}; renaming it is done on the .vmsd file.
  */
 public final class EsxiVirtualMachineSnapshot extends VirtualMachineSnapshot {
 
@@ -71,9 +71,16 @@ public final class EsxiVirtualMachineSnapshot extends VirtualMachineSnapshot {
         return "snapshot " + getMOR().getVal();
     }
 
+    /**
+     * vim-cmd has no command for this, so the name is changed in the .vmsd file of the VM, which the host is then
+     * told to read again.
+     */
     @Override
     public void rename(String name, String description) {
-        throw new UnsupportedOperationException(
-                "Renaming a snapshot is not supported by the ESXi SSH backend: vim-cmd cannot do it");
+        try {
+            host.renameSnapshot(vm, getMOR().getVal(), name, description);
+        } catch (org.jenkinsci.plugins.vsphere.tools.VSphereException e) {
+            throw new IllegalStateException(e.getMessage(), e);
+        }
     }
 }

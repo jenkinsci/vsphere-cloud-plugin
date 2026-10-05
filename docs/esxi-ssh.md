@@ -42,8 +42,8 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Reconfigure CPUs, memory, annotation, extra configuration, network adapters; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
 | Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
 | Revert to a snapshot, delete one                              | yes           |
-| Rename a snapshot                                             | no (`vim-cmd` cannot) |
-| Whatever needs vCenter: folders, clusters, templates, customization specs, distributed switches, choosing a host | no |
+| Rename a snapshot (in the `.vmsd` file, VM powered off)       | yes           |
+| Whatever needs vCenter: folders, clusters, customization specs, distributed switches, choosing a host, moving a VM to another host | no |
 
 What is not available says so with a message, when it is used.
 
@@ -127,9 +127,14 @@ templates do) work this way, with the "master" VM as the source.
 * The clone is made in a folder of its own, named after it, in the datastore. If anything goes
   wrong, what was made is removed again.
 
+**Cloning a named snapshot**: a full clone can be made of any snapshot (the disks that it froze
+are copied, with what they are changes of). A linked clone can only be made of the *newest*
+snapshot: it shares the disk that the snapshot froze, and needs a change of it that has no changes
+of its own, which only the newest snapshot has. The disks of a snapshot are read from the `.vmsd`
+file of the master.
+
 What a standalone host does not have is not available: a customization specification, choosing
-a host (or a host selection mode), and a named snapshot (the newest one that can be read is used)
-are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
+a host (or a host selection mode) are refused where they are given, and a cluster, a VM folder or a resource pool is ignored, with a
 note in the log. The name of a clone (and of the datastore) can have letters, digits, spaces and
 `. _ # + = @ ( ) -` in it, and has to start with a letter or digit.
 
@@ -156,7 +161,9 @@ Snapshots are taken, reverted to and deleted with `vim-cmd` (the host knows them
 plugin looks the number up by the name). A snapshot taken while the VM was running (with its
 memory) powers the VM on when it is reverted to, as it does on vCenter. A snapshot is deleted
 without its children, and its disks are consolidated by the host. `vim-cmd` has no command to
-rename a snapshot, so that is refused. (On an ESXi 7 host, asking `snapshot.remove` to remove the
+rename a snapshot, so that is done in the `.vmsd` file of the VM, where the host keeps the names
+(the VM has to be powered off; the host is told to read the file again, and if it does not show the
+new name afterwards, the file is put back as it was). (On an ESXi 7 host, asking `snapshot.remove` to remove the
 children too was seen to leave them in place; the plugin never asks for that.)
 
 ## Reconfiguring

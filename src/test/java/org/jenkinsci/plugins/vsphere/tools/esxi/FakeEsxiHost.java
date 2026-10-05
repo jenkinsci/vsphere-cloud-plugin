@@ -63,6 +63,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The host does not take what is changed in a .vmsd when it reloads. */
+    boolean ignoreVmsd;
     /** The -d type of the last disk made with vmkfstools -c. */
     String lastDiskType;
     /** What esxcli storage filesystem list prints, as seen on an ESXi 7 host. */
@@ -371,6 +373,21 @@ final class FakeEsxiHost implements EsxiShell {
                         .matcher(text);
                 if (shown.find()) {
                     vm.name = shown.group(1);
+                }
+                final String vmsd = files.get(
+                        "/vmfs/volumes/" + vm.datastore + "/" + vm.vmxRelativePath.replaceAll("\\.vmx$", ".vmsd"));
+                if (vmsd != null && !ignoreVmsd) {
+                    final VmxFile snapshotFile = VmxFile.parse(vmsd);
+                    for (int n = 0; n < 64; n++) {
+                        final String uid = snapshotFile.get("snapshot" + n + ".uid");
+                        for (String[] snapshot : vm.snapshots) {
+                            if (snapshot[4].equals(uid)) {
+                                snapshot[0] = VmxFile.unescape(
+                                        snapshotFile.get("snapshot" + n + ".displayName", snapshot[0]));
+                                snapshot[1] = VmxFile.unescape(snapshotFile.get("snapshot" + n + ".description", ""));
+                            }
+                        }
+                    }
                 }
                 return ok("");
             case "vmsvc/unregister":

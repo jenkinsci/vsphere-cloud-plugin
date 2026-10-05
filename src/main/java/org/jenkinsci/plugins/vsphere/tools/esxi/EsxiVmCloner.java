@@ -17,6 +17,7 @@ package org.jenkinsci.plugins.vsphere.tools.esxi;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -120,6 +121,9 @@ final class EsxiVmCloner {
      *
      * @param datastoreName where the clone goes; blank for the datastore of the master, which a linked clone has
      *     to be on
+     * @param namedSnapshot clone the state of the master at this snapshot; blank for the newest one that can be read.
+     *     A full clone can be made of any snapshot; a linked clone only of the newest, as it needs a disk that is a
+     *     change of what the snapshot froze, with no changes of its own
      */
     void clone(
             String cloneName,
@@ -128,7 +132,8 @@ final class EsxiVmCloner {
             @CheckForNull String datastoreName,
             boolean powerOn,
             @CheckForNull Map<String, String> extraConfigParameters,
-            @CheckForNull VmSize vmSize)
+            @CheckForNull VmSize vmSize,
+            @CheckForNull String namedSnapshot)
             throws VSphereException {
         EsxiDatastoreFiles.checkName("The name of the clone", cloneName);
         final List<VmEntry> vms = host.listVms();
@@ -162,6 +167,8 @@ final class EsxiVmCloner {
             throw new VSphereException("The VM \"" + sourceName + "\" has no virtual disk to clone");
         }
 
+        final Map<String, String> frozen = frozenDisks(source, sourceVmx, disks, namedSnapshot);
+
         say("Making " + (linkedClone ? "a linked clone" : "a full clone") + " \"" + cloneName + "\" of \"" + sourceName
                 + "\" in " + cloneDirectory);
         files.mkdirs(cloneDirectory);
@@ -170,12 +177,13 @@ final class EsxiVmCloner {
             int index = 0;
             for (Disk disk : disks) {
                 final String made = linkedClone
-                        ? linkDisk(disk, sourceDirectory, cloneDirectory)
+                        ? linkDisk(disk, sourceDirectory, cloneDirectory, frozen.get(disk.prefix))
                         : copyDisk(
                                 disk,
                                 sourceDirectory,
                                 cloneDirectory,
-                                index == 0 ? cloneName : cloneName + "_" + index);
+                                index == 0 ? cloneName : cloneName + "_" + index,
+                                frozen.get(disk.prefix));
                 vmx.put(disk.prefix + ".fileName", made);
                 index++;
             }
@@ -194,6 +202,41 @@ final class EsxiVmCloner {
             throw e;
         }
         say("\"" + cloneName + "\" was cloned from \"" + sourceName + "\"");
+    }
+
+    /**
+     * For a named snapshot, the disk file that held each disk when it was taken (a disk that was not there then is
+     * an error); empty when no snapshot is named.
+     */
+    private Map<String, String> frozenDisks(VmEntry source, String sourceVmx, List<Disk> disks, String namedSnapshot)
+            throws VSphereException {
+        final Map<String, String> frozen = new HashMap<>();
+        if (namedSnapshot == null || namedSnapshot.trim().isEmpty()) {
+            return frozen;
+        }
+        final String id = host.snapshotIdByName(source, namedSnapshot);
+        if (id == null) {
+            throw new VSphereNotFoundException("Snapshot", namedSnapshot);
+        }
+        final String vmsd = EsxiSnapshotMetadata.pathFor(sourceVmx);
+        if (!files.exists(vmsd)) {
+            throw new VSphereException(
+                    "Cannot tell the disks of the snapshot \"" + namedSnapshot + "\": " + vmsd + " is not there");
+        }
+        final EsxiSnapshotMetadata metadata = EsxiSnapshotMetadata.parse(files.read(vmsd));
+        final int index = metadata.indexOfUid(id);
+        if (index < 0) {
+            throw new VSphereException("The snapshot \"" + namedSnapshot + "\" (" + id + ") is not in " + vmsd);
+        }
+        for (Disk disk : disks) {
+            final String file = metadata.diskFile(index, disk.prefix);
+            if (file == null) {
+                throw new VSphereException("The disk " + disk.prefix + " was not in the VM when the snapshot \""
+                        + namedSnapshot + "\" was taken");
+            }
+            frozen.put(disk.prefix, file);
+        }
+        return frozen;
     }
 
     private void cleanUp(@CheckForNull Integer registeredId, String cloneDirectory, String cloneName) {
@@ -296,8 +339,19 @@ final class EsxiVmCloner {
                 + " of the master cannot be read: is the master running? Take a snapshot of it");
     }
 
-    private String linkDisk(Disk disk, String sourceDirectory, String cloneDirectory) throws VSphereException {
+    private String linkDisk(Disk disk, String sourceDirectory, String cloneDirectory, String frozenFile)
+            throws VSphereException {
         final Located chosen = newestReadableSnapshotDisk(disk, sourceDirectory);
+        if (frozenFile != null) {
+            final String wanted =
+                    files.canonical(frozenFile.startsWith("/") ? frozenFile : sourceDirectory + "/" + frozenFile);
+            if (!files.canonical(parentPath(chosen)).equals(wanted)) {
+                throw new VSphereException("A linked clone can only be made of the newest snapshot, as the disk it"
+                        + " shares has to be one with no changes of its own after the snapshot: " + disk.fileName
+                        + " is a change of " + parentPath(chosen) + ", not of " + wanted
+                        + ". Make a full clone of that snapshot instead");
+            }
+        }
         // The data that is shared is named by where it really is, as the datastore is also there by its name
         final String parent = files.canonical(parentPath(chosen));
         say("Linking disk " + disk.fileName + ": copying " + chosen.name + " and making it a change of " + parent);
@@ -310,9 +364,18 @@ final class EsxiVmCloner {
         return chosen.name;
     }
 
-    private String copyDisk(Disk disk, String sourceDirectory, String cloneDirectory, String newName)
+    private String copyDisk(Disk disk, String sourceDirectory, String cloneDirectory, String newName, String frozenFile)
             throws VSphereException {
-        final Located chosen = newestReadableDisk(disk, sourceDirectory);
+        final Located chosen;
+        if (frozenFile != null) {
+            // what the snapshot froze is not written to any more, and a copy of it takes what it is a change of along
+            chosen = locate(sourceDirectory, frozenFile);
+            if (!extentsCanBeRead(chosen)) {
+                throw new VSphereException("The disk " + chosen.path() + " of the snapshot cannot be read");
+            }
+        } else {
+            chosen = newestReadableDisk(disk, sourceDirectory);
+        }
         final String made = newName + ".vmdk";
         say("Copying disk " + disk.fileName + " as " + made + ", which takes a while");
         host.runLong(
