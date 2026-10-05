@@ -405,9 +405,37 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         // the hosts that see the files of the master, and the datastore the clone is to be on
         final List<VSphereEsxiSsh> able = new ArrayList<>();
         final List<String> unable = new ArrayList<>();
+        final Map<VSphereEsxiSsh, VmEntry> masterOn = new LinkedHashMap<>();
+        // The datastore of the master is the same one for the hosts that have the volume with the same UUID, which
+        // they may call something else (an NFS share mounted with a label of its own is the same volume)
+        String masterVolume = null;
+        try {
+            for (EsxiDatastoreEntry datastore : owner.listDatastores()) {
+                if (datastore.getName().equals(masterEntry.getDatastore())) {
+                    masterVolume = datastore.getUuid();
+                }
+            }
+        } catch (VSphereException e) {
+            LOGGER.log(Level.FINE, "Asking " + owner.getLabel() + " for its datastores", e);
+        }
         for (VSphereEsxiSsh host : availableMembers()) {
             try {
-                final boolean seesMaster = host == owner || host.fileExists(masterEntry.getVmxFileSystemPath());
+                VmEntry seen = host == owner ? masterEntry : null;
+                if (seen == null && masterVolume != null) {
+                    for (EsxiDatastoreEntry datastore : host.listDatastores()) {
+                        if (datastore.getUuid().equals(masterVolume)
+                                && host.fileExists("/vmfs/volumes/" + datastore.getName() + "/"
+                                        + masterEntry.getVmxRelativePath())) {
+                            seen = masterEntry.onDatastore(datastore.getName());
+                        }
+                    }
+                } else if (seen == null && host.fileExists(masterEntry.getVmxFileSystemPath())) {
+                    seen = masterEntry;
+                }
+                final boolean seesMaster = seen != null;
+                if (seen != null) {
+                    masterOn.put(host, seen);
+                }
                 final boolean seesDatastore = datastoreName == null
                         || datastoreName.trim().isEmpty()
                         || host.fileExists("/vmfs/volumes/" + datastoreName.trim());
@@ -462,7 +490,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         }
         target.cloneFrom(
                 target == owner ? null : owner,
-                target == owner ? null : masterEntry,
+                target == owner ? null : masterOn.get(target),
                 cloneName,
                 sourceName,
                 linkedClone,

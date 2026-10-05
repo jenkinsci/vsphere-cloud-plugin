@@ -34,6 +34,11 @@ public final class VmEntry {
         this.annotation = annotation;
     }
 
+    /** The same VM as the host that has the datastore under another name knows its files: {@code [name] path}. */
+    VmEntry onDatastore(String datastoreName) {
+        return new VmEntry(id, name, "[" + datastoreName + "] " + getVmxRelativePath(), guestOs, version, annotation);
+    }
+
     /** The id the host knows the VM by, which is what the other {@code vim-cmd vmsvc/...} commands take. */
     public int getId() {
         return id;

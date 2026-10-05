@@ -295,8 +295,10 @@ and the load of a host is not measured. What it does:
   snapshots, reconfiguring, deleting, ...) is done by the host it is registered on. A name that is
   registered on more than one host is found on the first one, as the hosts are listed.
 * **A clone is made on one of the hosts that can see the files of its master**, which they can if they
-  have a datastore in common, with the same name on each: an NFS datastore mounted with the same label
-  on all of them, or VMFS on shared storage. The clone's files are written there, the clone is
+  have a datastore in common: an NFS datastore, or VMFS on shared storage. The volume is the same one
+  if it has the same **UUID** (an NFS share that is mounted from the same server and path gets the same
+  one on each host), whatever each host labels it; the clone is made through the label of the host that
+  makes it. The clone's files are written there, the clone is
   registered with the host that made it, and the master need not be registered with that host: the
   host reads it from the shared datastore. A linked clone shares the disks of the master by their
   path on the datastore (by the UUID that the datastore really has), so the datastore has to be the same one.

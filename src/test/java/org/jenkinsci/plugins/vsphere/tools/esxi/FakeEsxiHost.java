@@ -66,6 +66,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** Volumes this host calls by another name than the files are kept under: its label, to the one they are under. */
+    final Map<String, String> volumeAliases = new LinkedHashMap<>();
     /** What the host says of its size and load (vim-cmd hostsvc/hostsummary); a null number is left out. */
     int cpuMhz = 2400;
 
@@ -191,6 +193,24 @@ final class FakeEsxiHost implements EsxiShell {
     private int nextVmId = 100;
     private final Map<String, String> failures = new LinkedHashMap<>();
 
+    private String unalias(String word) {
+        for (Map.Entry<String, String> alias : volumeAliases.entrySet()) {
+            final String prefix = "/vmfs/volumes/" + alias.getKey() + "/";
+            if (word.startsWith(prefix)) {
+                return "/vmfs/volumes/" + alias.getValue() + "/" + word.substring(prefix.length());
+            }
+        }
+        return word;
+    }
+
+    private List<String> unaliased(List<String> words) {
+        final List<String> mapped = new ArrayList<>();
+        for (String word : words) {
+            mapped.add(unalias(word));
+        }
+        return mapped;
+    }
+
     /** Has this host see the same datastores as the other: the same files, folders, locks and names for them. */
     void shareStorageWith(FakeEsxiHost other) {
         this.files = other.files;
@@ -281,7 +301,7 @@ final class FakeEsxiHost implements EsxiShell {
         if (written != null) {
             return written;
         }
-        final List<String> words = split(command);
+        final List<String> words = unaliased(split(command));
         for (Map.Entry<String, String> failure : failures.entrySet()) {
             if (!words.get(0).equals("/bin/vim-cmd") && command.contains(failure.getKey())) {
                 return new ShellResult(1, "", failure.getValue());
@@ -483,7 +503,7 @@ final class FakeEsxiHost implements EsxiShell {
             return null;
         }
         final String text = split("x " + m.group(1)).get(1);
-        final String path = split(m.group(2)).get(0);
+        final String path = unalias(split(m.group(2)).get(0));
         if (!directories.contains(parentOf(path))) {
             return new ShellResult(1, "", "sh: can't create " + path + ": nonexistent directory");
         }
@@ -529,7 +549,7 @@ final class FakeEsxiHost implements EsxiShell {
                         files.containsKey(words.get(2)) || directories.contains(words.get(2)) ? 0 : 1, "", "");
             case "dd":
                 // dd if=path of=/dev/null bs=1 count=1
-                final String path = words.get(1).substring("if=".length());
+                final String path = unalias(words.get(1).substring("if=".length()));
                 return new ShellResult(files.containsKey(path) && !locked.contains(path) ? 0 : 1, "", "");
             case "readlink":
                 // readlink -f path

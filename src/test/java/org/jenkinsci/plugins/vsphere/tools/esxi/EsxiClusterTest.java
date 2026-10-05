@@ -420,6 +420,36 @@ class EsxiClusterTest {
         assertThat(hostA.file(SHARED + "/named/named-flat.vmdk"), is("COPY OF " + MASTER + "/master.vmdk"));
     }
 
+    @Test
+    void aVolumeThatAnotherHostCallsByAnotherNameIsTheSameByItsUuid() throws Exception {
+        // b has the volume under the label "share-b" (the UUID is the same one)
+        hostB.volumeAliases.put("share-b", "shared");
+        hostB.datastoreTable = FakeEsxiHost.datastoreTable(
+                new String[][] {{REAL, "share-b", "uuid-shared", "true", "NFS", "1000000000", "900000000"}});
+
+        clone(cluster(), "lc", false, "esxib", null);
+
+        assertThat(hostB.vmNamed("lc"), is(notNullValue()));
+        // b read the master through its own name for the volume
+        assertThat(
+                hostB.commands.stream()
+                        .anyMatch(c -> c.startsWith("vmkfstools -i '/vmfs/volumes/share-b/master/master-000001.vmdk'")),
+                is(true));
+        assertThat(hostA.hasFile(SHARED + "/lc/lc.vmx"), is(true));
+    }
+
+    @Test
+    void aHostThatHasNoVolumeWithTheUuidOfTheMastersDatastoreDoesNotSeeTheMaster() throws Exception {
+        hostB.datastoreTable = FakeEsxiHost.datastoreTable(new String[][] {
+            {"/vmfs/volumes/uuid-other", "shared", "uuid-other", "true", "VMFS-6", "1000000000", "900000000"}
+        });
+
+        final VSphereException e =
+                assertThrows(VSphereException.class, () -> clone(cluster(), "lc", true, "esxib", null));
+
+        assertThat(e.getMessage(), containsString("cannot be used for the clone"));
+    }
+
     // -- where a clone goes by how busy the hosts really are --
 
     private String cloneRanked(String mode, HostSelectionOptions options) throws Exception {
