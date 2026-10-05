@@ -299,9 +299,14 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    /** For what is not done yet. */
     private static VSphereException unsupported(String operation) {
-        return new VSphereException(
-                operation + " is not supported by the ESXi SSH backend (it needs vCenter, or is not implemented yet)");
+        return new VSphereException(operation + " is not supported by the ESXi SSH backend (yet)");
+    }
+
+    /** For what a standalone ESXi host does not have, which is what {@link EsxiPlatformConstraint} is for. */
+    static EsxiConstraintException notApplicable(String operation, String reason) {
+        return new EsxiConstraintException(operation + " is not applicable to a standalone ESXi host: " + reason);
     }
 
     // -- cloning, done on the files of the host --
@@ -339,7 +344,9 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         if (hostSelectionCandidates != null && !hostSelectionCandidates.isEmpty()) {
             refuse("choosing a host", hostSelectionCandidates.toString());
         }
-        refuse("a named snapshot (the newest snapshot disk that can be read is used)", namedSnapshot);
+        if (namedSnapshot != null && !namedSnapshot.trim().isEmpty()) {
+            throw unsupported("Cloning from the named snapshot \"" + namedSnapshot + "\"");
+        }
         ignored(jLogger, "cluster", cluster);
         ignored(jLogger, "folder", folderName);
         if (resourcePoolName != null && !resourcePoolName.trim().isEmpty() && !"Resources".equals(resourcePoolName)) {
@@ -351,8 +358,8 @@ public class VSphereEsxiSsh extends AbstractVSphere {
 
     private static void refuse(String what, String value) throws VSphereException {
         if (value != null && !value.trim().isEmpty()) {
-            throw new VSphereException("Over SSH to an ESXi host, " + what + " cannot be used (it was given as \""
-                    + value + "\"): leave it empty");
+            throw new EsxiConstraintException("Over SSH to an ESXi host, " + what
+                    + " cannot be used (it was given as \"" + value + "\"): leave it empty");
         }
     }
 
@@ -387,18 +394,18 @@ public class VSphereEsxiSsh extends AbstractVSphere {
 
     @Override
     public Boolean folderExists(String folderPath) throws VSphereException {
-        throw unsupported("folderExists");
+        throw notApplicable("folderExists", "there are no folders in a standalone host's inventory");
     }
 
     @Override
     public Folder getFolder(String folderPath) throws VSphereException {
-        throw unsupported("getFolder");
+        throw notApplicable("getFolder", "there are no folders in a standalone host's inventory");
     }
 
     @Override
     public CustomizationSpecItem getCustomizationSpecByName(final String customizationSpecName)
             throws VSphereException {
-        throw unsupported("getCustomizationSpecByName");
+        throw notApplicable("getCustomizationSpecByName", "customization specifications are kept by vCenter");
     }
 
     @Override
@@ -409,12 +416,12 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     @Override
     public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine, String name)
             throws VSphereException {
-        throw unsupported("getDistributedVirtualPortGroupByName");
+        throw notApplicable("getDistributedVirtualPortGroupByName", "distributed switches are managed by vCenter");
     }
 
     @Override
     public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
             DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException {
-        throw unsupported("getDistributedVirtualSwitchByPortGroup");
+        throw notApplicable("getDistributedVirtualSwitchByPortGroup", "distributed switches are managed by vCenter");
     }
 }

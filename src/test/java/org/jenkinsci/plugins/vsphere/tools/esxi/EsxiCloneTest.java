@@ -345,6 +345,7 @@ class EsxiCloneTest {
                         VmSize.NONE,
                         log));
         assertThat(target.getMessage(), containsString("choosing a host cannot be used"));
+        assertThat(target, org.hamcrest.Matchers.instanceOf(EsxiPlatformConstraint.class));
         VSphereException snapshot = assertThrows(
                 VSphereException.class,
                 () -> esxi.cloneOrDeployVm(
@@ -366,7 +367,7 @@ class EsxiCloneTest {
                         null,
                         VmSize.NONE,
                         log));
-        assertThat(snapshot.getMessage(), containsString("a named snapshot"));
+        assertThat(snapshot.getMessage(), containsString("named snapshot"));
     }
 
     @Test

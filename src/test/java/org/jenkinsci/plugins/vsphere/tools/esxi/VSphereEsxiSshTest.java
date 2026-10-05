@@ -400,9 +400,33 @@ class VSphereEsxiSshTest {
     // -- what is not supported --
 
     @Test
+    void whatTheHostDoesNotHaveIsToldApartFromWhatIsNotDoneYet() throws Exception {
+        // by the nature of the platform
+        assertThat(
+                assertThrows(VSphereException.class, () -> esxi.getCustomizationSpecByName("x")),
+                instanceOf(EsxiPlatformConstraint.class));
+        assertThat(
+                assertThrows(VSphereException.class, () -> esxi.getDistributedVirtualPortGroupByName(null, "x")),
+                instanceOf(EsxiPlatformConstraint.class));
+        VirtualMachine vm = esxi.getVmByName("kube-master");
+        assertThat(
+                assertThrows(UnsupportedOperationException.class, () -> vm.migrateVM_Task(null, null, null, null)),
+                instanceOf(EsxiPlatformConstraint.class));
+        assertThat(
+                assertThrows(UnsupportedOperationException.class, () -> vm.relocateVM_Task(null)),
+                instanceOf(EsxiPlatformConstraint.class));
+        // not done yet: an ordinary failure
+        assertThat(
+                assertThrows(UnsupportedOperationException.class, () -> vm.getParent())
+                        .getClass(),
+                is((Object) UnsupportedOperationException.class));
+    }
+
+    @Test
     void whatNeedsVCenterIsNotSupportedAndSays() {
         VSphereException e = assertThrows(VSphereException.class, () -> esxi.folderExists("folder"));
-        assertThat(e.getMessage(), containsString("folderExists is not supported by the ESXi SSH backend"));
+        assertThat(e.getMessage(), containsString("folderExists is not applicable to a standalone ESXi host"));
+        assertThat(e, instanceOf(EsxiPlatformConstraint.class));
         assertThrows(VSphereException.class, () -> esxi.hostExists("host"));
         assertThrows(VSphereException.class, () -> esxi.getDatastores());
     }

@@ -15,8 +15,14 @@
 package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.VirtualMachineCloneSpec;
 import com.vmware.vim25.VirtualMachineConfigSpec;
+import com.vmware.vim25.VirtualMachineMovePriority;
+import com.vmware.vim25.VirtualMachinePowerState;
+import com.vmware.vim25.VirtualMachineRelocateSpec;
+import com.vmware.vim25.mo.Folder;
 import com.vmware.vim25.mo.HostSystem;
+import com.vmware.vim25.mo.ResourcePool;
 import com.vmware.vim25.mo.Task;
 import com.vmware.vim25.mo.VirtualMachine;
 
@@ -130,6 +136,35 @@ public final class EsxiVirtualMachine extends VirtualMachine {
         final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
         spec.setName(newName);
         return host.reconfigureTask("rename", entry, spec);
+    }
+
+    private static EsxiConstraintUnsupportedOperationException migration(String what) {
+        return new EsxiConstraintUnsupportedOperationException(what
+                + " is not applicable to a standalone ESXi host: there is no other host to move a VM to or to"
+                + " clone it on (that takes vCenter)");
+    }
+
+    @Override
+    public Task migrateVM_Task(
+            ResourcePool pool, HostSystem host, VirtualMachineMovePriority priority, VirtualMachinePowerState state) {
+        throw migration("Migrating a VM");
+    }
+
+    @Override
+    public Task relocateVM_Task(VirtualMachineRelocateSpec spec) {
+        throw migration("Relocating a VM");
+    }
+
+    @Override
+    public Task relocateVM_Task(VirtualMachineRelocateSpec spec, VirtualMachineMovePriority priority) {
+        throw migration("Relocating a VM");
+    }
+
+    @Override
+    public Task cloneVM_Task(Folder folder, String name, VirtualMachineCloneSpec spec) {
+        throw new EsxiConstraintUnsupportedOperationException(
+                "Cloning through the API is not applicable to a standalone ESXi host: cloning is done on its files"
+                        + " (use the clone and deploy operations of the plugin)");
     }
 
     @Override
