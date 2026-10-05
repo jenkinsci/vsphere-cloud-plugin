@@ -15,9 +15,11 @@
 package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import com.vmware.vim25.Description;
+import com.vmware.vim25.ParaVirtualSCSIController;
 import com.vmware.vim25.ResourceAllocationInfo;
 import com.vmware.vim25.SharesInfo;
 import com.vmware.vim25.SharesLevel;
+import com.vmware.vim25.VirtualBusLogicController;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualDiskFlatVer2BackingInfo;
@@ -26,7 +28,9 @@ import com.vmware.vim25.VirtualEthernetCard;
 import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualLsiLogicController;
+import com.vmware.vim25.VirtualLsiLogicSASController;
 import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.VirtualPCIController;
 import com.vmware.vim25.VirtualSCSIController;
 import com.vmware.vim25.VirtualVmxnet3;
 import java.util.ArrayList;
@@ -42,6 +46,7 @@ import java.util.List;
  */
 final class EsxiConfigInfo {
 
+    private static final int PCI_CONTROLLER_KEY = 100;
     private static final int SCSI_CONTROLLER_KEY_BASE = 1000;
     private static final int DISK_KEY_BASE = 2000;
     private static final int NIC_KEY_BASE = 4000;
@@ -70,6 +75,11 @@ final class EsxiConfigInfo {
         hardware.setNumCoresPerSocket(vmx.getInt("cpuid.coresPerSocket", 1));
         hardware.setMemoryMB(vmx.getInt("memSize", 4));
         final List<VirtualDevice> devices = new ArrayList<>();
+        final VirtualPCIController pci = new VirtualPCIController();
+        pci.setKey(PCI_CONTROLLER_KEY);
+        pci.setBusNumber(0);
+        pci.setDeviceInfo(label("PCI controller 0"));
+        devices.add(pci);
         addDisks(devices, entry, vmx);
         addNetworkAdapters(devices, vmx);
         hardware.setDevice(devices.toArray(new VirtualDevice[0]));
@@ -110,6 +120,39 @@ final class EsxiConfigInfo {
         }
     }
 
+    /** "[datastore] path" for a disk file the .vmx names relative to the folder of the VM or by its full path. */
+    private static String backingName(VmEntry entry, String folder, String fileName) {
+        final String volumes = "/vmfs/volumes/";
+        if (fileName.startsWith(volumes) && fileName.indexOf('/', volumes.length()) > 0) {
+            final int slash = fileName.indexOf('/', volumes.length());
+            return "[" + fileName.substring(volumes.length(), slash) + "] " + fileName.substring(slash + 1);
+        }
+        return "[" + entry.getDatastore() + "] " + folder + fileName;
+    }
+
+    /** The place in the file system of a disk file as {@link #backingName} gave it; folder is that of the VM. */
+    static String pathOf(String backingName, String vmFolderPath) {
+        final int end = backingName.indexOf(']');
+        if (backingName.startsWith("[") && end > 0) {
+            return "/vmfs/volumes/" + backingName.substring(1, end) + "/"
+                    + backingName.substring(end + 1).trim();
+        }
+        return vmFolderPath + "/" + backingName;
+    }
+
+    private static VirtualSCSIController controllerOf(String virtualDev) {
+        switch (virtualDev == null ? "" : virtualDev.toLowerCase()) {
+            case "pvscsi":
+                return new ParaVirtualSCSIController();
+            case "lsisas1068":
+                return new VirtualLsiLogicSASController();
+            case "buslogic":
+                return new VirtualBusLogicController();
+            default:
+                return new VirtualLsiLogicController();
+        }
+    }
+
     private static void addDisks(List<VirtualDevice> devices, VmEntry entry, VmxFile vmx) {
         final String folder = entry.getVmxRelativePath().contains("/")
                 ? entry.getVmxRelativePath()
@@ -121,11 +164,12 @@ final class EsxiConfigInfo {
             if (!vmx.getBoolean(controllerPrefix + ".present")) {
                 continue;
             }
-            final VirtualSCSIController controller = new VirtualLsiLogicController();
+            final VirtualSCSIController controller = controllerOf(vmx.get(controllerPrefix + ".virtualDev"));
             controller.setKey(SCSI_CONTROLLER_KEY_BASE + bus);
             controller.setBusNumber(bus);
             controller.setDeviceInfo(label("SCSI controller " + bus));
             devices.add(controller);
+            final List<Integer> diskKeys = new ArrayList<>();
             for (int unit = 0; unit < MAX_SCSI_UNITS; unit++) {
                 final String diskPrefix = controllerPrefix + ":" + unit;
                 final String fileName = vmx.get(diskPrefix + ".fileName");
@@ -139,9 +183,12 @@ final class EsxiConfigInfo {
                 disk.setUnitNumber(unit);
                 disk.setDeviceInfo(label("Hard disk " + diskNumber));
                 final VirtualDiskFlatVer2BackingInfo backing = new VirtualDiskFlatVer2BackingInfo();
-                backing.setFileName("[" + entry.getDatastore() + "] " + folder + fileName);
+                backing.setFileName(backingName(entry, folder, VmxFile.unescape(fileName)));
                 disk.setBacking(backing);
                 devices.add(disk);
+                diskKeys.add(disk.getKey());
+                controller.setDevice(
+                        diskKeys.stream().mapToInt(Integer::intValue).toArray());
             }
         }
     }

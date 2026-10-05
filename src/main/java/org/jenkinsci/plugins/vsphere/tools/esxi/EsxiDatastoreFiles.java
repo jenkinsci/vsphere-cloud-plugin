@@ -120,6 +120,33 @@ final class EsxiDatastoreFiles {
                 .succeeded();
     }
 
+    /** The descriptor of a disk, which fails with a message of its own if there is none. */
+    VmdkDescriptor readDescriptor(String path) throws VSphereException {
+        return VmdkDescriptor.parse(read(path));
+    }
+
+    /** Makes a disk of the size, thin or thick (lazily zeroed). */
+    void createDisk(String path, long sizeKb, boolean thin) throws VSphereException {
+        mkdirs(path.substring(0, path.lastIndexOf('/')));
+        shell.run("vmkfstools -c " + ShellQuote.quote(sizeKb + "K") + " -d " + (thin ? "thin " : "zeroedthick ")
+                        + ShellQuote.quote(path))
+                .stdoutOrThrow("Making the disk " + path);
+    }
+
+    /** Makes a disk larger. */
+    void extendDisk(String path, long sizeKb) throws VSphereException {
+        shell.run("vmkfstools -X " + ShellQuote.quote(sizeKb + "K") + " " + ShellQuote.quote(path))
+                .stdoutOrThrow("Making the disk " + path + " larger");
+    }
+
+    /** Deletes a disk, all the files of it. Only a disk in a datastore folder. */
+    void deleteDisk(String path) throws VSphereException {
+        if (!isInsideADatastoreFolder(path) || !path.endsWith(".vmdk")) {
+            throw new VSphereException("Refusing to delete " + path + ": it is not a disk in a datastore folder");
+        }
+        shell.run("vmkfstools -U " + ShellQuote.quote(path)).stdoutOrThrow("Deleting the disk " + path);
+    }
+
     /** What a path is really, with the links in it (a datastore is also there by its name) resolved. */
     String canonical(String path) throws VSphereException {
         final String resolved = shell.run("readlink -f " + ShellQuote.quote(path))

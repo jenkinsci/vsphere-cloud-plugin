@@ -49,7 +49,9 @@ final class EsxiReconfigure {
     private EsxiReconfigure() {}
 
     /** Changes the settings as the specification says; fails, with nothing said to be done, if it cannot be. */
-    static void apply(VmxFile vmx, VirtualMachineConfigSpec spec) throws VSphereException {
+    static EsxiDiskChanges apply(
+            VmxFile vmx, VirtualMachineConfigSpec spec, String vmFolder, EsxiDiskChanges.Inspector inspector)
+            throws VSphereException {
         applyAllocation(vmx, "cpu", spec.getCpuAllocation());
         applyAllocation(vmx, "mem", spec.getMemoryAllocation());
         if (spec.getNumCPUs() != null) {
@@ -90,7 +92,9 @@ final class EsxiReconfigure {
             vmx.put("displayName", VmxFile.escape(checkedName(spec.getName())));
         }
         applyExtraConfig(vmx, spec.getExtraConfig());
-        applyDeviceChanges(vmx, spec.getDeviceChange());
+        final EsxiDiskChanges disks = new EsxiDiskChanges(vmx, vmFolder, inspector);
+        applyDeviceChanges(vmx, disks, spec.getDeviceChange());
+        return disks;
     }
 
     /**
@@ -161,18 +165,23 @@ final class EsxiReconfigure {
         }
     }
 
-    private static void applyDeviceChanges(VmxFile vmx, VirtualDeviceConfigSpec[] changes) throws VSphereException {
+    private static void applyDeviceChanges(VmxFile vmx, EsxiDiskChanges disks, VirtualDeviceConfigSpec[] changes)
+            throws VSphereException {
         if (changes == null) {
             return;
         }
         for (VirtualDeviceConfigSpec change : changes) {
             final VirtualDevice device = change.getDevice();
+            if (EsxiDiskChanges.handles(device)) {
+                disks.apply(change);
+                continue;
+            }
             if (!(device instanceof VirtualEthernetCard)) {
-                throw new VSphereException("Over SSH to an ESXi host only network adapters can be changed, not "
-                        + (device == null
-                                ? "a device that is not given"
-                                : device.getClass().getSimpleName())
-                        + " (disks cannot be added, changed or removed this way)");
+                throw new VSphereException(
+                        "Over SSH to an ESXi host only network adapters, disks and SCSI controllers can be changed, not "
+                                + (device == null
+                                        ? "a device that is not given"
+                                        : device.getClass().getSimpleName()));
             }
             final VirtualEthernetCard card = (VirtualEthernetCard) device;
             final VirtualDeviceConfigSpecOperation operation = change.getOperation();

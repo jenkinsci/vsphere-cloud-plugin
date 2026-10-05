@@ -310,7 +310,7 @@ class EsxiReconfigureTest {
         assertThat(vmx().get("ethernet2.addressType"), is("generated"));
         assertThat(
                 esxi.getVmByName("web").getConfig().getHardware().getDevice().length,
-                is(1 + 1 + 3)); // a controller, a disk, three adapters
+                is(1 + 1 + 1 + 3)); // PCI and SCSI controllers, a disk, three adapters
     }
 
     @Test
@@ -363,13 +363,13 @@ class EsxiReconfigureTest {
     }
 
     @Test
-    void disksCannotBeChanged() {
-        final VirtualDevice disk = new VirtualDisk();
+    void devicesOfOtherKindsCannotBeChanged() {
+        final VirtualDevice disk = new com.vmware.vim25.VirtualCdrom();
 
         final VSphereException e = assertThrows(VSphereException.class, () -> esxi.reconfigureVm("web", change(disk)));
 
-        assertThat(e.getMessage(), containsString("only network adapters can be changed"));
-        assertThat(e.getMessage(), containsString("VirtualDisk"));
+        assertThat(e.getMessage(), containsString("only network adapters, disks and SCSI controllers can be changed"));
+        assertThat(e.getMessage(), containsString("VirtualCdrom"));
     }
 
     private static VirtualMachineConfigSpec change(VirtualDevice device) {

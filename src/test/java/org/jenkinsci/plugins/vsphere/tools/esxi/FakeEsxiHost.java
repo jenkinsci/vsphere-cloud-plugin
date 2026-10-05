@@ -63,6 +63,8 @@ final class FakeEsxiHost implements EsxiShell {
     String esxiVersion = "VMware ESXi 7.0.3 build-20036589";
 
     int notFoundExitCode;
+    /** The -d type of the last disk made with vmkfstools -c. */
+    String lastDiskType;
     /** What esxcli storage filesystem list prints, as seen on an ESXi 7 host. */
     String datastoreTable = datastoreTable(DATASTORE_ROWS);
     /** The short name of the host; null makes esxcli unknown. */
@@ -459,6 +461,9 @@ final class FakeEsxiHost implements EsxiShell {
                 directories.removeIf(d -> d.equals(directory) || d.startsWith(directory + "/"));
                 return ok("");
             case "vmkfstools":
+                if (!words.get(1).equals("-i")) {
+                    return vmkfstoolsOnDisk(words);
+                }
                 // vmkfstools -i source destination -d thin
                 final String source = words.get(2);
                 final String destination = words.get(3);
@@ -475,6 +480,48 @@ final class FakeEsxiHost implements EsxiShell {
                 return ok("Clone: 100% done.\n");
             default:
                 return null;
+        }
+    }
+
+    /** vmkfstools -c SIZE -d TYPE path, -X SIZE path and -U path. */
+    private ShellResult vmkfstoolsOnDisk(List<String> words) {
+        final String flag = words.get(1);
+        final String path = words.get(words.size() - 1);
+        final String flat = path.replace(".vmdk", "-flat.vmdk");
+        final String name = flat.substring(flat.lastIndexOf('/') + 1);
+        switch (flag) {
+            case "-c":
+            case "-X":
+                final String size = words.get(2);
+                if (!size.endsWith("K")) {
+                    throw new AssertionError("The size should be in K: " + words);
+                }
+                final long sectors = Long.parseLong(size.substring(0, size.length() - 1)) * 2;
+                if (flag.equals("-c")) {
+                    if (!directories.contains(parentOf(path))) {
+                        return new ShellResult(1, "", "Failed to create virtual disk: no such directory");
+                    }
+                    lastDiskType = words.get(4);
+                } else if (!files.containsKey(path)) {
+                    return new ShellResult(1, "", "Failed to open disk '" + path + "'");
+                } else if (files.get(path).contains("parentFileNameHint")) {
+                    return new ShellResult(1, "", "Failed to extend a disk that has snapshots");
+                }
+                files.put(
+                        path,
+                        "# Disk DescriptorFile\nversion=1\ncreateType=\"vmfs\"\n\n# Extent description\nRW " + sectors
+                                + " VMFS \"" + name + "\"\n");
+                files.put(flat, "DATA");
+                return ok(flag.equals("-c") ? "Create: 100% done.\n" : "Grow: 100% done.\n");
+            case "-U":
+                if (!files.containsKey(path)) {
+                    return new ShellResult(1, "", "Failed to open disk '" + path + "'");
+                }
+                files.remove(path);
+                files.remove(flat);
+                return ok("Destroy: 100% done.\n");
+            default:
+                throw new AssertionError("Unexpected vmkfstools command: " + words);
         }
     }
 

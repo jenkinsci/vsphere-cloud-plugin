@@ -29,6 +29,7 @@ final class VmdkDescriptor {
 
     private static final Pattern PARENT = Pattern.compile("(?m)^(parentFileNameHint\\s*=\\s*\")([^\"]*)(\")");
     private static final Pattern EXTENT = Pattern.compile("(?m)^(RW|RDONLY|NOACCESS)\\s+\\d+\\s+\\w+\\s+\"([^\"]+)\"");
+    private static final Pattern EXTENT_SIZE = Pattern.compile("(?m)^(?:RW|RDONLY|NOACCESS)\\s+(\\d+)\\s+\\w+\\s+\"");
 
     private final String text;
 
@@ -59,6 +60,16 @@ final class VmdkDescriptor {
             extents.add(m.group(2));
         }
         return extents;
+    }
+
+    /** The size of the disk in KB: its extents add up to a number of sectors of 512 bytes. */
+    long getCapacityKb() {
+        long sectors = 0;
+        final Matcher m = EXTENT_SIZE.matcher(text);
+        while (m.find()) {
+            sectors += Long.parseLong(m.group(1));
+        }
+        return sectors / 2;
     }
 
     /** The same descriptor, as a change of another disk. */

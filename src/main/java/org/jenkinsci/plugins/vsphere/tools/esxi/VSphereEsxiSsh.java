@@ -162,7 +162,24 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     VirtualMachineConfigInfo readConfigInfo(VmEntry vm) throws VSphereException {
         final String vmx = shell.run("cat " + ShellQuote.quote(vm.getVmxFileSystemPath()))
                 .stdoutOrThrow("Reading the .vmx of " + vm);
-        return EsxiConfigInfo.build(vm, VmxFile.parse(vmx));
+        final VirtualMachineConfigInfo config = EsxiConfigInfo.build(vm, VmxFile.parse(vmx));
+        // the size of a disk is in its descriptor, not in the .vmx
+        final EsxiDatastoreFiles files = new EsxiDatastoreFiles(shell);
+        final String folder =
+                vm.getVmxFileSystemPath().substring(0, vm.getVmxFileSystemPath().lastIndexOf('/'));
+        for (VirtualDevice device : config.getHardware().getDevice()) {
+            if (device instanceof VirtualDisk && device.getBacking() instanceof VirtualDeviceFileBackingInfo) {
+                final String file = ((VirtualDeviceFileBackingInfo) device.getBacking()).getFileName();
+                try {
+                    ((VirtualDisk) device)
+                            .setCapacityInKB(files.readDescriptor(EsxiConfigInfo.pathOf(file, folder))
+                                    .getCapacityKb());
+                } catch (VSphereException e) {
+                    LOGGER.log(Level.FINE, "Could not read the size of the disk " + file, e);
+                }
+            }
+        }
+        return config;
     }
 
     VirtualMachineRuntimeInfo readRuntime(VmEntry vm) throws VSphereException {
@@ -259,10 +276,46 @@ public class VSphereEsxiSsh extends AbstractVSphere {
                         + " but it is " + state);
             }
             final EsxiDatastoreFiles files = new EsxiDatastoreFiles(shell);
-            final VmxFile vmx = VmxFile.parse(files.read(vm.getVmxFileSystemPath()));
-            EsxiReconfigure.apply(vmx, spec);
-            files.replace(vm.getVmxFileSystemPath(), vmx.toString());
-            vim(vmCommand(vm, "reload")).stdoutOrThrow("Having the host read the configuration of " + vm + " again");
+            final String vmxPath = vm.getVmxFileSystemPath();
+            final VmxFile vmx = VmxFile.parse(files.read(vmxPath));
+            final EsxiDiskChanges disks = EsxiReconfigure.apply(
+                    vmx, spec, vmxPath.substring(0, vmxPath.lastIndexOf('/')), new EsxiDiskChanges.Inspector() {
+                        @Override
+                        public VmdkDescriptor descriptor(String path) throws VSphereException {
+                            return files.readDescriptor(path);
+                        }
+
+                        @Override
+                        public boolean exists(String path) throws VSphereException {
+                            return files.exists(path);
+                        }
+                    });
+            final List<String> made = new ArrayList<>();
+            try {
+                for (EsxiDiskChanges.Step step : disks.before()) {
+                    if (step.kind == EsxiDiskChanges.Step.Kind.CREATE) {
+                        files.createDisk(step.path, step.sizeKb, step.thin);
+                        made.add(step.path);
+                    } else {
+                        files.extendDisk(step.path, step.sizeKb);
+                    }
+                }
+                files.replace(vmxPath, vmx.toString());
+                vim(vmCommand(vm, "reload"))
+                        .stdoutOrThrow("Having the host read the configuration of " + vm + " again");
+            } catch (VSphereException e) {
+                for (String path : made) {
+                    try {
+                        files.deleteDisk(path);
+                    } catch (VSphereException again) {
+                        e.addSuppressed(again);
+                    }
+                }
+                throw e;
+            }
+            for (EsxiDiskChanges.Step step : disks.after()) {
+                files.deleteDisk(step.path);
+            }
             return new EsxiTask(description, null);
         } catch (VSphereException e) {
             return new EsxiTask(description, e.getMessage());
