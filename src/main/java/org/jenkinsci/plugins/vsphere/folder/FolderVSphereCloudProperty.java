@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins.folder;
+package org.jenkinsci.plugins.vsphere.folder;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 

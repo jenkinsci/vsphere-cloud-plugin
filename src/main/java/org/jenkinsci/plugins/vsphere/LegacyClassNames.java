@@ -17,38 +17,44 @@ package org.jenkinsci.plugins.vsphere;
 import hudson.init.InitMilestone;
 import hudson.init.Initializer;
 import hudson.model.Items;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 
 /**
- * The classes that used to be directly in the {@code org.jenkinsci.plugins} package are in {@code
- * org.jenkinsci.plugins.vsphere} now, and what Jenkins has stored under their old names (the clouds in {@code
+ * The classes that used to be directly in the {@code org.jenkinsci.plugins} package (and the folder property that
+ * was in {@code org.jenkinsci.plugins.folder}) are in {@code org.jenkinsci.plugins.vsphere} now, and what Jenkins has stored under their old names (the clouds in {@code
  * config.xml}, the agents in {@code nodes/NAME/config.xml}, those of a folder in its {@code config.xml}) is still
  * read: the old names are aliases of the new classes. What is saved from then on has the new names.
  */
 public final class LegacyClassNames {
 
-    /** The classes that are stored, which had their names in {@code org.jenkinsci.plugins}. */
-    static final Class<?>[] MOVED = {
-        vSphereCloud.class,
-        vSphereCloudSlave.class,
-        vSphereCloudProvisionedSlave.class,
-        vSphereCloudLauncher.class,
-        vSphereCloudSlaveTemplate.class
-    };
+    /** The old names of the classes that are stored, and what they are now. */
+    static final Map<String, Class<?>> MOVED = new LinkedHashMap<>();
+
+    static {
+        for (Class<?> moved : new Class<?>[] {
+            vSphereCloud.class,
+            vSphereCloudSlave.class,
+            vSphereCloudProvisionedSlave.class,
+            vSphereCloudLauncher.class,
+            vSphereCloudSlaveTemplate.class
+        }) {
+            // these were directly in org.jenkinsci.plugins
+            MOVED.put("org.jenkinsci.plugins." + moved.getSimpleName(), moved);
+        }
+        MOVED.put("org.jenkinsci.plugins.folder.FolderVSphereCloudProperty", FolderVSphereCloudProperty.class);
+    }
 
     private LegacyClassNames() {}
 
-    /** The name that the class had before it was moved. */
-    static String oldNameOf(Class<?> moved) {
-        return "org.jenkinsci.plugins." + moved.getSimpleName();
-    }
-
     @Initializer(before = InitMilestone.PLUGINS_STARTED)
     public static void addAliases() {
-        for (Class<?> moved : MOVED) {
+        for (Map.Entry<String, Class<?>> moved : MOVED.entrySet()) {
             // the configuration of Jenkins and its agents, and that of the items (those of folders)
-            Jenkins.XSTREAM2.addCompatibilityAlias(oldNameOf(moved), moved);
-            Items.XSTREAM2.addCompatibilityAlias(oldNameOf(moved), moved);
+            Jenkins.XSTREAM2.addCompatibilityAlias(moved.getKey(), moved.getValue());
+            Items.XSTREAM2.addCompatibilityAlias(moved.getKey(), moved.getValue());
         }
     }
 }

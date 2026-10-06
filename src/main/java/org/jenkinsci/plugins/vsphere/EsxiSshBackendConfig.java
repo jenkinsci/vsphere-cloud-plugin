@@ -45,7 +45,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import org.jenkinsci.Symbol;
-import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiConnectionTestResult;

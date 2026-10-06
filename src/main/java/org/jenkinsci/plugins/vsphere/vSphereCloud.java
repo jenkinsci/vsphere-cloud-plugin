@@ -34,7 +34,7 @@ import java.util.logging.Level;
 import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;

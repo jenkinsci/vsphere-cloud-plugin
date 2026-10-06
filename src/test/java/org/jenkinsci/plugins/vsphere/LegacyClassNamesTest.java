@@ -16,10 +16,15 @@ package org.jenkinsci.plugins.vsphere;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.startsWith;
 
 import hudson.model.Items;
+import java.util.Map;
 import jenkins.model.Jenkins;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vsphere.workflow.vSphereStep;
+import org.jenkinsci.plugins.workflow.steps.StepDescriptor;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
@@ -30,13 +35,38 @@ class LegacyClassNamesTest {
 
     @Test
     void theOldNamesOfTheStoredClassesAreAliasesInTheConfigurationOfJenkinsAndOfItems(JenkinsRule r) throws Exception {
-        for (Class<?> moved : LegacyClassNames.MOVED) {
-            final String old = "org.jenkinsci.plugins." + moved.getSimpleName();
-            assertThat(moved.getName(), is("org.jenkinsci.plugins.vsphere." + moved.getSimpleName()));
-            assertThat(old, is(LegacyClassNames.oldNameOf(moved)));
-            assertThat(Jenkins.XSTREAM2.getMapper().realClass(old), is((Object) moved));
-            assertThat(Items.XSTREAM2.getMapper().realClass(old), is((Object) moved));
+        assertThat(LegacyClassNames.MOVED.size(), is(6));
+        for (Map.Entry<String, Class<?>> moved : LegacyClassNames.MOVED.entrySet()) {
+            assertThat(moved.getValue().getName(), startsWith("org.jenkinsci.plugins.vsphere."));
+            assertThat(moved.getKey(), not(startsWith("org.jenkinsci.plugins.vsphere.")));
+            assertThat(Jenkins.XSTREAM2.getMapper().realClass(moved.getKey()), is((Object) moved.getValue()));
+            assertThat(Items.XSTREAM2.getMapper().realClass(moved.getKey()), is((Object) moved.getValue()));
         }
+    }
+
+    @Test
+    void aFolderThatHasTheOldPropertyIsReadAsTheNewOne(JenkinsRule r) {
+        final Object property = Items.XSTREAM2.fromXML(
+                "<org.jenkinsci.plugins.folder.FolderVSphereCloudProperty><clouds/></org.jenkinsci.plugins.folder.FolderVSphereCloudProperty>");
+
+        assertThat(property instanceof FolderVSphereCloudProperty, is(true));
+        assertThat(
+                Items.XSTREAM2.toXML(property),
+                startsWith("<org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty"));
+    }
+
+    @Test
+    void theStepIsFoundByTheIdThatPipelineStoredInTheNodesOfOldBuilds(JenkinsRule r) {
+        final String id = "org.jenkinsci.plugins.workflow.vSphereStep$DescriptorImpl";
+
+        final StepDescriptor descriptor = StepDescriptor.byFunctionName("vSphere");
+
+        assertThat(descriptor instanceof vSphereStep.DescriptorImpl, is(true));
+        assertThat(descriptor.getId(), is(id));
+        assertThat(Jenkins.get().getDescriptor(id), is((Object) descriptor));
+        assertThat(StepDescriptor.all().stream().anyMatch(d -> id.equals(d.getId())), is(true));
+        // and the address that the page of a job uses for its form checks leads to it too
+        assertThat(Jenkins.get().getDescriptorByName(descriptor.getDescriptorUrl()), is((Object) descriptor));
     }
 
     @Test

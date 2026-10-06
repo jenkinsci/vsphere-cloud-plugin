@@ -8,15 +8,13 @@ define a logger called e.g. `vSphere`.
 In that new logger, add the logger
 `org.jenkinsci.plugins.vsphere`
 (which covers the plugin code, as it is all in this Java package and its sub-packages),
-plus the two classes that are not in it, for historical reasons
-(and which are not covered by a wider logger, as their packages hold lots of general Jenkins logs):
-`org.jenkinsci.plugins.workflow.vSphereStep` and
-`org.jenkinsci.plugins.folder.FolderVSphereCloudProperty`.
-Set the Log level for each of these to `ALL`.
+and set its Log level to `ALL`.
 
 Before the classes were moved into that package (see [below](#classes-that-were-moved)), a logger
-called `vsphere-cloud` and a logger for every Java class of the plugin were needed: if you have a
-log recorder like that, it no longer logs the cloud, so replace its entries with the ones above.
+called `vsphere-cloud` and a logger for every Java class of the plugin (including
+`org.jenkinsci.plugins.workflow.vSphereStep`, as its package holds lots of general Jenkins logs)
+were needed: if you have a log recorder like that, it no longer logs the cloud, nor the step,
+so replace its entries with the one above.
 
 Once done, you'll end up with a log definition that looks something like
 this:
@@ -81,6 +79,10 @@ Java package, which made it hard to set up logging and auditing for the plugin a
 | `org.jenkinsci.plugins.vSphereCloudSlaveComputer` | `org.jenkinsci.plugins.vsphere.vSphereCloudSlaveComputer` |
 | `org.jenkinsci.plugins.vSphereCloudLauncher`    | `org.jenkinsci.plugins.vsphere.vSphereCloudLauncher`  |
 | `org.jenkinsci.plugins.vSphereCloudRunListener` | `org.jenkinsci.plugins.vsphere.vSphereCloudRunListener` |
+| `org.jenkinsci.plugins.folder.FolderVSphereCloudProperty` | `org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty` |
+| `org.jenkinsci.plugins.workflow.vSphereStep`    | `org.jenkinsci.plugins.vsphere.workflow.vSphereStep`  |
+
+(The last two were in the Java packages of the Folders and the Pipeline plugins, which are not the plugin's own.)
 
 **What keeps working**
 * Pipelines, Freestyle jobs and the Configuration as Code of the plugin (`vSphere`, `esxiSsh`, `vsphereRunOnceCloud`
@@ -88,11 +90,16 @@ Java package, which made it hard to set up logging and auditing for the plugin a
   names these classes.
 * What Jenkins has stored: the clouds in `config.xml`, the agents in `nodes/*/config.xml`, and the clouds of
   folders in the `config.xml` of the folder, that use the old names as XML elements (or as `class="..."`)
-  are read as before, as the old names are aliases of the new classes (`LegacyClassNames`). What is saved
+  are read as before, as the old names are aliases of the new classes (`LegacyClassNames`; that includes the property of
+  a folder, which is `org.jenkinsci.plugins.folder.FolderVSphereCloudProperty` in the `config.xml` of the folder). What is saved
   after that has the new names. XML posted to Jenkins (the CLI, the REST API, `jenkins-cli create-node`)
   with the old names is accepted too.
 
 **What does not**
+* **Pipeline builds that are in the middle of a `vSphere` step** when Jenkins is restarted for the upgrade: the
+  step was saved under its old class name, which is gone, so the build cannot resume. Wait for them to end
+  first. Builds that have ended are not affected: Pipeline finds the step in their nodes by the id of its
+  descriptor (`org.jenkinsci.plugins.workflow.vSphereStep$DescriptorImpl`), which was kept as it was.
 * **Downgrading the plugin** after Jenkins has saved its configuration with the new names: the older plugin
   does not know them, and Jenkins will complain about, and skip, the clouds and agents that have them.
   Keep a backup of `$JENKINS_HOME` (`config.xml`, `nodes/`, folders) from before the upgrade.

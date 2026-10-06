@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins.workflow;
+package org.jenkinsci.plugins.vsphere.workflow;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
@@ -27,6 +27,9 @@ import org.kohsuke.stapler.DataBoundSetter;
  * The vSphere invocation step for the Jenkins workflow plugin.
  */
 public class vSphereStep extends AbstractStepImpl {
+
+    /** What {@code DescriptorImpl} was called when this class was in {@code org.jenkinsci.plugins.workflow}. */
+    static final String OLD_DESCRIPTOR_ID = "org.jenkinsci.plugins.workflow.vSphereStep$DescriptorImpl";
 
     private String serverName;
 
@@ -58,6 +61,22 @@ public class vSphereStep extends AbstractStepImpl {
 
         public DescriptorImpl() {
             super(vSphereExecution.class);
+        }
+
+        /**
+         * Pipeline keeps this in each node of the builds that ran the step, to find the descriptor again; so it stays
+         * what it was when the class was in another package, for those builds to still show it as a step of this
+         * plugin.
+         */
+        @Override
+        public String getId() {
+            return OLD_DESCRIPTOR_ID;
+        }
+
+        /** The address of the descriptor (of its form checks and fills) is told by the same id, which it is looked up by. */
+        @Override
+        public String getDescriptorUrl() {
+            return OLD_DESCRIPTOR_ID;
         }
 
         @Override
