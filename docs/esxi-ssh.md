@@ -184,7 +184,8 @@ that stand in for the vSphere API). Anything else that is refused is an ordinary
 
 ## Copying files between hosts: the relay
 
-For hosts that do not share a datastore, files of a datastore folder can be copied from one host to
+For hosts that do not share a datastore (which is found out by the plugin, with nothing to set: [see
+below](#several-esxi-hosts-a-poor-mans-cluster)), files of a datastore folder can be copied from one host to
 another **through the controller** (`EsxiRelay`): `tar` on the source writes the files, compressed
 there, to a stream that Jenkins passes on, as it is, to `tar` on the target. It needs nothing of the
 hosts but the SSH session that each of them already has: no trust between the hosts, no firewall to
@@ -462,6 +463,17 @@ vsConnectionConfig:
           credentialsId: "esxi-c"
           hostKeyPolicy: ACCEPT_ANY
 ```
+
+**Shared storage is found out, not configured.** There is no setting that says that hosts share a datastore: for
+each host the plugin looks at the volume that holds the master (by its UUID, whatever the host calls it), and at
+whether the master's `.vmx` is really there through it (if the UUID cannot be read, whether the same path exists).
+A host that sees the master makes the clone by itself, with plain file operations on the shared datastore, and
+nothing is copied between hosts. Only a host that does not see it is a case for a copy (a replica), and only if
+**Make replicas of masters** is on, so that `transferMode` and the other settings of copies matter for those hosts
+alone; with that off, such a host is not used, and the message of a clone that no host can make says why for each.
+To keep a clone off a host, name another one or limit the *host selection candidates*. A volume that a host reports
+under a different UUID (an NFS export that is mounted by NFS 3 on one host and by NFS 4.1 on another may be one; this
+has not been tried) is not taken for the same one.
 
 This is **not vSphere's DRS, nor vMotion**: the hosts are independent, the plugin does not move VMs,
 and the load of a host is not measured. What it does:
