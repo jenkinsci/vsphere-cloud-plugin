@@ -36,7 +36,8 @@ public final class EsxiDatastore extends Datastore {
         summary.setType(entry.getType());
         summary.setCapacity(entry.getSize());
         summary.setFreeSpace(entry.getFree());
-        summary.setAccessible(entry.isMounted());
+        // not accessible, as far as putting files on it goes, if it is mounted read-only
+        summary.setAccessible(entry.isMounted() && !entry.isReadOnly());
         summary.setMultipleHostAccess(entry.getType().toUpperCase().startsWith("NFS"));
     }
 

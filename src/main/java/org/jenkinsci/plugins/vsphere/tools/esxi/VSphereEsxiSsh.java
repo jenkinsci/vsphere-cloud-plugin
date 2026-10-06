@@ -553,13 +553,30 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         if (all == null) {
             throw new VSphereException("Could not make out the datastores from: " + output.trim());
         }
+        final java.util.Set<String> readOnly = readOnlyShares();
         final List<EsxiDatastoreEntry> usable = new ArrayList<>();
         for (EsxiDatastoreEntry entry : all) {
             if (entry.isForVms() && entry.isMounted()) {
-                usable.add(entry);
+                usable.add(readOnly.contains(entry.getName()) ? entry.asReadOnly() : entry);
             }
         }
         return usable;
+    }
+
+    /** The NFS shares that are mounted read-only: nothing can be put on them. Those that cannot be told are not. */
+    private java.util.Set<String> readOnlyShares() {
+        final java.util.Set<String> names = new java.util.HashSet<>();
+        for (String command : new String[] {"esxcli storage nfs list", "esxcli storage nfs41 list"}) {
+            try {
+                final ShellResult listing = shell.run(command);
+                if (listing.succeeded()) {
+                    names.addAll(EsxiNfsTable.readOnlyVolumes(listing.getStdout()));
+                }
+            } catch (VSphereException e) {
+                LOGGER.log(Level.FINE, "Asking the host for its NFS shares", e);
+            }
+        }
+        return names;
     }
 
     @Override

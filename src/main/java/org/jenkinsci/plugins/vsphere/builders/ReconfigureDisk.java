@@ -598,19 +598,43 @@ public class ReconfigureDisk extends ReconfigureStep {
         Datastore datastore = null;
         long freeSpace = 0;
 
-        for (ManagedEntity entity : vsphere.getDatastores()) {
-            if (entity instanceof Datastore) {
-                Datastore ds = (Datastore) entity;
-                long fs = ds.getSummary().getFreeSpace();
-                if (this.datastore != null
-                        && this.datastore.length() > 0
-                        && !ds.getName().equals(this.datastore)) {
-                    continue;
+        // Without a datastore that is asked for, the disk goes where the VM is, as it does when it is added in the
+        // client of the host, if there is room there: the datastore with the most room of all is not always one
+        // that can be written to (such as one of ISO images that is mounted read-only), nor one that is the VM's
+        final boolean named = this.datastore != null && this.datastore.length() > 0;
+        final Set<String> beside = new HashSet<>();
+        if (!named && vm != null) {
+            try {
+                for (Datastore own : vm.getDatastores()) {
+                    beside.add(own.getName());
                 }
-                if (fs > sizeInKB && fs > freeSpace) {
-                    datastore = ds;
-                    freeSpace = fs;
+            } catch (RuntimeException e) {
+                VSphereLogger.vsLogger(jLogger, "Could not tell where the VM is: " + e.getMessage());
+            }
+        }
+        for (boolean onlyBeside : beside.isEmpty() ? new boolean[] {false} : new boolean[] {true, false}) {
+            for (ManagedEntity entity : vsphere.getDatastores()) {
+                if (entity instanceof Datastore) {
+                    Datastore ds = (Datastore) entity;
+                    long fs = ds.getSummary().getFreeSpace();
+                    if (named && !ds.getName().equals(this.datastore)) {
+                        continue;
+                    }
+                    if (onlyBeside && !beside.contains(ds.getName())) {
+                        continue;
+                    }
+                    if (!ds.getSummary().isAccessible()) {
+                        // not mounted, or not to be written to
+                        continue;
+                    }
+                    if (fs > sizeInKB && fs > freeSpace) {
+                        datastore = ds;
+                        freeSpace = fs;
+                    }
                 }
+            }
+            if (datastore != null) {
+                break;
             }
         }
 
@@ -621,8 +645,10 @@ public class ReconfigureDisk extends ReconfigureStep {
         VSphereLogger.vsLogger(
                 jLogger,
                 String.format(
-                        "Selected datastore `%s` with free size: %dGB",
-                        datastore.getName(), freeSpace / 1024 / 1024 / 1024));
+                        "Selected datastore `%s` with free size: %dGB%s",
+                        datastore.getName(),
+                        freeSpace / 1024 / 1024 / 1024,
+                        beside.contains(datastore.getName()) ? ", where the VM is" : ""));
         return datastore.getName();
     }
 

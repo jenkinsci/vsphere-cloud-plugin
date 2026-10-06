@@ -332,7 +332,7 @@ final class EsxiReplica {
         if (where.isEmpty()) {
             long room = -1;
             for (EsxiDatastoreEntry candidate : target.listDatastores()) {
-                if (candidate.getFree() > room) {
+                if (!candidate.isReadOnly() && candidate.getFree() > room) {
                     room = candidate.getFree();
                     where = candidate.getName();
                 }

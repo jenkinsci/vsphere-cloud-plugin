@@ -31,9 +31,23 @@ final class EsxiDatastoreEntry {
     private final String type;
     private final long size;
     private final long free;
+    private final boolean readOnly;
 
     EsxiDatastoreEntry(
             String mountPoint, String name, String uuid, boolean mounted, String type, long size, long free) {
+        this(mountPoint, name, uuid, mounted, type, size, free, false);
+    }
+
+    private EsxiDatastoreEntry(
+            String mountPoint,
+            String name,
+            String uuid,
+            boolean mounted,
+            String type,
+            long size,
+            long free,
+            boolean readOnly) {
+        this.readOnly = readOnly;
         this.mountPoint = mountPoint;
         this.name = name;
         this.uuid = uuid;
@@ -69,6 +83,16 @@ final class EsxiDatastoreEntry {
 
     long getFree() {
         return free;
+    }
+
+    /** True if this is a share that is mounted read-only (as one of ISO images often is): nothing is put on it. */
+    boolean isReadOnly() {
+        return readOnly;
+    }
+
+    /** The same, as one that is mounted read-only. */
+    EsxiDatastoreEntry asReadOnly() {
+        return new EsxiDatastoreEntry(mountPoint, name, uuid, mounted, type, size, free, true);
     }
 
     /** Where VMs can be kept: not the boot banks and the system volumes of the host. */

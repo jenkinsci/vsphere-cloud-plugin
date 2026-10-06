@@ -1214,7 +1214,29 @@ final class FakeEsxiHost implements EsxiShell {
         return names;
     }
 
+    /** The NFS shares that are mounted read-only, for esxcli storage nfs list. */
+    final java.util.Set<String> readOnlyShares = new java.util.TreeSet<>();
+
     private ShellResult onFirewall(List<String> words) {
+        if (words.size() == 4
+                && words.get(1).equals("storage")
+                && words.get(2).startsWith("nfs")
+                && words.get(3).equals("list")) {
+            if (readOnlyShares.isEmpty() || !words.get(2).equals("nfs")) {
+                return new ShellResult(1, "", "esxcli: no shares");
+            }
+            final StringBuilder table = new StringBuilder(
+                            "Volume Name  Host        Share        Accessible  Mounted  Read-Only  Hardware Acceleration\n")
+                    .append(
+                            "-----------  ----------  -----------  ----------  -------  ---------  ---------------------\n");
+            for (String name : readOnlyShares) {
+                table.append(String.format(
+                        "%-11s  10.0.0.1     /export/x    true        true     true       Unknown%n", name));
+            }
+            table.append(String.format(
+                    "%-11s  10.0.0.1     /export/w    true        true     false      Unknown%n", "writable"));
+            return ok(table.toString());
+        }
         if (words.size() >= 4 && words.get(1).equals("network") && words.get(2).equals("firewall")) {
             final String what = String.join(" ", words.subList(3, words.size()));
             if (what.equals("refresh")) {

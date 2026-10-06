@@ -632,6 +632,61 @@ class EsxiDiskReconfigureTest {
         assertThat(host.hasFile(FOLDER + "/ide.vmdk"), is(false));
     }
 
+    /** A host with a VM on a small datastore, and a bigger one that is not the VM's (an ISO one, mounted read-only). */
+    private void hostWithABiggerDatastoreThatIsNotTheVms(String freeOfTheVms) {
+        host = new FakeEsxiHost();
+        host.datastoreTable = FakeEsxiHost.datastoreTable(new String[][] {
+            {"/vmfs/volumes/uuid-vm", "ds-vm", "uuid-vm", "true", "VMFS-6", "300000000000", freeOfTheVms},
+            {"/vmfs/volumes/uuid-iso", "ds-iso", "uuid-iso", "true", "NFS", "900000000000", "800000000000"}
+        });
+        host.addVm(7, "web", "ds-vm", "web/web.vmx", VMX);
+        host.addFile("/vmfs/volumes/ds-vm/web/web.vmdk", descriptor("web-flat.vmdk", 10 * 1024, null));
+        host.addFile("/vmfs/volumes/ds-vm/web/web-flat.vmdk", "DATA");
+        host.addFile("/vmfs/volumes/ds-iso/.keep", "");
+        esxi = new VSphereEsxiSsh(host);
+    }
+
+    @Test
+    void aDiskThatIsNotToldWhereIsPutWhereTheVmIsAndNotOnTheDatastoreWithTheMostRoom() throws Exception {
+        hostWithABiggerDatastoreThatIsNotTheVms("200000000000");
+
+        reconfigure(new ReconfigureDisk("1", ""));
+
+        assertThat(host.hasFile("/vmfs/volumes/ds-vm/web/web_1.vmdk"), is(true));
+        assertThat(host.hasFile("/vmfs/volumes/ds-iso/web/web_1.vmdk"), is(false));
+        assertThat(
+                VmxFile.parse(host.file("/vmfs/volumes/ds-vm/web/web.vmx")).get("scsi0:1.fileName"), is("web_1.vmdk"));
+    }
+
+    @Test
+    void aDiskThatDoesNotFitWhereTheVmIsGoesToTheDatastoreWithRoomForIt() throws Exception {
+        hostWithABiggerDatastoreThatIsNotTheVms("1000");
+
+        reconfigure(new ReconfigureDisk("1", ""));
+
+        assertThat(host.hasFile("/vmfs/volumes/ds-iso/web/web_1.vmdk"), is(true));
+    }
+
+    @Test
+    void aDatastoreThatIsMountedReadOnlyIsNotPutOnEvenWhenTheVmsHasNoRoom() throws Exception {
+        hostWithABiggerDatastoreThatIsNotTheVms("1000");
+        host.readOnlyShares.add("ds-iso");
+
+        final Exception e = assertThrows(Exception.class, () -> reconfigure(new ReconfigureDisk("1", "")));
+
+        assertThat(String.valueOf(e.getMessage()), containsString("No datastore with enough space found"));
+        assertThat(host.hasFile("/vmfs/volumes/ds-iso/web/web_1.vmdk"), is(false));
+    }
+
+    @Test
+    void aDiskThatIsToldWhereGoesThere() throws Exception {
+        hostWithABiggerDatastoreThatIsNotTheVms("200000000000");
+
+        reconfigure(new ReconfigureDisk("1", "ds-iso"));
+
+        assertThat(host.hasFile("/vmfs/volumes/ds-iso/web/web_1.vmdk"), is(true));
+    }
+
     @Test
     void aCdromIsADeviceThatTakesItsUnitSoTheStepUsesTheNextOne() throws Exception {
         final VmxFile with = VmxFile.parse(VMX);
