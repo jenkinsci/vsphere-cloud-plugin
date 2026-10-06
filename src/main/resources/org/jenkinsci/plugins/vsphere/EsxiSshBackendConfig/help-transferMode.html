@@ -1,5 +1,11 @@
 <div>
   How the files of a replica of a master (see <i>Make replicas of masters</i>) get from one ESXi host to another.
+  <p>
+    This is only for hosts that <b>do not share</b> the datastore of the master, which there is nothing to set for:
+    hosts that have it in common (an NFS share, or VMFS on shared storage; the same volume is found by its UUID,
+    whatever each host calls it) are found out, and a host that sees the master makes its clones by itself, with plain
+    file operations on that datastore. Nothing is copied between such hosts, and this setting is not used for them.
+  </p>
   <ul>
     <li><b>Through the controller</b> (the default): each host sends to Jenkins, which passes it on. It needs nothing
       of the hosts but the SSH session that each has already, and nothing is unencrypted. It is the slowest, as the
@@ -15,5 +21,4 @@
       <b>nothing is encrypted</b>: use it only in a network that you trust, as whoever can reach the port while it
       is open can send files to the folder that the copy is waiting for.</li>
   </ul>
-  Copies made by Jenkins that do not use this are done as before.
 </div>

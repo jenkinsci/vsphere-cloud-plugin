@@ -1,5 +1,6 @@
 <div>
   Other ESXi hosts to use together with this one (a "poor man's cluster"): VMs are looked up on all of them, and a
   clone is made on the host that is least loaded, or the one that is asked for, among those that can see the files of
-  its master (a datastore that they share, such as NFS). A host that cannot be reached is left out until it can again.
+  its master (a datastore that they share, such as NFS or VMFS on shared storage: that is found out from the UUID of the volume, and
+  there is nothing to set for it). A host that cannot be reached is left out until it can again.
 </div>
