@@ -176,6 +176,15 @@ the two ways [below](#faster-ways-direct-copies-over-ssh-or-by-netcat) are faste
 * **What is left behind**: the files are unpacked in a folder of their own next to where they are going
   (`.jenkins-incoming-...`), checked for their sizes, and only then moved in place; a copy that fails
   leaves nothing in the folder, and the folder is removed. A file that is there already is replaced.
+* **Order and names**: the files are sent smallest first, checksum files (`.sha256`, `.md5`, ...) before all, as they
+  are the likeliest to get across before a session is cut or a disk is full, so that what is cut short is the
+  last and the biggest, and a comparison finds a file that is missing or short next to a checksum that is there.
+  Each file is moved in place under a name of its own, `<name>.__WRITING__`, and renamed to `<name>` when it is
+  there whole (after the sizes were checked); what is left of one that failed is removed. The same goes for the
+  local copies of files that the host makes (`cp`, to `<name>.__WRITING__`, then `mv`) and for the files that are
+  replaced (a `.vmx`, a `.vmsd`). A `.__WRITING__` file that you find was left by something that was stopped
+  hard, and can be removed. What `vmkfstools` writes (the disks that it clones, exports or imports) is written by
+  it under the final name, as it cannot be told another.
 * **Time stamps** are carried over by `tar`, so that a file is as old on the target as on the source.
 * Only plain names in folders of datastores are accepted.
 
@@ -356,7 +365,11 @@ powered off** (a running VM is refused, with a message saying so).
   or removed, only disks put on them, and the host does not power on a VM with an IDE slave (unit 1) and
   no master (unit 0), so that is refused. The disk step of the plugin has a **Disk bus** (SCSI, the default, IDE, SATA or NVMe), on vCenter as on
   a host: it uses the first controller of that kind with a free unit, and adds a SCSI, SATA or NVMe controller by
-  itself when there is none (it cannot for IDE, which has two controllers of two units). Disks are found by
+  itself when there is none (it cannot for IDE, which has two controllers of two units).
+  Mind that `IDE(1:0)`, and often `IDE(0:0)` too, is taken by a CD-ROM (an ISO image, emulation or
+  passthrough of a drive) in many VMs, which counts as a device on that unit: the step then finds IDE full or
+  puts the disk on the unit that is free. Where a VM needs more disks than IDE has room for, use SCSI, SATA or
+  NVMe, which most guests can also attach the CD-ROM to (SATA is common), or have no CD-ROM at all. Disks are found by
   monikers such as `SATA(0:1)` or `NVME(0:0)` too.
 * **Not available**: distributed switches, and devices other than network adapters, disks and their
   controllers.
