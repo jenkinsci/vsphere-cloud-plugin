@@ -7,7 +7,7 @@ st = namespace("jelly:stapler")
 st.adjunct(includes:"org.jenkinsci.plugins.vsphere.vsHostRecheck")
 
 f.entry(title:_("vSphere Host"), field:"vsHost") {
-    f.textbox()
+    f.textbox(checkMethod:"post")
 }
 
 // What the rest of the settings are depends on how the host is connected to: each way has its own

@@ -16,6 +16,9 @@
 
 package org.jenkinsci.plugins.vsphere;
 
+import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
+
+import com.cloudbees.hudson.plugins.folder.AbstractFolder;
 import com.cloudbees.plugins.credentials.CredentialsMatcher;
 import com.cloudbees.plugins.credentials.CredentialsMatchers;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
@@ -48,9 +51,11 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
+import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 
 /**
  *
@@ -380,7 +385,12 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
          * @param port a setting of the connection type "standalone ESXi host over SSH", which is not there (so not sent)
          *     for the other: that is how this tells which of the two is chosen
          */
-        public FormValidation doCheckVsHost(@QueryParameter String value, @QueryParameter String port) {
+        @RequirePOST
+        public FormValidation doCheckVsHost(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String value,
+                @QueryParameter String port) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             if (value != null && value.length() != 0) {
                 if (value.endsWith("/")) {
                     return FormValidation.error("vSphere host name must NOT end with a trailing slash");

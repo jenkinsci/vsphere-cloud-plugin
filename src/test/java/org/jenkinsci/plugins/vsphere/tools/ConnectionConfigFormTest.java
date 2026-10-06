@@ -195,13 +195,13 @@ class ConnectionConfigFormTest {
                 r.jenkins.getDescriptorByType(VSphereConnectionConfig.DescriptorImpl.class);
 
         // the port is there when a standalone ESXi host over SSH is chosen, and not when a vCenter is
-        assertThat(descriptor.doCheckVsHost("10.1.2.3", "22").kind, is(FormValidation.Kind.OK));
-        assertThat(descriptor.doCheckVsHost("esxi.example.com", "22").kind, is(FormValidation.Kind.OK));
-        assertThat(descriptor.doCheckVsHost("10.1.2.3", null).kind, is(FormValidation.Kind.WARNING));
-        assertThat(descriptor.doCheckVsHost("https://vc.example.com", null).kind, is(FormValidation.Kind.OK));
-        assertThat(descriptor.doCheckVsHost("https://vc.example.com/", null).kind, is(FormValidation.Kind.ERROR));
-        assertThat(descriptor.doCheckVsHost("ssh://esxi.example.com", "22").kind, is(FormValidation.Kind.ERROR));
-        assertThat(descriptor.doCheckVsHost("", null).kind, is(FormValidation.Kind.ERROR));
+        assertThat(descriptor.doCheckVsHost(null, "10.1.2.3", "22").kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost(null, "esxi.example.com", "22").kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost(null, "10.1.2.3", null).kind, is(FormValidation.Kind.WARNING));
+        assertThat(descriptor.doCheckVsHost(null, "https://vc.example.com", null).kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost(null, "https://vc.example.com/", null).kind, is(FormValidation.Kind.ERROR));
+        assertThat(descriptor.doCheckVsHost(null, "ssh://esxi.example.com", "22").kind, is(FormValidation.Kind.ERROR));
+        assertThat(descriptor.doCheckVsHost(null, "", null).kind, is(FormValidation.Kind.ERROR));
     }
 
     @Test
