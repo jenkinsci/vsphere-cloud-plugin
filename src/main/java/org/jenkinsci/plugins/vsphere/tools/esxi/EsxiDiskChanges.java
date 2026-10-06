@@ -16,6 +16,7 @@ package org.jenkinsci.plugins.vsphere.tools.esxi;
 
 import com.vmware.vim25.ParaVirtualSCSIController;
 import com.vmware.vim25.VirtualBusLogicController;
+import com.vmware.vim25.VirtualController;
 import com.vmware.vim25.VirtualDeviceBackingInfo;
 import com.vmware.vim25.VirtualDeviceConfigSpec;
 import com.vmware.vim25.VirtualDeviceConfigSpecFileOperation;
@@ -88,7 +89,7 @@ final class EsxiDiskChanges {
     private final List<Step> before = new ArrayList<>();
     private final List<Step> after = new ArrayList<>();
     /** The keys that a reconfiguration gave to the controllers it adds (they are negative), and their buses. */
-    private final Map<Integer, Integer> newControllers = new HashMap<>();
+    private final Map<Integer, EsxiDiskBus.Place> newControllers = new HashMap<>();
 
     EsxiDiskChanges(VmxFile vmx, String vmFolder, Inspector inspector) {
         this.vmx = vmx;
@@ -108,7 +109,7 @@ final class EsxiDiskChanges {
 
     /** True if this kind of device is handled here. */
     static boolean handles(Object device) {
-        return device instanceof VirtualDisk || device instanceof VirtualSCSIController;
+        return device instanceof VirtualDisk || EsxiDiskBus.isController(device);
     }
 
     void apply(VirtualDeviceConfigSpec change) throws VSphereException {
@@ -116,8 +117,8 @@ final class EsxiDiskChanges {
         if (operation == null) {
             throw new VSphereException("The operation on a disk or a controller is not given");
         }
-        if (change.getDevice() instanceof VirtualSCSIController) {
-            final VirtualSCSIController controller = (VirtualSCSIController) change.getDevice();
+        if (EsxiDiskBus.isController(change.getDevice())) {
+            final VirtualController controller = (VirtualController) change.getDevice();
             switch (operation) {
                 case add:
                     addController(controller);
@@ -126,7 +127,7 @@ final class EsxiDiskChanges {
                     removeController(controller);
                     break;
                 default:
-                    throw new VSphereException("A SCSI controller can be added or removed, not changed");
+                    throw new VSphereException("A controller can be added or removed, not changed");
             }
         } else {
             final VirtualDisk disk = (VirtualDisk) change.getDevice();
@@ -158,42 +159,54 @@ final class EsxiDiskChanges {
         return "lsilogic";
     }
 
-    private void addController(VirtualSCSIController controller) throws VSphereException {
-        int bus = controller.getBusNumber();
-        if (bus < 0 || bus >= MAX_SCSI_CONTROLLERS) {
-            throw new VSphereException("A VM has SCSI controllers 0 to " + (MAX_SCSI_CONTROLLERS - 1) + ", not " + bus);
+    private void addController(VirtualController controller) throws VSphereException {
+        final EsxiDiskBus kind = EsxiDiskBus.of(controller);
+        if (kind.builtIn) {
+            throw new VSphereException("A VM has its two IDE controllers always (ide0 and ide1): they cannot be"
+                    + " added, only disks put on them");
         }
-        if (vmx.getBoolean("scsi" + bus + ".present")) {
-            throw new VSphereException("The VM has the SCSI controller " + bus + " already");
+        final int bus = controller.getBusNumber();
+        if (bus < 0 || bus >= kind.maxControllers) {
+            throw new VSphereException(
+                    "A VM has " + kind.prefix + " controllers 0 to " + (kind.maxControllers - 1) + ", not " + bus);
         }
-        final String prefix = "scsi" + bus;
+        if (vmx.getBoolean(kind.prefix + bus + ".present")) {
+            throw new VSphereException("The VM has the " + kind.prefix + " controller " + bus + " already");
+        }
+        final String prefix = kind.prefix + bus;
         vmx.put(prefix + ".present", "TRUE");
-        vmx.put(prefix + ".virtualDev", controllerType(controller));
-        if (controller.getSharedBus() != null && controller.getSharedBus() != VirtualSCSISharing.noSharing) {
-            vmx.put(
-                    prefix + ".sharedBus",
-                    controller.getSharedBus() == VirtualSCSISharing.physicalSharing ? "physical" : "virtual");
-        }
-        newControllers.put(controller.getKey(), bus);
-    }
-
-    private int busOf(VirtualSCSIController controller) throws VSphereException {
-        final int bus = controller.getKey() - SCSI_CONTROLLER_KEY_BASE;
-        if (bus < 0 || bus >= MAX_SCSI_CONTROLLERS || !vmx.getBoolean("scsi" + bus + ".present")) {
-            throw new VSphereException("There is no SCSI controller with the key " + controller.getKey());
-        }
-        return bus;
-    }
-
-    private void removeController(VirtualSCSIController controller) throws VSphereException {
-        final int bus = busOf(controller);
-        for (int unit = 0; unit < MAX_SCSI_UNITS; unit++) {
-            if (vmx.hasSettingsUnder("scsi" + bus + ":" + unit)) {
-                throw new VSphereException(
-                        "The SCSI controller " + bus + " still has a disk (unit " + unit + "): remove that first");
+        if (controller instanceof VirtualSCSIController) {
+            final VirtualSCSIController scsi = (VirtualSCSIController) controller;
+            vmx.put(prefix + ".virtualDev", controllerType(scsi));
+            if (scsi.getSharedBus() != null && scsi.getSharedBus() != VirtualSCSISharing.noSharing) {
+                vmx.put(
+                        prefix + ".sharedBus",
+                        scsi.getSharedBus() == VirtualSCSISharing.physicalSharing ? "physical" : "virtual");
             }
         }
-        final String prefix = ("scsi" + bus + ".").toLowerCase();
+        newControllers.put(controller.getKey(), new EsxiDiskBus.Place(kind, bus, -1));
+    }
+
+    private EsxiDiskBus.Place existingController(VirtualController controller) throws VSphereException {
+        final EsxiDiskBus.Place place = EsxiDiskBus.ofControllerKey(controller.getKey());
+        if (place == null || place.bus != EsxiDiskBus.of(controller) || !place.bus.isPresent(vmx, place.controller)) {
+            throw new VSphereException("There is no controller with the key " + controller.getKey());
+        }
+        return place;
+    }
+
+    private void removeController(VirtualController controller) throws VSphereException {
+        final EsxiDiskBus.Place place = existingController(controller);
+        if (place.bus.builtIn) {
+            throw new VSphereException("The IDE controllers of a VM cannot be removed");
+        }
+        for (int unit = 0; unit < place.bus.maxUnits; unit++) {
+            if (vmx.hasSettingsUnder(place.controllerPrefix() + ":" + unit)) {
+                throw new VSphereException("The controller " + place.controllerPrefix() + " still has a device (unit "
+                        + unit + "): remove that first");
+            }
+        }
+        final String prefix = (place.controllerPrefix() + ".").toLowerCase();
         for (String key : new ArrayList<>(vmx.keys())) {
             if (key.toLowerCase().startsWith(prefix)) {
                 vmx.remove(key);
@@ -232,16 +245,16 @@ final class EsxiDiskChanges {
                 : path;
     }
 
-    private int busOfController(int controllerKey) throws VSphereException {
-        if (newControllers.containsKey(controllerKey)) {
-            return newControllers.get(controllerKey);
+    private EsxiDiskBus.Place busOfController(int controllerKey) throws VSphereException {
+        final EsxiDiskBus.Place made = newControllers.get(controllerKey);
+        if (made != null) {
+            return made;
         }
-        final int bus = controllerKey - SCSI_CONTROLLER_KEY_BASE;
-        if (bus < 0 || bus >= MAX_SCSI_CONTROLLERS || !vmx.getBoolean("scsi" + bus + ".present")) {
-            throw new VSphereException(
-                    "There is no SCSI controller with the key " + controllerKey + " to put a disk on");
+        final EsxiDiskBus.Place place = EsxiDiskBus.ofControllerKey(controllerKey);
+        if (place == null || !place.bus.isPresent(vmx, place.controller)) {
+            throw new VSphereException("There is no controller with the key " + controllerKey + " to put a disk on");
         }
-        return bus;
+        return place;
     }
 
     private void addDisk(VirtualDisk disk, VirtualDeviceConfigSpecFileOperation fileOperation) throws VSphereException {
@@ -253,14 +266,18 @@ final class EsxiDiskChanges {
         if (disk.getControllerKey() == null) {
             throw new VSphereException("The controller to put the disk on is not given");
         }
-        final int bus = busOfController(disk.getControllerKey());
-        final int unit = disk.getUnitNumber() == null ? firstFreeUnit(bus) : disk.getUnitNumber();
-        if (unit < 0 || unit >= MAX_SCSI_UNITS || unit == RESERVED_UNIT) {
-            throw new VSphereException("The unit " + unit + " cannot be used for a disk (0 to 15, not 7)");
+        final EsxiDiskBus.Place controller = busOfController(disk.getControllerKey());
+        final EsxiDiskBus kind = controller.bus;
+        final int unit = disk.getUnitNumber() == null ? firstFreeUnit(controller) : disk.getUnitNumber();
+        if (unit < 0 || unit >= kind.maxUnits || unit == kind.reservedUnit) {
+            throw new VSphereException("The unit " + unit + " cannot be used for a disk on " + kind.prefix
+                    + " (0 to " + (kind.maxUnits - 1) + (kind.reservedUnit >= 0 ? ", not " + kind.reservedUnit : "")
+                    + ")");
         }
-        final String prefix = "scsi" + bus + ":" + unit;
+        final String prefix = new EsxiDiskBus.Place(kind, controller.controller, unit).diskPrefix();
         if (vmx.hasSettingsUnder(prefix)) {
-            throw new VSphereException("The unit " + unit + " of the SCSI controller " + bus + " is in use already");
+            throw new VSphereException(
+                    "The unit " + unit + " of " + controller.controllerPrefix() + " is in use already");
         }
         final String path = pathOf(file.getFileName());
         if (fileOperation == VirtualDeviceConfigSpecFileOperation.create) {
@@ -276,6 +293,9 @@ final class EsxiDiskChanges {
             throw new VSphereException("The disk file " + path + " to attach does not exist");
         }
         vmx.put(prefix + ".present", "TRUE");
+        if (kind == EsxiDiskBus.IDE) {
+            vmx.put(prefix + ".deviceType", "ata-hardDisk");
+        }
         vmx.put(prefix + ".fileName", VmxFile.escape(nameInVmx(path)));
         final String mode = file.getDiskMode();
         if (mode != null && !mode.equals("persistent")) {
@@ -283,28 +303,27 @@ final class EsxiDiskChanges {
         }
     }
 
-    private int firstFreeUnit(int bus) throws VSphereException {
-        for (int unit = 0; unit < MAX_SCSI_UNITS; unit++) {
-            if (unit != RESERVED_UNIT && !vmx.hasSettingsUnder("scsi" + bus + ":" + unit)) {
+    private int firstFreeUnit(EsxiDiskBus.Place controller) throws VSphereException {
+        for (int unit = 0; unit < controller.bus.maxUnits; unit++) {
+            if (unit != controller.bus.reservedUnit
+                    && !vmx.hasSettingsUnder(
+                            new EsxiDiskBus.Place(controller.bus, controller.controller, unit).diskPrefix())) {
                 return unit;
             }
         }
-        throw new VSphereException("The SCSI controller " + bus + " has no free unit");
+        throw new VSphereException("The controller " + controller.controllerPrefix() + " has no free unit");
     }
 
     /** The prefix in the .vmx of the disk that the key stands for, or fails if there is no such disk. */
     private String existingDisk(VirtualDisk disk) throws VSphereException {
-        final int index = disk.getKey() - DISK_KEY_BASE;
-        final int bus = index / MAX_SCSI_UNITS;
-        final int unit = index % MAX_SCSI_UNITS;
-        final String prefix = "scsi" + bus + ":" + unit;
-        if (index < 0
-                || bus >= MAX_SCSI_CONTROLLERS
-                || !vmx.getBoolean(prefix + ".present")
-                || vmx.get(prefix + ".fileName") == null) {
+        final EsxiDiskBus.Place place = EsxiDiskBus.ofDiskKey(disk.getKey());
+        if (place == null
+                || !place.bus.isPresent(vmx, place.controller)
+                || !vmx.getBoolean(place.diskPrefix() + ".present")
+                || vmx.get(place.diskPrefix() + ".fileName") == null) {
             throw new VSphereException("There is no disk with the key " + disk.getKey() + " in the VM");
         }
-        return prefix;
+        return place.diskPrefix();
     }
 
     private void editDisk(VirtualDisk disk) throws VSphereException {

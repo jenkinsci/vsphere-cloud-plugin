@@ -309,7 +309,7 @@ class EsxiReconfigureTest {
         assertThat(vmx().get("ethernet2.addressType"), is("generated"));
         assertThat(
                 esxi.getVmByName("web").getConfig().getHardware().getDevice().length,
-                is(1 + 1 + 1 + 3)); // PCI and SCSI controllers, a disk, three adapters
+                is(1 + 2 + 1 + 1 + 3)); // PCI, the two IDE and a SCSI controller, a disk, three adapters
     }
 
     @Test

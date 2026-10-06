@@ -39,7 +39,7 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Take a snapshot                                               | yes           |
 | Delete a VM                                                   | yes           |
 | Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
-| Reconfigure CPUs, memory, reservations and limits, annotation, extra configuration, network adapters, disks and SCSI controllers; rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
+| Reconfigure CPUs, memory, reservations and limits, annotation, extra configuration, network adapters, disks and their controllers (SCSI, SATA, NVMe; IDE for disks); rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
 | List datastores and resource pools, tell which ones hold a VM, tell whether a name is the host's own | yes |
 | Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
 | Revert to a snapshot, delete one                              | yes           |
@@ -292,7 +292,7 @@ powered off** (a running VM is refused, with a message saying so).
   `ethernet0.checkMACAddress = "FALSE"` (as an extra configuration parameter, for the adapter in question).
 * **Reservations, limits and shares** of CPU (MHz) and memory (MB): the `sched.cpu.*` and
   `sched.mem.*` settings. The CPU limit of the reconfigure CPU step is a reservation.
-* **Disks and SCSI controllers**, which `vmkfstools` manages (it makes disks, makes them larger and
+* **Disks and their controllers**, which `vmkfstools` manages (it makes disks, makes them larger and
   deletes them; it is not only for datastores). A disk is added in a folder of a datastore (made
   if needed), thick (lazily zeroed) unless the request says thin, and the datastore is one that
   the host lists; an existing disk file can be attached instead of making one. A disk can be made
@@ -301,8 +301,12 @@ powered off** (a running VM is refused, with a message saying so).
   files are made (or enlarged) before the `.vmx` is changed, and those that were made are deleted
   again if that fails; the files of a removed disk are deleted after it has been changed. A SCSI
   controller (LSI Logic, LSI Logic SAS, BusLogic, VMware Paravirtual) can be added, or removed if no
-  disk is on it. The disk step adds a controller by itself when the VM has none.
-* **Not available**: distributed switches, and devices other than network adapters, disks and SCSI
+  disk is on it, and so can a SATA (AHCI) or NVMe controller. Disks go on any of the four buses
+  (`scsiN`, `ideN`, `sataN`, `nvmeN`), with the units that the bus has (SCSI 0 to 15 without 7, IDE
+  0 and 1, SATA 0 to 29, NVMe 0 to 14). A VM always has its two IDE controllers: they cannot be added
+  or removed, only disks put on them. The disk step of the plugin adds a SCSI controller by itself
+  when the VM has none, and makes SCSI disks.
+* **Not available**: distributed switches, and devices other than network adapters, disks and their
   controllers.
 * There is no command to consolidate disks apart from removing snapshots, which consolidates what
   they held; asking for a consolidation is therefore taken as done.

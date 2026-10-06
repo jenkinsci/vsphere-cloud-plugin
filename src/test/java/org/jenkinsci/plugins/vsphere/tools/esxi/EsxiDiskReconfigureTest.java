@@ -359,7 +359,7 @@ class EsxiDiskReconfigureTest {
                 VSphereException.class,
                 () -> esxi.reconfigureVm("web", controllerChange(controller, VirtualDeviceConfigSpecOperation.remove)));
 
-        assertThat(e.getMessage(), containsString("still has a disk"));
+        assertThat(e.getMessage(), containsString("still has a device"));
         assertThat(host.file(VMX_PATH), is(VMX));
     }
 
@@ -373,7 +373,184 @@ class EsxiDiskReconfigureTest {
                 VSphereException.class,
                 () -> esxi.reconfigureVm("web", controllerChange(controller, VirtualDeviceConfigSpecOperation.add)));
 
-        assertThat(e.getMessage(), containsString("has the SCSI controller 0 already"));
+        assertThat(e.getMessage(), containsString("has the scsi controller 0 already"));
+    }
+
+    // -- the other buses: IDE, SATA, NVMe, and a second SCSI controller --
+
+    private static VirtualDisk newDisk(int controllerKey, Integer unit, String file, long kb) {
+        final VirtualDiskFlatVer2BackingInfo backing = new VirtualDiskFlatVer2BackingInfo();
+        backing.setFileName(file);
+        backing.setThinProvisioned(true);
+        final VirtualDisk disk = new VirtualDisk();
+        disk.setBacking(backing);
+        disk.setCapacityInKB(kb);
+        disk.setControllerKey(controllerKey);
+        disk.setUnitNumber(unit);
+        disk.setKey(-1);
+        return disk;
+    }
+
+    private static VirtualDeviceConfigSpec add(com.vmware.vim25.VirtualDevice device, boolean create) {
+        final VirtualDeviceConfigSpec change = new VirtualDeviceConfigSpec();
+        change.setDevice(device);
+        change.setOperation(VirtualDeviceConfigSpecOperation.add);
+        if (create) {
+            change.setFileOperation(VirtualDeviceConfigSpecFileOperation.create);
+        }
+        return change;
+    }
+
+    private static VirtualMachineConfigSpec specOf(VirtualDeviceConfigSpec... changes) {
+        final VirtualMachineConfigSpec spec = new VirtualMachineConfigSpec();
+        spec.setDeviceChange(changes);
+        return spec;
+    }
+
+    private java.util.List<com.vmware.vim25.VirtualDevice> devices() throws Exception {
+        return java.util.Arrays.asList(
+                esxi.getVmByName("web").getConfig().getHardware().getDevice());
+    }
+
+    @Test
+    void aDiskCanBeAddedOnAnIdleControllerThatIsAlwaysThere() throws Exception {
+        esxi.reconfigureVm("web", specOf(add(newDisk(200, null, "[datastore1] web/ide.vmdk", 2048), true)));
+
+        assertThat(vmx().get("ide0:0.present"), is("TRUE"));
+        assertThat(vmx().get("ide0:0.fileName"), is("ide.vmdk"));
+        assertThat(vmx().get("ide0:0.deviceType"), is("ata-hardDisk"));
+        assertThat(host.hasFile(FOLDER + "/ide.vmdk"), is(true));
+        // the VM tells it back, on the controller with the key of IDE 0, as a disk of its own
+        final com.vmware.vim25.VirtualDisk ide = (com.vmware.vim25.VirtualDisk)
+                devices().stream().filter(d -> d.getKey() == 3000).findFirst().get();
+        assertThat(ide.getControllerKey(), is(200));
+        assertThat(ide.getUnitNumber(), is(0));
+        assertThat(
+                devices().stream()
+                        .filter(d -> d instanceof com.vmware.vim25.VirtualIDEController)
+                        .count(),
+                is(2L));
+    }
+
+    @Test
+    void anIdeControllerCannotBeAddedOrRemoved() {
+        final com.vmware.vim25.VirtualIDEController controller = new com.vmware.vim25.VirtualIDEController();
+        controller.setBusNumber(0);
+        controller.setKey(200);
+
+        final VSphereException added =
+                assertThrows(VSphereException.class, () -> esxi.reconfigureVm("web", specOf(add(controller, false))));
+        assertThat(added.getMessage(), containsString("A VM has its two IDE controllers always"));
+
+        final VirtualDeviceConfigSpec remove = add(controller, false);
+        remove.setOperation(VirtualDeviceConfigSpecOperation.remove);
+        final VSphereException removed =
+                assertThrows(VSphereException.class, () -> esxi.reconfigureVm("web", specOf(remove)));
+        assertThat(removed.getMessage(), containsString("cannot be removed"));
+        assertThat(host.file(VMX_PATH), is(VMX));
+    }
+
+    @Test
+    void theUnitsOfIdeAreTwo() {
+        final VSphereException e = assertThrows(
+                VSphereException.class,
+                () -> esxi.reconfigureVm("web", specOf(add(newDisk(201, 2, "[datastore1] web/x.vmdk", 2048), true))));
+
+        assertThat(e.getMessage(), containsString("cannot be used for a disk on ide (0 to 1)"));
+    }
+
+    @Test
+    void aSataControllerAndADiskOnItAreAddedTogether() throws Exception {
+        final com.vmware.vim25.VirtualAHCIController controller = new com.vmware.vim25.VirtualAHCIController();
+        controller.setBusNumber(0);
+        controller.setKey(-100);
+
+        esxi.reconfigureVm(
+                "web",
+                specOf(add(controller, false), add(newDisk(-100, null, "[datastore1] web/sata.vmdk", 4096), true)));
+
+        assertThat(vmx().get("sata0.present"), is("TRUE"));
+        assertThat(vmx().get("sata0:0.fileName"), is("sata.vmdk"));
+        final com.vmware.vim25.VirtualDisk sata = (com.vmware.vim25.VirtualDisk)
+                devices().stream().filter(d -> d.getKey() == 16000).findFirst().get();
+        assertThat(sata.getControllerKey(), is(15000));
+        assertThat(
+                devices().stream()
+                        .anyMatch(d -> d instanceof com.vmware.vim25.VirtualAHCIController && d.getKey() == 15000),
+                is(true));
+    }
+
+    @Test
+    void anNvmeControllerAndADiskOnItAreAddedTogether() throws Exception {
+        final com.vmware.vim25.VirtualNVMEController controller = new com.vmware.vim25.VirtualNVMEController();
+        controller.setBusNumber(0);
+        controller.setKey(-7);
+
+        esxi.reconfigureVm(
+                "web", specOf(add(controller, false), add(newDisk(-7, 3, "[datastore1] web/nvme.vmdk", 4096), true)));
+
+        assertThat(vmx().get("nvme0.present"), is("TRUE"));
+        assertThat(vmx().get("nvme0:3.fileName"), is("nvme.vmdk"));
+        assertThat(
+                devices().stream().anyMatch(d -> d instanceof com.vmware.vim25.VirtualDisk && d.getKey() == 19003),
+                is(true));
+    }
+
+    @Test
+    void aSecondScsiControllerOfAnotherTypeTakesDisksToo() throws Exception {
+        final com.vmware.vim25.VirtualLsiLogicSASController controller =
+                new com.vmware.vim25.VirtualLsiLogicSASController();
+        controller.setBusNumber(1);
+        controller.setKey(-3);
+
+        esxi.reconfigureVm(
+                "web", specOf(add(controller, false), add(newDisk(-3, null, "[datastore1] web/two.vmdk", 4096), true)));
+
+        assertThat(vmx().get("scsi1.virtualDev"), is("lsisas1068"));
+        assertThat(vmx().get("scsi1:0.fileName"), is("two.vmdk"));
+        assertThat(
+                devices().stream()
+                        .anyMatch(
+                                d -> d instanceof com.vmware.vim25.VirtualLsiLogicSASController && d.getKey() == 1001),
+                is(true));
+    }
+
+    @Test
+    void aDiskOnAnIdeControllerCanBeEnlargedAndRemoved() throws Exception {
+        esxi.reconfigureVm("web", specOf(add(newDisk(201, 1, "[datastore1] web/ide.vmdk", 2048), true)));
+        final com.vmware.vim25.VirtualDisk ide = newDisk(201, 1, "[datastore1] web/ide.vmdk", 4096);
+        ide.setKey(3003);
+        final VirtualDeviceConfigSpec bigger = add(ide, false);
+        bigger.setOperation(VirtualDeviceConfigSpecOperation.edit);
+
+        esxi.reconfigureVm("web", specOf(bigger));
+        assertThat(host.file(FOLDER + "/ide.vmdk"), containsString("RW 8192 VMFS"));
+
+        final VirtualDeviceConfigSpec remove = add(ide, false);
+        remove.setOperation(VirtualDeviceConfigSpecOperation.remove);
+        remove.setFileOperation(VirtualDeviceConfigSpecFileOperation.destroy);
+        esxi.reconfigureVm("web", specOf(remove));
+
+        assertThat(vmx().get("ide1:1.fileName"), is(nullValue()));
+        assertThat(host.hasFile(FOLDER + "/ide.vmdk"), is(false));
+    }
+
+    @Test
+    void aCdromOnTheBusIsNotADisk() throws Exception {
+        final VmxFile with = VmxFile.parse(VMX);
+        with.put("sata0.present", "TRUE");
+        with.put("sata0:0.present", "TRUE");
+        with.put("sata0:0.deviceType", "cdrom-image");
+        with.put("sata0:0.fileName", "/vmfs/volumes/iso/os.iso");
+        host.addFile(VMX_PATH, with.toString());
+
+        assertThat(
+                devices().stream()
+                        .filter(d -> d instanceof com.vmware.vim25.VirtualDisk)
+                        .count(),
+                is(1L));
+        // but the controller it is on is there
+        assertThat(devices().stream().anyMatch(d -> d.getKey() == 15000), is(true));
     }
 
     private static VirtualMachineConfigSpec controllerChange(

@@ -19,7 +19,9 @@ import com.vmware.vim25.ParaVirtualSCSIController;
 import com.vmware.vim25.ResourceAllocationInfo;
 import com.vmware.vim25.SharesInfo;
 import com.vmware.vim25.SharesLevel;
+import com.vmware.vim25.VirtualAHCIController;
 import com.vmware.vim25.VirtualBusLogicController;
+import com.vmware.vim25.VirtualController;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualDiskFlatVer2BackingInfo;
@@ -27,9 +29,11 @@ import com.vmware.vim25.VirtualE1000;
 import com.vmware.vim25.VirtualEthernetCard;
 import com.vmware.vim25.VirtualEthernetCardNetworkBackingInfo;
 import com.vmware.vim25.VirtualHardware;
+import com.vmware.vim25.VirtualIDEController;
 import com.vmware.vim25.VirtualLsiLogicController;
 import com.vmware.vim25.VirtualLsiLogicSASController;
 import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.VirtualNVMEController;
 import com.vmware.vim25.VirtualPCIController;
 import com.vmware.vim25.VirtualSCSIController;
 import com.vmware.vim25.VirtualVmxnet3;
@@ -153,42 +157,65 @@ final class EsxiConfigInfo {
         }
     }
 
+    private static VirtualController controllerFor(EsxiDiskBus kind, VmxFile vmx, int bus) {
+        switch (kind) {
+            case SCSI:
+                return controllerOf(vmx.get("scsi" + bus + ".virtualDev"));
+            case IDE:
+                return new VirtualIDEController();
+            case SATA:
+                return new VirtualAHCIController();
+            default:
+                return new VirtualNVMEController();
+        }
+    }
+
+    /**
+     * The controllers of the VM and the disks on them, on all the kinds of bus: the SCSI, SATA and NVMe controllers
+     * that its .vmx says it has, and the two IDE ones that it always has.
+     */
     private static void addDisks(List<VirtualDevice> devices, VmEntry entry, VmxFile vmx) {
         final String folder = entry.getVmxRelativePath().contains("/")
                 ? entry.getVmxRelativePath()
                         .substring(0, entry.getVmxRelativePath().lastIndexOf('/') + 1)
                 : "";
         int diskNumber = 0;
-        for (int bus = 0; bus < MAX_SCSI_CONTROLLERS; bus++) {
-            final String controllerPrefix = "scsi" + bus;
-            if (!vmx.getBoolean(controllerPrefix + ".present")) {
-                continue;
-            }
-            final VirtualSCSIController controller = controllerOf(vmx.get(controllerPrefix + ".virtualDev"));
-            controller.setKey(SCSI_CONTROLLER_KEY_BASE + bus);
-            controller.setBusNumber(bus);
-            controller.setDeviceInfo(label("SCSI controller " + bus));
-            devices.add(controller);
-            final List<Integer> diskKeys = new ArrayList<>();
-            for (int unit = 0; unit < MAX_SCSI_UNITS; unit++) {
-                final String diskPrefix = controllerPrefix + ":" + unit;
-                final String fileName = vmx.get(diskPrefix + ".fileName");
-                if (!vmx.getBoolean(diskPrefix + ".present") || fileName == null || !fileName.endsWith(".vmdk")) {
+        for (EsxiDiskBus kind : EsxiDiskBus.values()) {
+            for (int bus = 0; bus < kind.maxControllers; bus++) {
+                if (!kind.isPresent(vmx, bus)) {
                     continue;
                 }
-                diskNumber++;
-                final VirtualDisk disk = new VirtualDisk();
-                disk.setKey(DISK_KEY_BASE + bus * MAX_SCSI_UNITS + unit);
-                disk.setControllerKey(controller.getKey());
-                disk.setUnitNumber(unit);
-                disk.setDeviceInfo(label("Hard disk " + diskNumber));
-                final VirtualDiskFlatVer2BackingInfo backing = new VirtualDiskFlatVer2BackingInfo();
-                backing.setFileName(backingName(entry, folder, VmxFile.unescape(fileName)));
-                disk.setBacking(backing);
-                devices.add(disk);
-                diskKeys.add(disk.getKey());
-                controller.setDevice(
-                        diskKeys.stream().mapToInt(Integer::intValue).toArray());
+                final VirtualController controller = controllerFor(kind, vmx, bus);
+                controller.setKey(kind.controllerKey(bus));
+                controller.setBusNumber(bus);
+                controller.setDeviceInfo(label(kind.label + bus));
+                devices.add(controller);
+                final List<Integer> diskKeys = new ArrayList<>();
+                for (int unit = 0; unit < kind.maxUnits; unit++) {
+                    final String diskPrefix = new EsxiDiskBus.Place(kind, bus, unit).diskPrefix();
+                    final String fileName = vmx.get(diskPrefix + ".fileName");
+                    if (!vmx.getBoolean(diskPrefix + ".present")
+                            || fileName == null
+                            || !fileName.endsWith(".vmdk")
+                            || vmx.get(diskPrefix + ".deviceType", "")
+                                    .toLowerCase()
+                                    .contains("cdrom")) {
+                        continue;
+                    }
+                    diskNumber++;
+                    final VirtualDisk disk = new VirtualDisk();
+                    disk.setKey(kind.diskKey(bus, unit));
+                    disk.setControllerKey(controller.getKey());
+                    disk.setUnitNumber(unit);
+                    disk.setDeviceInfo(label("Hard disk " + diskNumber));
+                    final VirtualDiskFlatVer2BackingInfo backing = new VirtualDiskFlatVer2BackingInfo();
+                    backing.setFileName(backingName(entry, folder, VmxFile.unescape(fileName)));
+                    disk.setBacking(backing);
+                    devices.add(disk);
+                    diskKeys.add(disk.getKey());
+                    controller.setDevice(
+                            diskKeys.stream().mapToInt(Integer::intValue).toArray());
+                }
             }
         }
     }
