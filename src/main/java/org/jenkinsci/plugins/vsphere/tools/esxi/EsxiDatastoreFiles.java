@@ -36,6 +36,9 @@ final class EsxiDatastoreFiles {
 
     private final EsxiShell shell;
 
+    /** What is added to the name of a file while it is being written, and taken off when it is complete. */
+    static final String WRITING = ".__WRITING__";
+
     EsxiDatastoreFiles(EsxiShell shell) {
         this.shell = shell;
     }
@@ -76,7 +79,7 @@ final class EsxiDatastoreFiles {
      * failure on the way does not leave a half-written file in its place.
      */
     void replace(String path, String content) throws VSphereException {
-        final String partial = path + ".jenkins-new";
+        final String partial = path + WRITING;
         write(partial, content);
         final ShellResult moved = shell.run("mv -f " + ShellQuote.quote(partial) + " " + ShellQuote.quote(path));
         if (!moved.succeeded()) {
@@ -89,9 +92,21 @@ final class EsxiDatastoreFiles {
         shell.run("mkdir -p " + ShellQuote.quote(directory)).stdoutOrThrow("Making " + directory);
     }
 
+    /**
+     * Copies a file, into a name of its own ({@value #WRITING} after the name) which is renamed to the name when the
+     * copy is complete, so that a copy that is cut short (a session that ends, a disk that fills up) is not
+     * mistaken for a file; what was written of it is removed.
+     */
     void copy(String from, String to) throws VSphereException {
-        shell.run("cp " + ShellQuote.quote(from) + " " + ShellQuote.quote(to))
-                .stdoutOrThrow("Copying " + from + " to " + to);
+        final String partial = to + WRITING;
+        ShellResult copied = shell.run("cp " + ShellQuote.quote(from) + " " + ShellQuote.quote(partial));
+        if (copied.succeeded()) {
+            copied = shell.run("mv -f " + ShellQuote.quote(partial) + " " + ShellQuote.quote(to));
+        }
+        if (!copied.succeeded()) {
+            shell.run("rm -f " + ShellQuote.quote(partial));
+            copied.stdoutOrThrow("Copying " + from + " to " + to);
+        }
     }
 
     /** The names of what is in a directory. */

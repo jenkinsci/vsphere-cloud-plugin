@@ -377,10 +377,13 @@ final class FakeEsxiHost implements EsxiShell {
                     final String name = in.readUTF();
                     final byte[] data = new byte[in.readInt()];
                     in.readFully(data);
-                    if (!directories.contains(directory)) {
-                        return new ShellResult(1, "", "tar: can't create " + directory + "/" + name);
+                    synchronized (this) {
+                        if (!directories.contains(directory)) {
+                            return new ShellResult(1, "", "tar: can't create " + directory + "/" + name);
+                        }
+                        files.put(
+                                directory + "/" + name, new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
                     }
-                    files.put(directory + "/" + name, new String(data, java.nio.charset.StandardCharsets.ISO_8859_1));
                 }
                 return ok("");
             }
@@ -522,7 +525,7 @@ final class FakeEsxiHost implements EsxiShell {
     }
 
     @Override
-    public ShellResult run(String command) throws VSphereException {
+    public synchronized ShellResult run(String command) throws VSphereException {
         commands.add(command);
         if (closed) {
             throw new VSphereException("The connection is closed");

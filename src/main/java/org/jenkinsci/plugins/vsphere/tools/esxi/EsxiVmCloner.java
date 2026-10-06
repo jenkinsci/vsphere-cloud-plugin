@@ -216,7 +216,7 @@ final class EsxiVmCloner {
             if (adapted != null) {
                 say(adapted);
             }
-            files.write(cloneVmx, vmx.toString());
+            files.replace(cloneVmx, vmx.toString());
 
             say("Registering \"" + cloneName + "\" with the host");
             registeredId = register(cloneVmx, cloneName, resourcePoolId);
@@ -449,7 +449,7 @@ final class EsxiVmCloner {
         for (String extent : chosen.descriptor.getExtentFiles()) {
             files.copy(chosen.directory + "/" + extent, cloneDirectory + "/" + extent);
         }
-        files.write(
+        files.replace(
                 cloneDirectory + "/" + chosen.name,
                 chosen.descriptor.withParentHint(parent).toString());
         return chosen.name;

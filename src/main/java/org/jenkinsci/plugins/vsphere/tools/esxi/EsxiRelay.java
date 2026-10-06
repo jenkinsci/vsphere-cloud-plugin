@@ -318,17 +318,17 @@ public final class EsxiRelay {
             EsxiShell to,
             String toLabel,
             String sourceDir,
-            List<String> names,
+            List<String> wanted,
             String targetDir,
             Compression requested,
             int idleSeconds,
             @CheckForNull PrintStream log,
             Mover mover)
             throws VSphereException {
-        if (names.isEmpty()) {
+        if (wanted.isEmpty()) {
             throw new VSphereException("There are no files to copy");
         }
-        for (String name : names) {
+        for (String name : wanted) {
             EsxiDatastoreFiles.checkName("The name of a file to copy", name);
         }
         for (String dir : new String[] {sourceDir, targetDir}) {
@@ -337,7 +337,24 @@ public final class EsxiRelay {
             }
         }
         final long started = System.currentTimeMillis();
-        final long[] sizes = sizes(from, sourceDir, names, "Cannot copy from " + fromLabel);
+        final long[] wantedSizes = sizes(from, sourceDir, wanted, "Cannot copy from " + fromLabel);
+        // Checksum files, then the smallest files first: those are the likeliest to get across before a session
+        // is cut or a disk is full, so that what is cut short is the last and the biggest, and a comparison finds
+        // a file that is missing or short next to a checksum that is there
+        final Integer[] order = new Integer[wanted.size()];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        java.util.Arrays.sort(order, (a, b) -> {
+            final int byKind = Boolean.compare(!isChecksum(wanted.get(a)), !isChecksum(wanted.get(b)));
+            return byKind != 0 ? byKind : Long.compare(wantedSizes[a], wantedSizes[b]);
+        });
+        final List<String> names = new ArrayList<>();
+        final long[] sizes = new long[order.length];
+        for (int i = 0; i < order.length; i++) {
+            names.add(wanted.get(order[i]));
+            sizes[i] = wantedSizes[order[i]];
+        }
         long total = 0;
         for (long size : sizes) {
             total += size;
@@ -389,13 +406,25 @@ public final class EsxiRelay {
                             + " bytes, not the " + sizes[i] + " that it has on " + fromLabel);
                 }
             }
+            // in place one file at a time, in that order, each under a name of its own until it is there whole
             for (String name : names) {
-                to.run("mv -f " + ShellQuote.quote(staging + "/" + name) + " "
-                                + ShellQuote.quote(targetDir + "/" + name))
+                final String partial = targetDir + "/" + name + EsxiDatastoreFiles.WRITING;
+                to.run("mv -f " + ShellQuote.quote(staging + "/" + name) + " " + ShellQuote.quote(partial))
+                        .stdoutOrThrow("Moving " + name + " in place on " + toLabel);
+                to.run("mv -f " + ShellQuote.quote(partial) + " " + ShellQuote.quote(targetDir + "/" + name))
                         .stdoutOrThrow("Moving " + name + " in place on " + toLabel);
             }
             copied = true;
         } finally {
+            if (!copied) {
+                for (String name : names) {
+                    try {
+                        to.run("rm -f " + ShellQuote.quote(targetDir + "/" + name + EsxiDatastoreFiles.WRITING));
+                    } catch (VSphereException e) {
+                        say(log, "Could not remove what is left of " + name + " on " + toLabel + ": " + e.getMessage());
+                    }
+                }
+            }
             try {
                 targetFiles.removeFolder(staging);
             } catch (VSphereException e) {
@@ -413,6 +442,12 @@ public final class EsxiRelay {
                         + (transferred.get() > 0 ? ", sending " + transferred.get() + " bytes" : "")
                         + " in " + result.getMillis() / 1000 + " seconds");
         return result;
+    }
+
+    /** Whether the file holds a checksum of others, as it is told by the name. */
+    static boolean isChecksum(String name) {
+        return name.toLowerCase()
+                .matches(".*\\.(cksum|sum|md5|sha1|sha224|sha256|sha384|sha512|sfv|sha\\d*sum|md5sum)$");
     }
 
     /** The relay: through the controller, as {@link EsxiRelay} says. */

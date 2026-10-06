@@ -221,7 +221,7 @@ class EsxiReconfigureTest {
 
         assertThat(e.getMessage(), containsString("Read-only file system"));
         assertThat(host.file(VMX_PATH), is(VMX));
-        assertThat(host.hasFile(VMX_PATH + ".jenkins-new"), is(false));
+        assertThat(host.hasFile(VMX_PATH + ".__WRITING__"), is(false));
     }
 
     // -- extra configuration --

@@ -89,6 +89,77 @@ class EsxiRelayTest {
     }
 
     @Test
+    void checksumsAreSentFirstThenTheSmallestFilesAndTheBiggestLast() throws Exception {
+        from.addFile(SOURCE + "/master-flat.vmdk.sha256", "abc  master-flat.vmdk\n");
+        copy(
+                EsxiRelay.Compression.NONE,
+                "master-flat.vmdk",
+                "with space.vmdk",
+                "master.vmdk",
+                "master-flat.vmdk.sha256");
+
+        final String pack = from.commands.stream()
+                .filter(c -> c.startsWith("(tar cf -"))
+                .findFirst()
+                .get();
+        assertThat(pack.indexOf("master-flat.vmdk.sha256") < pack.indexOf("'with space.vmdk'"), is(true));
+        assertThat(pack.indexOf("'with space.vmdk'") < pack.indexOf("master.vmdk'"), is(true));
+        assertThat(pack.indexOf("master.vmdk'") < pack.indexOf("master-flat.vmdk'"), is(true));
+    }
+
+    @Test
+    void eachFileIsMovedInUnderANameOfItsOwnAndThenRenamed() throws Exception {
+        copy(EsxiRelay.Compression.NONE, "master.vmdk");
+
+        final List<String> moves =
+                to.commands.stream().filter(c -> c.startsWith("mv -f")).collect(java.util.stream.Collectors.toList());
+        assertThat(moves.size(), is(2));
+        assertThat(moves.get(0).endsWith("'" + TARGET + "/master.vmdk.__WRITING__'"), is(true));
+        assertThat(moves.get(1).startsWith("mv -f '" + TARGET + "/master.vmdk.__WRITING__' "), is(true));
+        assertThat(to.hasFile(TARGET + "/master.vmdk.__WRITING__"), is(false));
+    }
+
+    @Test
+    void whatIsCutShortIsRemovedAndNotLeftUnderTheNameOfTheFile() {
+        to.failing("master.vmdk.__WRITING__' '" + TARGET + "/master.vmdk'", "mv: no space left");
+
+        assertThrows(VSphereException.class, () -> copy(EsxiRelay.Compression.NONE, "master.vmdk"));
+
+        assertThat(to.hasFile(TARGET + "/master.vmdk"), is(false));
+        assertThat(to.files.keySet().stream().anyMatch(f -> f.endsWith(".__WRITING__")), is(false));
+        assertThat(to.commands.stream().anyMatch(c -> c.startsWith("rm -f") && c.contains(".__WRITING__")), is(true));
+    }
+
+    @Test
+    void aLocalCopyOfAFileIsMadeUnderANameOfItsOwnToo() throws Exception {
+        final EsxiDatastoreFiles files = new EsxiDatastoreFiles(from);
+        from.addFile("/vmfs/volumes/ds1/copy/.keep", "");
+
+        files.copy(SOURCE + "/master.vmdk", "/vmfs/volumes/ds1/copy/master.vmdk");
+
+        assertThat(from.file("/vmfs/volumes/ds1/copy/master.vmdk"), is(from.file(SOURCE + "/master.vmdk")));
+        assertThat(
+                from.commands.stream().anyMatch(c -> c.endsWith("'/vmfs/volumes/ds1/copy/master.vmdk.__WRITING__'")),
+                is(true));
+        assertThat(from.hasFile("/vmfs/volumes/ds1/copy/master.vmdk.__WRITING__"), is(false));
+    }
+
+    @Test
+    void aLocalCopyThatFailsLeavesNothingBehind() {
+        final EsxiDatastoreFiles files = new EsxiDatastoreFiles(from);
+        from.addFile("/vmfs/volumes/ds1/copy/.keep", "");
+        from.failing("cp ", "cp: write error: No space left on device");
+
+        assertThrows(
+                VSphereException.class, () -> files.copy(SOURCE + "/master.vmdk", "/vmfs/volumes/ds1/copy/m.vmdk"));
+
+        assertThat(from.hasFile("/vmfs/volumes/ds1/copy/m.vmdk"), is(false));
+        assertThat(
+                from.commands.stream().anyMatch(c -> c.startsWith("rm -f") && c.contains("m.vmdk.__WRITING__")),
+                is(true));
+    }
+
+    @Test
     void theSourceIsNotTouched() throws Exception {
         copy(EsxiRelay.Compression.GZIP, "master.vmdk");
 

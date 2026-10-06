@@ -502,7 +502,7 @@ final class EsxiReplica {
             vmx.put(KEY_STAMP, stamp);
             vmx.put(KEY_CREATED, Long.toString(System.currentTimeMillis() / 1000));
             final String replicaVmx = replicaDir + "/" + name + ".vmx";
-            targetFiles.write(replicaVmx, vmx.toString());
+            targetFiles.replace(replicaVmx, vmx.toString());
             final String output = target.vim("/bin/vim-cmd solo/registervm " + ShellQuote.quote(replicaVmx) + " "
                             + ShellQuote.quote(name))
                     .stdoutOrThrow("Registering " + replicaVmx);
