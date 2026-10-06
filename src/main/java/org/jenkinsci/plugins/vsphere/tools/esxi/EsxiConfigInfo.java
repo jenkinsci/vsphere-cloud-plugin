@@ -21,6 +21,9 @@ import com.vmware.vim25.SharesInfo;
 import com.vmware.vim25.SharesLevel;
 import com.vmware.vim25.VirtualAHCIController;
 import com.vmware.vim25.VirtualBusLogicController;
+import com.vmware.vim25.VirtualCdrom;
+import com.vmware.vim25.VirtualCdromAtapiBackingInfo;
+import com.vmware.vim25.VirtualCdromIsoBackingInfo;
 import com.vmware.vim25.VirtualController;
 import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDisk;
@@ -194,6 +197,31 @@ final class EsxiConfigInfo {
                 for (int unit = 0; unit < kind.maxUnits; unit++) {
                     final String diskPrefix = new EsxiDiskBus.Place(kind, bus, unit).diskPrefix();
                     final String fileName = vmx.get(diskPrefix + ".fileName");
+                    final String deviceType =
+                            vmx.get(diskPrefix + ".deviceType", "").toLowerCase();
+                    if (vmx.getBoolean(diskPrefix + ".present")
+                            && (deviceType.contains("cdrom") || (fileName != null && !fileName.endsWith(".vmdk")))) {
+                        // a CD-ROM (an image, or a drive of the host) takes its unit as a disk would
+                        final VirtualCdrom cdrom = new VirtualCdrom();
+                        cdrom.setKey(kind.diskKey(bus, unit));
+                        cdrom.setControllerKey(controller.getKey());
+                        cdrom.setUnitNumber(unit);
+                        cdrom.setDeviceInfo(label("CD/DVD drive " + (unit + 1)));
+                        if (fileName != null && fileName.toLowerCase().endsWith(".iso")) {
+                            final VirtualCdromIsoBackingInfo iso = new VirtualCdromIsoBackingInfo();
+                            iso.setFileName(VmxFile.unescape(fileName));
+                            cdrom.setBacking(iso);
+                        } else {
+                            final VirtualCdromAtapiBackingInfo drive = new VirtualCdromAtapiBackingInfo();
+                            drive.setDeviceName(fileName == null ? "" : VmxFile.unescape(fileName));
+                            cdrom.setBacking(drive);
+                        }
+                        devices.add(cdrom);
+                        diskKeys.add(cdrom.getKey());
+                        controller.setDevice(
+                                diskKeys.stream().mapToInt(Integer::intValue).toArray());
+                        continue;
+                    }
                     if (!vmx.getBoolean(diskPrefix + ".present")
                             || fileName == null
                             || !fileName.endsWith(".vmdk")

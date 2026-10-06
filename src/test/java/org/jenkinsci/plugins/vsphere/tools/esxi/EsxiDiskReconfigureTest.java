@@ -633,6 +633,30 @@ class EsxiDiskReconfigureTest {
     }
 
     @Test
+    void aCdromIsADeviceThatTakesItsUnitSoTheStepUsesTheNextOne() throws Exception {
+        final VmxFile with = VmxFile.parse(VMX);
+        with.put("sata0.present", "TRUE");
+        with.put("sata0:0.present", "TRUE");
+        with.put("sata0:0.fileName", "/vmfs/volumes/iso/os.iso");
+        with.put("ide1:0.present", "TRUE");
+        with.put("ide1:0.deviceType", "atapi-cdrom");
+        with.put("ide1:0.fileName", "/dev/cdrom");
+        host.addFile(VMX_PATH, with.toString());
+
+        assertThat(
+                devices().stream()
+                        .filter(d -> d instanceof com.vmware.vim25.VirtualCdrom)
+                        .count(),
+                is(2L));
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.SATA));
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.IDE));
+
+        assertThat(vmx().get("sata0:1.fileName"), is("web_1.vmdk"));
+        assertThat(vmx().get("ide0:0.fileName"), is("web_2.vmdk"));
+        assertThat(vmx().get("ide1:0.fileName"), is("/dev/cdrom"));
+    }
+
+    @Test
     void aCdromOnTheBusIsNotADisk() throws Exception {
         final VmxFile with = VmxFile.parse(VMX);
         with.put("sata0.present", "TRUE");
