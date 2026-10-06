@@ -161,6 +161,9 @@ final class EsxiDiskChanges {
 
     private void addController(VirtualController controller) throws VSphereException {
         final EsxiDiskBus kind = EsxiDiskBus.of(controller);
+        if (kind == null) {
+            throw new VSphereException("The device is not a controller that disks go on");
+        }
         if (kind.builtIn) {
             throw new VSphereException("A VM has its two IDE controllers always (ide0 and ide1): they cannot be"
                     + " added, only disks put on them");
