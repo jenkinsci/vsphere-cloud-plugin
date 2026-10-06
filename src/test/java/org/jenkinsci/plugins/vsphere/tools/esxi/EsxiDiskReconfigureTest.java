@@ -451,6 +451,30 @@ class EsxiDiskReconfigureTest {
     }
 
     @Test
+    void anIdeSlaveNeedsItsMaster() throws Exception {
+        final VSphereException e = assertThrows(
+                VSphereException.class,
+                () -> esxi.reconfigureVm("web", specOf(add(newDisk(200, 1, "[datastore1] web/x.vmdk", 2048), true))));
+        assertThat(e.getMessage(), containsString("the slave"));
+        assertThat(host.hasFile(FOLDER + "/x.vmdk"), is(false));
+
+        // with a master it is all right, and then the master is not taken away from under it
+        esxi.reconfigureVm(
+                "web",
+                specOf(
+                        add(newDisk(200, 0, "[datastore1] web/m.vmdk", 2048), true),
+                        add(newDisk(200, 1, "[datastore1] web/s.vmdk", 2048), true)));
+        assertThat(vmx().get("ide0:1.fileName"), is("s.vmdk"));
+        final com.vmware.vim25.VirtualDisk master = newDisk(200, 0, "[datastore1] web/m.vmdk", 2048);
+        master.setKey(3000);
+        final VirtualDeviceConfigSpec remove = add(master, false);
+        remove.setOperation(VirtualDeviceConfigSpecOperation.remove);
+        final VSphereException removed =
+                assertThrows(VSphereException.class, () -> esxi.reconfigureVm("web", specOf(remove)));
+        assertThat(removed.getMessage(), containsString("the master"));
+    }
+
+    @Test
     void theUnitsOfIdeAreTwo() {
         final VSphereException e = assertThrows(
                 VSphereException.class,
@@ -517,9 +541,9 @@ class EsxiDiskReconfigureTest {
 
     @Test
     void aDiskOnAnIdeControllerCanBeEnlargedAndRemoved() throws Exception {
-        esxi.reconfigureVm("web", specOf(add(newDisk(201, 1, "[datastore1] web/ide.vmdk", 2048), true)));
-        final com.vmware.vim25.VirtualDisk ide = newDisk(201, 1, "[datastore1] web/ide.vmdk", 4096);
-        ide.setKey(3003);
+        esxi.reconfigureVm("web", specOf(add(newDisk(201, 0, "[datastore1] web/ide.vmdk", 2048), true)));
+        final com.vmware.vim25.VirtualDisk ide = newDisk(201, 0, "[datastore1] web/ide.vmdk", 4096);
+        ide.setKey(3002);
         final VirtualDeviceConfigSpec bigger = add(ide, false);
         bigger.setOperation(VirtualDeviceConfigSpecOperation.edit);
 
@@ -531,7 +555,7 @@ class EsxiDiskReconfigureTest {
         remove.setFileOperation(VirtualDeviceConfigSpecFileOperation.destroy);
         esxi.reconfigureVm("web", specOf(remove));
 
-        assertThat(vmx().get("ide1:1.fileName"), is(nullValue()));
+        assertThat(vmx().get("ide1:0.fileName"), is(nullValue()));
         assertThat(host.hasFile(FOLDER + "/ide.vmdk"), is(false));
     }
 

@@ -304,7 +304,8 @@ powered off** (a running VM is refused, with a message saying so).
   disk is on it, and so can a SATA (AHCI) or NVMe controller. Disks go on any of the four buses
   (`scsiN`, `ideN`, `sataN`, `nvmeN`), with the units that the bus has (SCSI 0 to 15 without 7, IDE
   0 and 1, SATA 0 to 29, NVMe 0 to 14). A VM always has its two IDE controllers: they cannot be added
-  or removed, only disks put on them. The disk step of the plugin adds a SCSI controller by itself
+  or removed, only disks put on them, and the host does not power on a VM with an IDE slave (unit 1) and
+  no master (unit 0), so that is refused. The disk step of the plugin adds a SCSI controller by itself
   when the VM has none, and makes SCSI disks.
 * **Not available**: distributed switches, and devices other than network adapters, disks and their
   controllers.

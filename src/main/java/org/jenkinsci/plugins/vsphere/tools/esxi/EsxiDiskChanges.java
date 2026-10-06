@@ -279,6 +279,13 @@ final class EsxiDiskChanges {
             throw new VSphereException(
                     "The unit " + unit + " of " + controller.controllerPrefix() + " is in use already");
         }
+        if (kind == EsxiDiskBus.IDE
+                && unit == 1
+                && !vmx.hasSettingsUnder(new EsxiDiskBus.Place(kind, controller.controller, 0).diskPrefix())) {
+            // the host refuses to power on a VM with a slave and no master ("There is an IDE slave with no master")
+            throw new VSphereException("The unit 1 of " + controller.controllerPrefix() + " (the slave) cannot be used"
+                    + " while its unit 0 (the master) has nothing on it: the host would not power the VM on");
+        }
         final String path = pathOf(file.getFileName());
         if (fileOperation == VirtualDeviceConfigSpecFileOperation.create) {
             if (disk.getCapacityInKB() < 1024) {
@@ -348,6 +355,14 @@ final class EsxiDiskChanges {
 
     private void removeDisk(VirtualDisk disk, boolean destroy) throws VSphereException {
         final String prefix = existingDisk(disk);
+        final EsxiDiskBus.Place place = EsxiDiskBus.ofDiskKey(disk.getKey());
+        if (place != null
+                && place.bus == EsxiDiskBus.IDE
+                && place.unit == 0
+                && vmx.hasSettingsUnder(new EsxiDiskBus.Place(place.bus, place.controller, 1).diskPrefix())) {
+            throw new VSphereException("The unit 0 of " + place.controllerPrefix() + " (the master) cannot be removed"
+                    + " while its unit 1 (the slave) has a device on it: the host would not power the VM on");
+        }
         final String path = resolve(VmxFile.unescape(vmx.get(prefix + ".fileName", "")));
         if (destroy) {
             if (inspector.descriptor(path).isSnapshotDisk()) {
