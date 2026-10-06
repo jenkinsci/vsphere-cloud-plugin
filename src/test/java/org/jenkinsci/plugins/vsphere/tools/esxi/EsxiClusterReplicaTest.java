@@ -156,6 +156,32 @@ class EsxiClusterReplicaTest {
     }
 
     @Test
+    void theFilesOfAReplicaGoTheWayThatTheOptionsSay() throws Exception {
+        final java.util.concurrent.atomic.AtomicInteger moves = new java.util.concurrent.atomic.AtomicInteger();
+        final EsxiRelay.Mover counting = new EsxiRelay.Mover() {
+            @Override
+            public String describe() {
+                return "by a test";
+            }
+
+            @Override
+            public void move(EsxiRelay.Job job) throws VSphereException {
+                moves.incrementAndGet();
+                EsxiRelay.RELAY.move(job);
+            }
+        };
+        final VSphereEsxiCluster cluster = new VSphereEsxiCluster(
+                List.of(connector("a.example", hostA), connector("b.example", hostB)),
+                new VSphereEsxiCluster.Options(true, EsxiRelay.Compression.PIGZ, 30, counting));
+
+        clone(cluster, "lc", true, "esxib", true, null);
+
+        assertThat(moves.get() > 0, is(true));
+        assertThat(said.toString(), containsString(" by a test, compressed with pigz"));
+        assertThat(replicasOnB(), is(1L));
+    }
+
+    @Test
     void aFullCloneIsMadeOfTheReplicaToo() throws Exception {
         clone(cluster(true), "full", false, "esxib", true, null);
 

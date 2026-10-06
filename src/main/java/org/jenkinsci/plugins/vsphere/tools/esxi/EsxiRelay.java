@@ -120,6 +120,86 @@ public final class EsxiRelay {
         }
     }
 
+    /** What a mover is given to move: the commands that pack the files on the source and unpack them on the target. */
+    static final class Job {
+        final EsxiShell from;
+        final String fromLabel;
+        final EsxiShell to;
+        final String toLabel;
+        final String sourceDir;
+        final List<String> names;
+        /** The folder on the target that the files are unpacked in. */
+        final String staging;
+        /** The compression tool, or null for none. */
+        @CheckForNull
+        final String tool;
+        /** Writes the (compressed) stream of the files to its output. */
+        final String packCommand;
+        /** Reads the (compressed) stream of the files from its input and unpacks them in {@link #staging}. */
+        final String unpackCommand;
+
+        final int idleSeconds;
+
+        @CheckForNull
+        final PrintStream log;
+        /** Counts the bytes of the stream that were moved, if the mover knows. */
+        final AtomicLong transferred;
+
+        Job(
+                EsxiShell from,
+                String fromLabel,
+                EsxiShell to,
+                String toLabel,
+                String sourceDir,
+                List<String> names,
+                String staging,
+                @CheckForNull String tool,
+                String packCommand,
+                String unpackCommand,
+                int idleSeconds,
+                @CheckForNull PrintStream log,
+                AtomicLong transferred) {
+            this.from = from;
+            this.fromLabel = fromLabel;
+            this.to = to;
+            this.toLabel = toLabel;
+            this.sourceDir = sourceDir;
+            this.names = names;
+            this.staging = staging;
+            this.tool = tool;
+            this.packCommand = packCommand;
+            this.unpackCommand = unpackCommand;
+            this.idleSeconds = idleSeconds;
+            this.log = log;
+            this.transferred = transferred;
+        }
+    }
+
+    /** The way that the stream of the files gets from the source to the target. */
+    public interface Mover {
+        /** Says how, for the log: "through the controller", for example. */
+        String describe();
+
+        /**
+         * Runs the pack command on the source and the unpack command on the target, with the stream between them,
+         * and returns when both are done; fails, with what went wrong and where, if either did.
+         */
+        void move(Job job) throws VSphereException;
+    }
+
+    /** Through the controller: it needs nothing of the hosts but the session that each of them has already. */
+    public static final Mover RELAY = new Mover() {
+        @Override
+        public String describe() {
+            return "through the controller";
+        }
+
+        @Override
+        public void move(Job job) throws VSphereException {
+            relay(job);
+        }
+    };
+
     private static final int PIPE_BYTES = 1024 * 1024;
     private static final long PROGRESS_EVERY_MILLIS = 30_000L;
 
@@ -228,6 +308,23 @@ public final class EsxiRelay {
             int idleSeconds,
             @CheckForNull PrintStream log)
             throws VSphereException {
+        return copy(from, fromLabel, to, toLabel, sourceDir, names, targetDir, requested, idleSeconds, log, RELAY);
+    }
+
+    /** Like {@link #copy(EsxiShell, String, EsxiShell, String, String, List, String, Compression, int, PrintStream)}, moving the bytes the way the mover does. */
+    public static Result copy(
+            EsxiShell from,
+            String fromLabel,
+            EsxiShell to,
+            String toLabel,
+            String sourceDir,
+            List<String> names,
+            String targetDir,
+            Compression requested,
+            int idleSeconds,
+            @CheckForNull PrintStream log,
+            Mover mover)
+            throws VSphereException {
         if (names.isEmpty()) {
             throw new VSphereException("There are no files to copy");
         }
@@ -263,17 +360,78 @@ public final class EsxiRelay {
 
         say(
                 log,
-                "Copying " + names.size() + " file(s), " + total + " bytes, from " + fromLabel + " to " + toLabel
-                        + " through the controller, " + (tool == null ? "not compressed" : "compressed with " + tool));
+                "Copying " + names.size() + " file(s), " + total + " bytes, from " + fromLabel + " to " + toLabel + " "
+                        + mover.describe() + ", " + (tool == null ? "not compressed" : "compressed with " + tool));
 
         final AtomicLong transferred = new AtomicLong();
+        boolean copied = false;
+        try {
+            mover.move(new Job(
+                    from,
+                    fromLabel,
+                    to,
+                    toLabel,
+                    sourceDir,
+                    names,
+                    staging,
+                    tool,
+                    packCommand,
+                    unpackCommand,
+                    idleSeconds,
+                    log,
+                    transferred));
+
+            // The files that arrived are the files that were sent, if they are as large
+            final long[] arrived = sizes(to, staging, names, "The copy to " + toLabel + " is not complete");
+            for (int i = 0; i < arrived.length; i++) {
+                if (arrived[i] != sizes[i]) {
+                    throw new VSphereException("The copy of " + names.get(i) + " to " + toLabel + " has " + arrived[i]
+                            + " bytes, not the " + sizes[i] + " that it has on " + fromLabel);
+                }
+            }
+            for (String name : names) {
+                to.run("mv -f " + ShellQuote.quote(staging + "/" + name) + " "
+                                + ShellQuote.quote(targetDir + "/" + name))
+                        .stdoutOrThrow("Moving " + name + " in place on " + toLabel);
+            }
+            copied = true;
+        } finally {
+            try {
+                targetFiles.removeFolder(staging);
+            } catch (VSphereException e) {
+                say(log, "Could not remove " + staging + " on " + toLabel + ": " + e.getMessage());
+            }
+            if (!copied) {
+                say(log, "The copy to " + toLabel + " did not complete; nothing of it is left in " + targetDir);
+            }
+        }
+        final Result result =
+                new Result(names.size(), total, transferred.get(), compression, System.currentTimeMillis() - started);
+        say(
+                log,
+                "Copied " + names.size() + " file(s), " + total + " bytes"
+                        + (transferred.get() > 0 ? ", sending " + transferred.get() + " bytes" : "")
+                        + " in " + result.getMillis() / 1000 + " seconds");
+        return result;
+    }
+
+    /** The relay: through the controller, as {@link EsxiRelay} says. */
+    private static void relay(Job job) throws VSphereException {
+        final EsxiShell from = job.from;
+        final EsxiShell to = job.to;
+        final String fromLabel = job.fromLabel;
+        final String toLabel = job.toLabel;
+        final String packCommand = job.packCommand;
+        final String unpackCommand = job.unpackCommand;
+        final int idleSeconds = job.idleSeconds;
+        final PrintStream log = job.log;
+        final AtomicLong transferred = job.transferred;
         final PipedInputStream pipeIn = new PipedInputStream(PIPE_BYTES);
         final ExecutorService workers = Executors.newFixedThreadPool(3, runnable -> {
             final Thread thread = new Thread(runnable, "esxi-relay");
             thread.setDaemon(true);
             return thread;
         });
-        boolean copied = false;
         try {
             final PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
             final Future<ShellResult> packing = workers.submit(() -> {
@@ -347,21 +505,6 @@ public final class EsxiRelay {
             } finally {
                 progress.cancel(true);
             }
-
-            // The files that arrived are the files that were sent, if they are as large
-            final long[] arrived = sizes(to, staging, names, "The copy to " + toLabel + " is not complete");
-            for (int i = 0; i < arrived.length; i++) {
-                if (arrived[i] != sizes[i]) {
-                    throw new VSphereException("The copy of " + names.get(i) + " to " + toLabel + " has " + arrived[i]
-                            + " bytes, not the " + sizes[i] + " that it has on " + fromLabel);
-                }
-            }
-            for (String name : names) {
-                to.run("mv -f " + ShellQuote.quote(staging + "/" + name) + " "
-                                + ShellQuote.quote(targetDir + "/" + name))
-                        .stdoutOrThrow("Moving " + name + " in place on " + toLabel);
-            }
-            copied = true;
         } catch (IOException e) {
             throw new VSphereException(
                     "Copying files from " + fromLabel + " to " + toLabel + " failed: " + e.getMessage(), e);
@@ -372,30 +515,15 @@ public final class EsxiRelay {
             } catch (IOException e) {
                 // nothing is reading it any more
             }
-            try {
-                targetFiles.removeFolder(staging);
-            } catch (VSphereException e) {
-                say(log, "Could not remove " + staging + " on " + toLabel + ": " + e.getMessage());
-            }
-            if (!copied) {
-                say(log, "The copy to " + toLabel + " did not complete; nothing of it is left in " + targetDir);
-            }
         }
-        final Result result =
-                new Result(names.size(), total, transferred.get(), compression, System.currentTimeMillis() - started);
-        say(
-                log,
-                "Copied " + names.size() + " file(s), " + total + " bytes, sending " + transferred.get() + " bytes"
-                        + " in " + result.getMillis() / 1000 + " seconds");
-        return result;
     }
 
-    private static String explanation(ShellResult result) {
+    static String explanation(ShellResult result) {
         final String text = result.getStderr().replace("TAR-FAILED", "").trim();
         return " (exit code " + result.getExitCode() + (text.isEmpty() ? "" : ": " + text) + ")";
     }
 
-    private static ShellResult wait(Future<ShellResult> work, String what) throws VSphereException {
+    static ShellResult wait(Future<ShellResult> work, String what) throws VSphereException {
         try {
             return work.get();
         } catch (InterruptedException e) {

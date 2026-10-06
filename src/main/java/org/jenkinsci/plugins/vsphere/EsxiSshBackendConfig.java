@@ -56,6 +56,7 @@ import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyStore;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiRelay;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshAuth;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiSshSettings;
+import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiTransferMode;
 import org.jenkinsci.plugins.vsphere.tools.esxi.TrileadEsxiShell;
 import org.jenkinsci.plugins.vsphere.tools.esxi.VSphereEsxiCluster;
 import org.jenkinsci.plugins.vsphere.tools.esxi.VSphereEsxiSsh;
@@ -90,6 +91,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
     private List<EsxiSshHost> additionalHosts = new ArrayList<>();
     private boolean replicateMasters;
     private EsxiRelay.Compression relayCompression = EsxiRelay.Compression.PIGZ;
+    private EsxiTransferMode transferMode = EsxiTransferMode.RELAY;
     private int transferIdleSeconds = DEFAULT_TRANSFER_IDLE_SECONDS;
 
     @DataBoundConstructor
@@ -182,6 +184,16 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
     @DataBoundSetter
     public void setRelayCompression(@CheckForNull EsxiRelay.Compression compression) {
         this.relayCompression = compression == null ? EsxiRelay.Compression.PIGZ : compression;
+    }
+
+    /** How the files of a replica get from one host to another. */
+    public EsxiTransferMode getTransferMode() {
+        return transferMode == null ? EsxiTransferMode.RELAY : transferMode;
+    }
+
+    @DataBoundSetter
+    public void setTransferMode(@CheckForNull EsxiTransferMode mode) {
+        this.transferMode = mode == null ? EsxiTransferMode.RELAY : mode;
     }
 
     /** How long nothing may move in a transfer between hosts, or in the long command of a copy, before it is given up on. */
@@ -474,7 +486,11 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         }
         return new VSphereEsxiCluster(
                 connectors,
-                new VSphereEsxiCluster.Options(replicateMasters, getRelayCompression(), getTransferIdleSeconds()));
+                new VSphereEsxiCluster.Options(
+                        replicateMasters,
+                        getRelayCompression(),
+                        getTransferIdleSeconds(),
+                        getTransferMode().mover()));
     }
 
     @Override
@@ -495,6 +511,17 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
         public ListBoxModel doFillHostKeyPolicyItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return hostKeyPolicyItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillTransferModeItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            final ListBoxModel items = new ListBoxModel();
+            items.add(
+                    "Through the controller (the default; needs nothing of the hosts)", EsxiTransferMode.RELAY.name());
+            items.add("Directly over SSH, with a key made for each copy", EsxiTransferMode.SSH_DIRECT.name());
+            items.add("Directly by netcat (fast, and not encrypted)", EsxiTransferMode.NETCAT.name());
+            return items;
         }
 
         @RequirePOST

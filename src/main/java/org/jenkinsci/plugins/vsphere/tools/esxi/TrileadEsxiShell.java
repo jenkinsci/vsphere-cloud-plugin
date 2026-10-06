@@ -185,6 +185,12 @@ public final class TrileadEsxiShell implements EsxiShell {
     }
 
     @Override
+    public EsxiEndpoint endpoint() {
+        return new EsxiEndpoint(
+                settings.getHost(), settings.getPort(), settings.getAuth().getUsername());
+    }
+
+    @Override
     public ShellResult run(String command) throws VSphereException {
         final Session session;
         try {

@@ -60,6 +60,7 @@ jenkins:
             esxiSsh:
               credentialsId: "esxi-ssh"
               replicateMasters: true
+              transferMode: SSH_DIRECT
               relayCompression: GZIP
               transferIdleSeconds: 120
               additionalHosts:

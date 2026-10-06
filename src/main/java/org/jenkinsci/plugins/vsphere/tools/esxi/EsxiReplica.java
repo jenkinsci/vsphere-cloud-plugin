@@ -99,6 +99,21 @@ final class EsxiReplica {
             int idleSeconds,
             @CheckForNull PrintStream log)
             throws VSphereException {
+        return ensure(source, master, snapshotUid, target, datastore, compression, idleSeconds, EsxiRelay.RELAY, log);
+    }
+
+    /** As above, moving the files the way that the mover does. */
+    static EsxiVirtualMachine ensure(
+            VSphereEsxiSsh source,
+            VmEntry master,
+            @CheckForNull String snapshotUid,
+            VSphereEsxiSsh target,
+            @CheckForNull String datastore,
+            EsxiRelay.Compression compression,
+            int idleSeconds,
+            EsxiRelay.Mover mover,
+            @CheckForNull PrintStream log)
+            throws VSphereException {
         final EsxiDatastoreFiles sourceFiles = source.files();
         final String vmxPath = master.getVmxFileSystemPath();
         final String folder = parent(vmxPath);
@@ -165,6 +180,7 @@ final class EsxiReplica {
                     masterVmx,
                     compression,
                     idleSeconds,
+                    mover,
                     log);
         } finally {
             lock.unlock();
@@ -306,6 +322,7 @@ final class EsxiReplica {
             VmxFile masterVmx,
             EsxiRelay.Compression compression,
             int idleSeconds,
+            EsxiRelay.Mover mover,
             @CheckForNull PrintStream log)
             throws VSphereException {
         final EsxiDatastoreFiles sourceFiles = source.files();
@@ -394,7 +411,8 @@ final class EsxiReplica {
                             replicaDir,
                             compression,
                             idleSeconds,
-                            log);
+                            log,
+                            mover);
                     // the extents are as large as they were (and sent by a stream that checks itself); the descriptor
                     // is small, and is compared whole
                     final String descriptorHere = cksum(sourceFiles.shell(), plan.disk.path);
@@ -448,7 +466,8 @@ final class EsxiReplica {
                         importDir,
                         compression,
                         idleSeconds,
-                        log);
+                        log,
+                        mover);
                 for (int i = 0; i < names.size(); i++) {
                     final String there = cksum(targetFiles.shell(), importDir + "/" + names.get(i));
                     if (!there.equals(checksums.get(i))) {

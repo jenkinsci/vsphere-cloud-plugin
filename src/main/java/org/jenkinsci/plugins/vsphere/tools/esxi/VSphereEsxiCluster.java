@@ -91,11 +91,18 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         private final boolean replicateMasters;
         private final EsxiRelay.Compression compression;
         private final int idleSeconds;
+        private final EsxiRelay.Mover mover;
 
         public Options(boolean replicateMasters, EsxiRelay.Compression compression, int idleSeconds) {
+            this(replicateMasters, compression, idleSeconds, EsxiRelay.RELAY);
+        }
+
+        public Options(
+                boolean replicateMasters, EsxiRelay.Compression compression, int idleSeconds, EsxiRelay.Mover mover) {
             this.replicateMasters = replicateMasters;
             this.compression = compression == null ? EsxiRelay.Compression.PIGZ : compression;
             this.idleSeconds = idleSeconds > 0 ? idleSeconds : 300;
+            this.mover = mover == null ? EsxiRelay.RELAY : mover;
         }
     }
 
@@ -535,6 +542,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
                     datastoreName,
                     options.compression,
                     options.idleSeconds,
+                    options.mover,
                     jLogger);
             // the replica is what the clone is of, at its one snapshot, which is the state that was asked for
             target.cloneFrom(

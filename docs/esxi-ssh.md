@@ -166,7 +166,8 @@ another **through the controller** (`EsxiRelay`): `tar` on the source writes the
 there, to a stream that Jenkins passes on, as it is, to `tar` on the target. It needs nothing of the
 hosts but the SSH session that each of them already has: no trust between the hosts, no firewall to
 open, nothing unencrypted. It is the slowest way, as the bytes make two trips, which is why they are
-compressed on the source. (Cloning does not use it yet; it is what it will be built on.)
+compressed on the source. It is the default way of [replicas](#replicas-of-a-master-on-a-host-that-does-not-see-it);
+the two ways [below](#faster-ways-direct-copies-over-ssh-or-by-netcat) are faster.
 
 * **Compression** is `pigz` (the default; it is on ESXi 7 and 8), `gzip`, `bzip2` or none. If a host
   does not have the one that is asked for, the next is used, ending with none, and the log says so.
@@ -177,6 +178,54 @@ compressed on the source. (Cloning does not use it yet; it is what it will be bu
   leaves nothing in the folder, and the folder is removed. A file that is there already is replaced.
 * **Time stamps** are carried over by `tar`, so that a file is as old on the target as on the source.
 * Only plain names in folders of datastores are accepted.
+
+### Faster ways: direct copies over SSH or by netcat
+
+The setting **How copies go between hosts** (`transferMode`: `RELAY`, the default, `SSH_DIRECT` or `NETCAT`) has the
+source host send to the target itself, so that the bytes travel once and the controller only waits. Everything
+else is as with the relay: the compression, the idle time, the staging folder, the checks of the sizes (and, for
+replicas, of the checksums), and a copy that fails leaves nothing behind. Measured between an ESXi 8.0.1 and an
+ESXi 7.0.3 host, for 300 MB that do not compress: through the controller 34 s, over SSH 21 s, by netcat 25 s (the
+compression is what takes the time, then).
+
+The source reaches the target **at the address that is set for it here**, so that has to be one that the hosts
+reach one another at, not only the controller. The hosts need `ssh` (or `nc`) and the tools of the relay; they
+need not trust one another beforehand.
+
+* **`SSH_DIRECT`** is encrypted. For each copy:
+  * the source makes a key pair of its own in a folder in `/tmp` (an ECDSA one, as a host in FIPS mode, as ESXi
+    is, cannot make others), which is removed after;
+  * the controller adds the public key to `/etc/ssh/keys-<user>/authorized_keys` **on the target**, for the user
+    that Jenkins logs in as, with `restrict,command="..."`: the key is good for one command only, unpacking the
+    stream in the folder that the files are going to, with no terminal and no forwarding. The line is removed
+    after, and so are the file and the folder, if they were not there. Lines that were there stay. (The folder and
+    the file are made readable to all if the user is not `root`, as the SSH server reads them as that user. A
+    copy that is stopped halfway leaves the line, which ends in `jenkins-xfer-...`, to be removed by hand.)
+  * the source is given the **host key of the target**, which the controller read over the session that it trusts,
+    in a file of its own, and is told to accept no other: a copy cannot be sent to a host that is not the target.
+  * the firewall of the source must let it open SSH connections, which the `sshClient` ruleset does: it is
+    turned on for as long as copies need it (if it was off), and off again by the last of them. If it was on, it
+    stays on. A marker in `/tmp` tells a ruleset that a copy of ours that was stopped left on, from one that the
+    administrator turned on.
+* **`NETCAT`** is **not encrypted**: use it in a network that you trust, and for files that may be seen on it. The
+  target runs `nc` listening on a port that is picked at random above 49151 and that nothing uses; the source
+  connects to it. The firewall is opened for that port, on both hosts, and for the address of the source (when
+  that is an IPv4 address; else for all) **only while the copy goes on**: the ruleset `jenkinsXfer`, with its own
+  file `/etc/vmware/firewall/jenkins-xfer.xml`, shared by the copies that are going on at once on a host, with
+  the rules of a pair of ports each, and turned off and removed by the last one. (A host keeps the settings of a
+  ruleset of that name, such as the addresses that it is limited to, even after its file is gone, which is why the
+  name is always the same; they are put back as they were.) Two copies do not use the same port: a second
+  attempt for a port that a copy has says `Channel is still handling an earlier transfer`. A port that the host
+  will not bind is given up for another. As `nc` does not time out on waiting for a connection, the controller
+  looks for it (30 s), and ends the listener and the sender (by `kill`, found by the `nc` command) if none
+  comes, or if nothing is written for the idle time. Whoever can reach the port while it is open can send the
+  target a stream to unpack in the staging folder: moved in place only if its files are of the sizes that were
+  expected, but not otherwise checked. Several Jenkins controllers using the same host at once do not know of
+  one another's ports.
+
+If a direct copy cannot be done (no `ssh` or `nc` on a host, a firewall in the way, a name that the source cannot
+resolve), the copy fails, with the message of what failed: change the setting back to `RELAY` for the hosts that
+cannot do it.
 
 ## Replicas of a master on a host that does not see it
 
@@ -405,7 +454,8 @@ and the load of a host is not measured. What it does:
 **Make replicas of masters** (`replicateMasters`, off by default so that nothing is copied that was not
 asked for): a clone that is to be made on such a host, one that is asked for or that the host selection
 picks, is made of a **replica** of the master that is made on that host the first time ([see
-replicas](#replicas-of-a-master-on-a-host-that-does-not-see-it)). The replica is made through the controller, with the
+replicas](#replicas-of-a-master-on-a-host-that-does-not-see-it)). The replica is made through the controller (or [directly](#faster-ways-direct-copies-over-ssh-or-by-netcat), if
+`transferMode` says so), with the
 compression that is set (`relayCompression`: `PIGZ`, the default, `GZIP`, `BZIP2` or `NONE`) and no time limit, only
 `transferIdleSeconds` (300) of nothing moving. Host selection does not weigh the cost of making a replica: to keep
 clones of a big master off hosts that have none yet, name the host or the candidates.

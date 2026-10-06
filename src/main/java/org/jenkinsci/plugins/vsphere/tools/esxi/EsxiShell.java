@@ -52,6 +52,15 @@ public interface EsxiShell extends AutoCloseable {
         throw new VSphereException("This way of reaching the host cannot stream data to and from a command");
     }
 
+    /**
+     * Where this shell reaches its host, or null if it is not known, which only the ways of copying files that need
+     * one host to reach another ask.
+     */
+    @CheckForNull
+    default EsxiEndpoint endpoint() {
+        return null;
+    }
+
     /** Ends the session. Does not throw. */
     @Override
     void close();

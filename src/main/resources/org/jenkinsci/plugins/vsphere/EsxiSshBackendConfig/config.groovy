@@ -31,6 +31,9 @@ f.advanced {
     f.entry(title:_("Make replicas of masters"), field:"replicateMasters") {
         f.checkbox()
     }
+    f.entry(title:_("How copies go between hosts"), field:"transferMode") {
+        f.select()
+    }
     f.entry(title:_("Compression of copies between hosts"), field:"relayCompression") {
         f.select()
     }

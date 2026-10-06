@@ -60,6 +60,65 @@ final class FakeEsxiHost implements EsxiShell {
     }
 
     private final Map<Integer, FakeVm> vms = new LinkedHashMap<>();
+
+    // -- what the copies from host to host use: an address, the other hosts, a firewall, processes --
+
+    /** The address that other hosts reach this one at, or null if it has none (then it has no endpoint either). */
+    String address;
+    /** The user that a session to this host is as, and the port of its SSH server. */
+    String endpointUser = "jenkins";
+
+    int endpointPort = 22;
+    /** The hosts that this one can reach, by the address that they are reached at. */
+    final Map<String, FakeEsxiHost> peers = new LinkedHashMap<>();
+    /** The rulesets that the firewall has of its own, and whether they are on. */
+    final Map<String, Boolean> rulesets = new java.util.TreeMap<>(Map.of("sshServer", true, "sshClient", false));
+    /** The rulesets that are open to all, and the addresses of those that are not. */
+    final Map<String, Boolean> allowedAll = new java.util.HashMap<>();
+
+    final Map<String, java.util.Set<String>> allowedIps = new java.util.HashMap<>();
+    /** The ports that a listener of nc has, with what is sent to it. */
+    final Map<Integer, java.util.concurrent.BlockingQueue<Pending>> listeners =
+            new java.util.concurrent.ConcurrentHashMap<>();
+    /** Ports that the host will not bind, though nothing is seen on them. */
+    final java.util.Set<Integer> unbindable = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** How many of the next listeners of nc are told that the port is in use. */
+    final java.util.concurrent.atomic.AtomicInteger refuseBinds = new java.util.concurrent.atomic.AtomicInteger();
+    /** The commands that are running now, which can be ended by killing them. */
+    final List<Proc> processes = new java.util.concurrent.CopyOnWriteArrayList<>();
+    /** The copy by ssh or nc stops, when it has begun, and stays so until it is killed. */
+    volatile boolean stallTransfers;
+    /** The ssh server of this host refuses the keys that it is shown, as a host would that does not read them. */
+    boolean refuseKeys;
+
+    private static final java.util.concurrent.atomic.AtomicInteger NEXT_PID =
+            new java.util.concurrent.atomic.AtomicInteger(1000);
+
+    static final class Proc {
+        final int pid = NEXT_PID.incrementAndGet();
+        final String command;
+        volatile boolean killed;
+
+        Proc(String command) {
+            this.command = command;
+        }
+    }
+
+    /** What a sender of nc leaves for a listener, which says how it went when it has unpacked it. */
+    static final class Pending {
+        final byte[] data;
+        final java.util.concurrent.CompletableFuture<ShellResult> done = new java.util.concurrent.CompletableFuture<>();
+
+        Pending(byte[] data) {
+            this.data = data;
+        }
+    }
+
+    @Override
+    public EsxiEndpoint endpoint() {
+        return address == null ? null : new EsxiEndpoint(address, endpointPort, endpointUser);
+    }
+
     final List<String> commands = new ArrayList<>();
     boolean closed;
     /** What "vmware -v" prints on an ESXi 7 host. */
@@ -103,6 +162,14 @@ final class FakeEsxiHost implements EsxiShell {
     java.util.Set<String> locked = new java.util.HashSet<>();
     /** Where a datastore really is: /vmfs/volumes/name is a link to /vmfs/volumes/uuid. */
     Map<String, String> datastoreUuids = new LinkedHashMap<>();
+
+    {
+        for (String directory : new String[] {"/tmp", "/etc", "/etc/ssh", "/etc/vmware", "/etc/vmware/firewall"}) {
+            directories.add(directory);
+        }
+        files.put("/usr/lib/vmware/openssh/bin/ssh-keygen", "");
+        files.put("/etc/ssh/ssh_host_rsa_key.pub", "ssh-rsa AAAAFAKEHOSTKEY root@fake\n");
+    }
 
     /** What esxcli storage filesystem list prints on an ESXi 7 host: mount point, name, UUID, mounted, type, size, free. */
     static final String[][] DATASTORE_ROWS = {
@@ -225,6 +292,9 @@ final class FakeEsxiHost implements EsxiShell {
     /** True if the command moves data through its input or output, which only {@link #stream} can run. */
     boolean streams(String command) {
         return command.startsWith("vmkfstools ")
+                || command.contains(" | ssh ")
+                || command.contains(" | nc -w ")
+                || NC_LISTEN.matcher(command).matches()
                 || PACK.matcher(command).matches()
                 || UNPACK.matcher(command).matches()
                 || command.equals(FakeEsxiSshServer.HANG);
@@ -252,6 +322,16 @@ final class FakeEsxiHost implements EsxiShell {
             return new ShellResult(result.getExitCode(), "", result.getStderr());
         }
         commands.add(command);
+        if (command.contains(" | ssh ")) {
+            return streamSsh(command, idleTimeoutSeconds);
+        }
+        if (command.contains(" | nc -w ")) {
+            return streamNcSend(command, idleTimeoutSeconds);
+        }
+        final java.util.regex.Matcher listen = NC_LISTEN.matcher(command);
+        if (listen.matches()) {
+            return streamNcListen(command, Integer.parseInt(listen.group(2)), listen.group(3), idleTimeoutSeconds);
+        }
         try {
             for (Map.Entry<String, String> failure : failures.entrySet()) {
                 if (command.contains(failure.getKey())) {
@@ -387,6 +467,10 @@ final class FakeEsxiHost implements EsxiShell {
     }
 
     private void addDirectories(String directory) {
+        if (!directory.startsWith("/vmfs/volumes/")) {
+            directories.add(directory);
+            return;
+        }
         String current = directory;
         while (current.startsWith("/vmfs/volumes/") && current.length() > "/vmfs/volumes/".length()) {
             directories.add(current);
@@ -450,7 +534,14 @@ final class FakeEsxiHost implements EsxiShell {
         if (written != null) {
             return written;
         }
+        if (command.startsWith("ps -c | grep ")) {
+            return listProcesses(command);
+        }
         final List<String> words = unaliased(split(command));
+        final ShellResult onHost = onTransferTools(words);
+        if (onHost != null) {
+            return onHost;
+        }
         for (Map.Entry<String, String> failure : failures.entrySet()) {
             if (!words.get(0).equals("/bin/vim-cmd") && command.contains(failure.getKey())) {
                 return new ShellResult(1, "", failure.getValue());
@@ -710,6 +801,21 @@ final class FakeEsxiHost implements EsxiShell {
                 files.put(words.get(2), files.get(words.get(1)));
                 return ok("");
             case "ls":
+                if (words.get(1).equals("-lnA") && directories.contains(words.get(2))) {
+                    // ls -lnA dir: the files in it
+                    final StringBuilder listing = new StringBuilder("total 0\n");
+                    for (Map.Entry<String, String> file : files.entrySet()) {
+                        if (parentOf(file.getKey()).equals(words.get(2))) {
+                            listing.append("-rw-r--r--    1 0        0        ")
+                                    .append(String.format(
+                                            "%11d", file.getValue().length()))
+                                    .append(" Oct  5 06:51 ")
+                                    .append(file.getKey().substring(words.get(2).length() + 1))
+                                    .append('\n');
+                        }
+                    }
+                    return ok(listing.toString());
+                }
                 if (words.get(1).equals("-ln")) {
                     // ls -ln path...: a line for each, as busybox prints them
                     final StringBuilder listing = new StringBuilder();
@@ -1021,6 +1127,319 @@ final class FakeEsxiHost implements EsxiShell {
             words.add(word.toString());
         }
         return words;
+    }
+
+    // -- ssh-keygen, the firewall, processes, ssh and nc between the fakes --
+
+    private static final java.util.regex.Pattern NC_LISTEN =
+            java.util.regex.Pattern.compile("^nc -d -l -w (\\d+) (\\d+) \\| (.*)$", java.util.regex.Pattern.DOTALL);
+
+    private ShellResult onTransferTools(List<String> words) {
+        final String tool = words.get(0);
+        if (tool.endsWith("/ssh-keygen")) {
+            // ssh-keygen -q -t ecdsa -b 256 -N '' -C comment -f path
+            final String path = words.get(words.indexOf("-f") + 1);
+            final String comment = words.get(words.indexOf("-C") + 1);
+            if (!directories.contains(parentOf(path))) {
+                return new ShellResult(1, "", "Saving key \"" + path + "\" failed: No such file or directory");
+            }
+            final String blob = "AAAAFAKEKEY" + path.hashCode();
+            files.put(path, "-----BEGIN OPENSSH PRIVATE KEY-----\n" + blob + "\n");
+            files.put(path + ".pub", "ecdsa-sha2-nistp256 " + blob + " " + comment + "\n");
+            return ok("");
+        }
+        switch (tool) {
+            case "chmod":
+                return ok("");
+            case "touch":
+                files.putIfAbsent(words.get(1), "");
+                return ok("");
+            case "rmdir":
+                if (!directories.contains(words.get(1))) {
+                    return new ShellResult(1, "", "rmdir: '" + words.get(1) + "': No such file or directory");
+                }
+                for (String file : files.keySet()) {
+                    if (parentOf(file).equals(words.get(1))) {
+                        return new ShellResult(1, "", "rmdir: '" + words.get(1) + "': Directory not empty");
+                    }
+                }
+                directories.remove(words.get(1));
+                return ok("");
+            case "kill":
+                for (String pid : words.subList(1, words.size())) {
+                    for (Proc proc : processes) {
+                        if (Integer.toString(proc.pid).equals(pid)) {
+                            proc.killed = true;
+                        }
+                    }
+                }
+                return ok("");
+            case "esxcli":
+                return onFirewall(words);
+            default:
+                return null;
+        }
+    }
+
+    private ShellResult listProcesses(String command) {
+        // ps -c | grep pattern | grep -v grep
+        final String text = command.substring("ps -c | grep ".length());
+        final String pattern = unalias(
+                split(text.substring(0, text.indexOf(" | grep -v grep"))).get(0));
+        final StringBuilder lines = new StringBuilder();
+        for (Proc proc : processes) {
+            if (proc.command.contains(pattern)) {
+                lines.append(String.format("%d  %d  sh      sh -c %s%n", proc.pid, proc.pid, proc.command));
+            }
+        }
+        return new ShellResult(lines.length() == 0 ? 1 : 0, lines.toString(), "");
+    }
+
+    /** The names of the rulesets that the files in the firewall folder define. */
+    private java.util.Set<String> definedRulesets() {
+        final java.util.Set<String> names = new java.util.TreeSet<>(rulesets.keySet());
+        for (Map.Entry<String, String> file : files.entrySet()) {
+            if (file.getKey().startsWith("/etc/vmware/firewall/")
+                    && file.getKey().endsWith(".xml")) {
+                final java.util.regex.Matcher id =
+                        java.util.regex.Pattern.compile("<id>([^<]+)</id>").matcher(file.getValue());
+                while (id.find()) {
+                    names.add(id.group(1));
+                }
+            }
+        }
+        return names;
+    }
+
+    private ShellResult onFirewall(List<String> words) {
+        if (words.size() >= 4 && words.get(1).equals("network") && words.get(2).equals("firewall")) {
+            final String what = String.join(" ", words.subList(3, words.size()));
+            if (what.equals("refresh")) {
+                return ok("true\n");
+            }
+            if (what.equals("ruleset list")) {
+                final StringBuilder table = new StringBuilder("Name                         Enabled\n")
+                        .append("---------------------------  -------\n");
+                for (String name : definedRulesets()) {
+                    table.append(String.format("%-27s  %s%n", name, rulesets.getOrDefault(name, false)));
+                }
+                return ok(table.toString());
+            }
+            if (words.get(3).equals("ruleset")
+                    && words.size() >= 7
+                    && words.get(4).equals("set")) {
+                // esxcli network firewall ruleset set -r name -e true | --allowed-all true
+                final String name = words.get(6);
+                if (!definedRulesets().contains(name)) {
+                    return new ShellResult(1, "", "Unable to find a ruleset named " + name);
+                }
+                if (words.get(7).equals("-e")) {
+                    rulesets.put(name, Boolean.parseBoolean(words.get(8)));
+                } else {
+                    allowedAll.put(name, Boolean.parseBoolean(words.get(8)));
+                }
+                return ok("");
+            }
+            if (words.get(3).equals("ruleset") && words.get(4).equals("allowedip")) {
+                // esxcli network firewall ruleset allowedip add|remove -r name -i ip
+                final String name = words.get(7);
+                if (!definedRulesets().contains(name)) {
+                    return new ShellResult(1, "", "Unable to find a ruleset named " + name);
+                }
+                if (allowedAll.getOrDefault(name, true)) {
+                    return new ShellResult(1, "", "Couldn't update allowed ip list when allowed-all flag is true.");
+                }
+                final java.util.Set<String> ips = allowedIps.computeIfAbsent(name, k -> new java.util.TreeSet<>());
+                if (words.get(5).equals("add")) {
+                    ips.add(words.get(9));
+                } else {
+                    ips.remove(words.get(9));
+                }
+                return ok("");
+            }
+        }
+        if (words.size() == 5
+                && words.get(1).equals("network")
+                && words.get(2).equals("ip")
+                && words.get(3).equals("connection")
+                && words.get(4).equals("list")) {
+            final StringBuilder table =
+                    new StringBuilder("Proto  Recv Q  Send Q  Local Address  Foreign Address  State\n");
+            for (Integer port : listeners.keySet()) {
+                table.append("tcp         0       0  0.0.0.0:" + port + "      0.0.0.0:0          LISTEN         "
+                        + (1000 + port % 1000) + "  newreno  nc\n");
+            }
+            return ok(table.toString());
+        }
+        return null;
+    }
+
+    /** Whether the firewall lets the traffic in or out: its ruleset has a rule for the port, and is open to the peer. */
+    boolean allows(String direction, int port, String peer) {
+        final String name = "jenkinsXfer";
+        if (!rulesets.getOrDefault(name, false)) {
+            return false;
+        }
+        final String xml = files.getOrDefault("/etc/vmware/firewall/jenkins-xfer.xml", "");
+        if (!xml.contains("<direction>" + direction
+                + "</direction><protocol>tcp</protocol><porttype>dst</porttype><port>" + port + "</port>")) {
+            return false;
+        }
+        return allowedAll.getOrDefault(name, true)
+                || allowedIps.getOrDefault(name, java.util.Set.of()).contains(peer);
+    }
+
+    private ShellResult streamSsh(String command, int idleSeconds) {
+        final int at = command.indexOf(" | ssh ");
+        final List<String> ssh = split(command.substring(at + 3));
+        final String packCommand = command.substring(0, at);
+        final Proc proc = new Proc(command);
+        processes.add(proc);
+        try {
+            String keyFile = null;
+            String known = null;
+            String destination = null;
+            for (int i = 0; i < ssh.size(); i++) {
+                if (ssh.get(i).equals("-i")) {
+                    keyFile = ssh.get(i + 1);
+                } else if (ssh.get(i).startsWith("UserKnownHostsFile=")) {
+                    known = ssh.get(i).substring("UserKnownHostsFile=".length());
+                } else if (ssh.get(i).contains("@")) {
+                    destination = ssh.get(i);
+                }
+            }
+            final String user = destination.substring(0, destination.indexOf('@'));
+            final String host = destination.substring(destination.indexOf('@') + 1);
+            final java.io.ByteArrayOutputStream packed = new java.io.ByteArrayOutputStream();
+            final ShellResult reading = stream(packCommand, null, packed, idleSeconds);
+            if (!rulesets.getOrDefault("sshClient", false)) {
+                return new ShellResult(255, "", "ssh: connect to host " + host + " port 22: Connection timed out");
+            }
+            final FakeEsxiHost peer = peers.get(host);
+            if (peer == null) {
+                return new ShellResult(255, "", "ssh: Could not resolve hostname " + host);
+            }
+            final String hostKey = peer.files.get("/etc/ssh/ssh_host_rsa_key.pub");
+            final String knownText = files.get(known);
+            if (knownText == null
+                    || !knownText.contains(hostKey.trim().split("\\s+")[0] + " "
+                            + hostKey.trim().split("\\s+")[1])) {
+                return new ShellResult(255, "", "Host key verification failed.");
+            }
+            final String blob = files.get(keyFile + ".pub").trim().split("\\s+")[1];
+            final String authorized = peer.files.getOrDefault("/etc/ssh/keys-" + user + "/authorized_keys", "");
+            String forced = null;
+            for (String line : authorized.split("\\R")) {
+                if (line.contains(blob)) {
+                    final java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                                    "^restrict,command=\"(.*)\" ecdsa")
+                            .matcher(line);
+                    if (m.find()) {
+                        forced = m.group(1);
+                    }
+                }
+            }
+            if (forced == null || peer.refuseKeys) {
+                return new ShellResult(255, "", user + "@" + host + ": Permission denied (publickey).");
+            }
+            if (stallTransfers) {
+                return stall(proc);
+            }
+            final ShellResult unpacked =
+                    peer.stream(forced, new java.io.ByteArrayInputStream(packed.toByteArray()), null, idleSeconds);
+            return new ShellResult(unpacked.getExitCode(), "", reading.getStderr() + unpacked.getStderr());
+        } catch (VSphereException e) {
+            return new ShellResult(255, "", e.getMessage());
+        } finally {
+            processes.remove(proc);
+        }
+    }
+
+    private ShellResult stall(Proc proc) {
+        final long end = System.nanoTime() + 30_000_000_000L;
+        while (!proc.killed && System.nanoTime() < end) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return new ShellResult(143, "", "Terminated");
+    }
+
+    private ShellResult streamNcListen(String command, int port, String unpack, int idleSeconds) {
+        if (unbindable.contains(port)
+                || listeners.containsKey(port)
+                || refuseBinds.getAndUpdate(left -> left > 0 ? left - 1 : 0) > 0) {
+            return new ShellResult(1, "", "nc: Address already in use");
+        }
+        final Proc proc = new Proc(command);
+        processes.add(proc);
+        final java.util.concurrent.BlockingQueue<Pending> inbox = new java.util.concurrent.LinkedBlockingQueue<>();
+        listeners.put(port, inbox);
+        try {
+            Pending pending = null;
+            final long end = System.nanoTime() + 60_000_000_000L;
+            while (pending == null && !proc.killed && System.nanoTime() < end) {
+                pending = inbox.poll(20, java.util.concurrent.TimeUnit.MILLISECONDS);
+            }
+            if (pending == null) {
+                return new ShellResult(143, "", "Terminated");
+            }
+            final ShellResult unpacked =
+                    stream(unpack, new java.io.ByteArrayInputStream(pending.data), null, idleSeconds);
+            pending.done.complete(unpacked);
+            return unpacked;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new ShellResult(1, "", "interrupted");
+        } catch (VSphereException e) {
+            return new ShellResult(1, "", String.valueOf(e.getMessage()));
+        } finally {
+            listeners.remove(port);
+            processes.remove(proc);
+        }
+    }
+
+    private ShellResult streamNcSend(String command, int idleSeconds) {
+        final int at = command.indexOf(" | nc -w ");
+        final List<String> nc = split(command.substring(at + 3));
+        final String packCommand = command.substring(0, at);
+        final Proc proc = new Proc(command);
+        processes.add(proc);
+        try {
+            // nc -w N [-s IP] host port
+            final int port = Integer.parseInt(nc.get(nc.size() - 1));
+            final String host = nc.get(nc.size() - 2);
+            final String from = nc.contains("-s") ? nc.get(nc.indexOf("-s") + 1) : address;
+            final java.io.ByteArrayOutputStream packed = new java.io.ByteArrayOutputStream();
+            final ShellResult reading = stream(packCommand, null, packed, idleSeconds);
+            final FakeEsxiHost peer = peers.get(host);
+            if (peer == null || !allows("outbound", port, host) || !peer.allows("inbound", port, from)) {
+                return new ShellResult(1, "", "nc: connect to " + host + " port " + port + " (tcp) timed out");
+            }
+            final java.util.concurrent.BlockingQueue<Pending> inbox = peer.listeners.get(port);
+            if (inbox == null) {
+                return new ShellResult(
+                        1, "", "nc: connect to " + host + " port " + port + " (tcp) failed: Connection refused");
+            }
+            if (stallTransfers) {
+                return stall(proc);
+            }
+            final Pending pending = new Pending(packed.toByteArray());
+            inbox.add(pending);
+            pending.done.get(60, java.util.concurrent.TimeUnit.SECONDS);
+            // as with the real one, what the listener makes of it is for the listener to say
+            return new ShellResult(0, "", reading.getStderr());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return new ShellResult(1, "", "interrupted");
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException | VSphereException e) {
+            return new ShellResult(1, "", String.valueOf(e.getMessage()));
+        } finally {
+            processes.remove(proc);
+        }
     }
 
     @Override
