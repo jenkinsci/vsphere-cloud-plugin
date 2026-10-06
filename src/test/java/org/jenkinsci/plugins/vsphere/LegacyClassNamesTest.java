@@ -1,0 +1,48 @@
+/*   Copyright 2026, Jim Klimov
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+package org.jenkinsci.plugins.vsphere;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.startsWith;
+
+import hudson.model.Items;
+import jenkins.model.Jenkins;
+import org.junit.jupiter.api.Test;
+import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
+
+/** What Jenkins stored under the names that the classes had before they were moved is still read. */
+@WithJenkins
+class LegacyClassNamesTest {
+
+    @Test
+    void theOldNamesOfTheStoredClassesAreAliasesInTheConfigurationOfJenkinsAndOfItems(JenkinsRule r) throws Exception {
+        for (Class<?> moved : LegacyClassNames.MOVED) {
+            final String old = "org.jenkinsci.plugins." + moved.getSimpleName();
+            assertThat(moved.getName(), is("org.jenkinsci.plugins.vsphere." + moved.getSimpleName()));
+            assertThat(old, is(LegacyClassNames.oldNameOf(moved)));
+            assertThat(Jenkins.XSTREAM2.getMapper().realClass(old), is((Object) moved));
+            assertThat(Items.XSTREAM2.getMapper().realClass(old), is((Object) moved));
+        }
+    }
+
+    @Test
+    void whatIsSavedNowHasTheNewName(JenkinsRule r) {
+        final String xml = Jenkins.XSTREAM2.toXML(new vSphereCloud(null, "old", 0, 0, false, null));
+
+        assertThat(xml, startsWith("<org.jenkinsci.plugins.vsphere.vSphereCloud"));
+    }
+}

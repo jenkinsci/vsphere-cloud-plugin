@@ -8,9 +8,7 @@ import static org.hamcrest.Matchers.nullValue;
 import com.cloudbees.plugins.credentials.CredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import hudson.util.Scrambler;
-import hudson.util.XStream2;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
@@ -77,7 +75,7 @@ class VSphereConnectionConfigLegacyCredentialsMigrationTest {
                 + scrambledPassword + "</password>\n"
                 + "</org.jenkinsci.plugins.vSphereCloud>";
 
-        vSphereCloud cloud = (vSphereCloud) new XStream2().fromXML(xml);
+        vSphereCloud cloud = (vSphereCloud) Jenkins.XSTREAM2.fromXML(xml);
 
         assertThat(cloud.getVsConnectionConfig(), notNullValue());
         assertThat(cloud.getVsConnectionConfig().getVCenter().getCredentialsId(), notNullValue());

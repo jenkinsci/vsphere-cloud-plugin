@@ -4,8 +4,8 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 
 import hudson.util.ListBoxModel;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 

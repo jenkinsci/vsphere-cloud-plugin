@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureSlave;
 
@@ -30,7 +30,6 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
-import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;

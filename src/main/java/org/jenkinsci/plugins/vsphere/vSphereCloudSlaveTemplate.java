@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureCloud;
 
@@ -61,10 +61,6 @@ import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import jenkins.model.Jenkins;
 import jenkins.slaves.JnlpSlaveAgentProtocol;
-import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
-import org.jenkinsci.plugins.vsphere.VSphereCloudRetentionStrategy;
-import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
-import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;

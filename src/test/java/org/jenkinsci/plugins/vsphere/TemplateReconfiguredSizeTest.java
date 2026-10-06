@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;

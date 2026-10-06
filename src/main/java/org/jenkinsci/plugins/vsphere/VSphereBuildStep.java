@@ -22,7 +22,6 @@ import hudson.Launcher;
 import hudson.model.*;
 import java.io.IOException;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;

@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import com.cloudbees.hudson.plugins.folder.AbstractFolderProperty;
 import com.cloudbees.hudson.plugins.folder.AbstractFolderPropertyDescriptor;
@@ -35,8 +35,6 @@ import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
-import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
-import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
@@ -129,7 +127,8 @@ public class vSphereCloud extends Cloud {
     private transient CloudProvisioningState templateState;
     private transient volatile VSphereConnectionPool connectionPool;
 
-    private static final java.util.logging.Logger VSLOG = java.util.logging.Logger.getLogger("vsphere-cloud");
+    private static final java.util.logging.Logger VSLOG =
+            java.util.logging.Logger.getLogger(vSphereCloud.class.getName());
 
     private static void InternalLog(
             Slave slave,
@@ -1134,7 +1133,7 @@ public class vSphereCloud extends Cloud {
 
     public static List<String> findAllVsphereCloudNames() {
         List<String> cloudNames = new ArrayList<String>();
-        for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : findAllVsphereClouds(null)) {
+        for (org.jenkinsci.plugins.vsphere.vSphereCloud vSphereCloud : findAllVsphereClouds(null)) {
             cloudNames.add(vSphereCloud.getVsDescription());
         }
         return cloudNames;

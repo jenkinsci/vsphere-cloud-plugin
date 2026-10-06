@@ -2,7 +2,7 @@
  * To change this template, choose Tools | Templates
  * and open the template in the editor.
  */
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import hudson.AbortException;
 import hudson.Extension;

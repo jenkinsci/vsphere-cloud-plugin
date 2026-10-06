@@ -31,7 +31,6 @@ import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
 import java.util.ArrayList;
 import java.util.List;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
 import org.jenkinsci.plugins.vsphere.EsxiSshHost;
 import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
@@ -40,6 +39,7 @@ import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyPolicy;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiRelay;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiTransferMode;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.junit.jupiter.api.Test;
 
 /**

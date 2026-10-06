@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import com.vmware.vim25.VirtualHardware;
 import com.vmware.vim25.VirtualMachineConfigInfo;

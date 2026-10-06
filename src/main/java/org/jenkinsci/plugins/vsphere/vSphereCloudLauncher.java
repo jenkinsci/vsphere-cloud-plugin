@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import com.vmware.vim25.VirtualMachinePowerState;
 import com.vmware.vim25.VirtualMachineToolsStatus;
@@ -18,7 +18,6 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
-import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.kohsuke.stapler.DataBoundConstructor;

@@ -1,4 +1,4 @@
-package org.jenkinsci.plugins;
+package org.jenkinsci.plugins.vsphere;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -12,7 +12,6 @@ import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningRecord;
 import org.jenkinsci.plugins.vsphere.tools.CloudProvisioningState;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +44,7 @@ class NodePreProvisionTest {
     @BeforeEach
     void setup() {
         loggedMessages = new ArrayList<>();
-        vsphereCloudLogger = Logger.getLogger("vsphere-cloud");
+        vsphereCloudLogger = Logger.getLogger(vSphereCloud.class.getName());
         vsphereCloudLogger.setLevel(Level.ALL);
         logCapture = new Handler() {
             @Override

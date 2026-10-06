@@ -33,7 +33,6 @@ import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import jenkins.tasks.SimpleBuildStep;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
@@ -42,6 +41,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -220,7 +220,7 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     /**
      * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
      * string. Blank means "inherit the cloud's default candidate list" (see {@link
-     * org.jenkinsci.plugins.vSphereCloud#getHostSelectionCandidates()}); a single comma
+     * org.jenkinsci.plugins.vsphere.vSphereCloud#getHostSelectionCandidates()}); a single comma
      * explicitly overrides to "no restriction at this call site" - see {@link
      * VSphereHostSelection#toAllowListString}.
      */
