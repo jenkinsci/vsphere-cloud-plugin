@@ -189,6 +189,11 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
     }
 
+    @Override
+    public boolean shouldBeCheckedWhenAcquired() {
+        return true;
+    }
+
     /**
      * Runs a {@code vim-cmd} command. When the host reports a fault, which it does by printing it (as
      * {@code (vim.fault.NotFound) { ... msg = "..." }}), the command is taken to have failed whatever its exit

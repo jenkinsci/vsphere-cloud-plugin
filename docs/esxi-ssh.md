@@ -418,6 +418,24 @@ jenkins:
               commandTimeoutSeconds: 600
 ```
 
+## Keeping the SSH connections: the connection pool
+
+The settings of the connection pool of a cloud (**Use vSphere connection pool**, and its health check, session
+age, uses and idle timeout, in the advanced settings of the cloud) apply to this connection type too: the pool then
+keeps one SSH session to the host (to each of the hosts, for several) instead of logging in for every operation.
+A login to an ESXi host takes 0.6 to 0.75 seconds (measured on ESXi 7.0.3 and 8.0.1, over a LAN), and a step of a job
+makes one, so a pool saves that for each step, for each host of the cloud.
+
+* The pool checks a session that was not used for 10 seconds when it hands it out (it runs a command that does nothing),
+  and logs in again if it does not answer: a session over SSH may have been ended by the host, a firewall or a restart
+  without telling, which is not so with a vCenter session. Without this a cloud with one host would fail until the
+  health check found it, if there is one. With several hosts, a host that has gone away is left out and tried again.
+* **Idle timeout** is the one to set (say 300 seconds): the sessions are not kept for a Jenkins that has nothing to do.
+  The **health check** is not needed for the above, but finds a dead session before it is asked for. **Max age** and
+  **max uses** are for when you want the sessions renewed anyway.
+* The settings are those of the cloud, for all its hosts, and are not saved with the connection type: they are not
+  shown only for vCenter.
+
 ## Several ESXi hosts: a poor man's cluster
 
 A cloud can use more than one ESXi host. The `vsHost` is the first one, and the others are listed

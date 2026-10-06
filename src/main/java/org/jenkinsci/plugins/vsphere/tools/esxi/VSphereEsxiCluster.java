@@ -230,6 +230,11 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         return !availableMembers().isEmpty();
     }
 
+    @Override
+    public boolean shouldBeCheckedWhenAcquired() {
+        return true;
+    }
+
     // -- looking VMs up --
 
     @Override

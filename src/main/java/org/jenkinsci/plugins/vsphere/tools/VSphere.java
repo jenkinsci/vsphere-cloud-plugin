@@ -112,6 +112,17 @@ public interface VSphere {
     boolean isSessionAlive();
 
     /**
+     * Whether a connection of this kind is to be checked with {@link #isSessionAlive()} when the pool hands it out
+     * after it has been idle for a while. Not for a vCenter session, which the server keeps and times out itself;
+     * but a session over SSH is only a connection, which a host, a firewall or a restart can have ended without
+     * either side being told, and that is found out by using it.
+     */
+    @Restricted(NoExternalUse.class)
+    default boolean shouldBeCheckedWhenAcquired() {
+        return false;
+    }
+
+    /**
      * Deploys a new VM from an existing (named) Template.
      *
      * @param cloneName - name of VM to be created
