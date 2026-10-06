@@ -18,16 +18,24 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 
 import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
+import hudson.util.FormValidation;
 import java.util.ArrayList;
 import java.util.List;
+import org.htmlunit.html.DomElement;
+import org.htmlunit.html.HtmlButton;
 import org.htmlunit.html.HtmlForm;
+import org.htmlunit.html.HtmlInput;
 import org.htmlunit.html.HtmlPage;
+import org.htmlunit.html.HtmlRadioButtonInput;
 import org.htmlunit.html.HtmlSelect;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
+import org.jenkinsci.plugins.vsphere.EsxiSshHost;
 import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig.BackendType;
@@ -116,12 +124,160 @@ class ConnectionConfigFormTest {
         String text = configurePage(r, cloud).asNormalizedText();
 
         assertThat(text, containsString("Connection type"));
-        assertThat(text, containsString("Standalone ESXi host over SSH"));
+        assertThat(text, containsString("Standalone ESXi host(s) over SSH"));
         assertThat(text, containsString("SSH Port"));
-        assertThat(text, containsString("Trust the host key"));
-        assertThat(text, containsString("Host key fingerprint"));
-        assertThat(text, containsString("Show host key"));
+        assertThat(text, containsString("Fingerprint trust"));
+        assertThat(text, containsString("Fingerprint"));
+        assertThat(text, containsString("Show fingerprint"));
         assertThat(text, containsString("Test Connection"));
+    }
+
+    /** What the validation button says after it is pressed (it asks the server, which answers in the page). */
+    private static String pressed(JenkinsRule.WebClient wc, HtmlPage page, String method) throws Exception {
+        final DomElement button =
+                (DomElement) page.getByXPath("//button[@data-validate-button-method='" + method + "']")
+                        .get(0);
+        button.click();
+        wc.waitForBackgroundJavaScript(10_000);
+        return button.getParentNode().asNormalizedText().replace(String.valueOf((char) 10), " | ");
+    }
+
+    @Test
+    void theButtonsOfANewEsxiCloudFindTheHostThatWasEntered(JenkinsRule r) throws Exception {
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            // the first page of a new cloud asks for its name and kind, the second has its settings
+            HtmlPage page = wc.goTo("manage/cloud/new");
+            page.getForms().stream()
+                    .filter(f -> !f.getInputsByName("mode").isEmpty())
+                    .findFirst()
+                    .get()
+                    .getInputByName("name")
+                    .setValue("buttons");
+            ((HtmlRadioButtonInput) page.getElementById("org.jenkinsci.plugins.vsphere.vSphereCloud")).setChecked(true);
+            HtmlPage settings = (HtmlPage) ((HtmlButton) page.getElementById("ok")).click();
+            wc.waitForBackgroundJavaScript(3000);
+            // the settings of a connection type are there once it is chosen
+            HtmlSelect type = (HtmlSelect) settings.getByXPath("//select[contains(@class,'dropdownList')]")
+                    .get(0);
+            type.setSelectedAttribute(type.getOptions().get(0), true);
+            wc.waitForBackgroundJavaScript(2000);
+            ((HtmlInput) settings.getByXPath("//input[@name='_.vsHost']").get(0)).setValue("127.0.0.1");
+            // a port where nothing listens, to get an answer that tells the host that was asked about
+            ((HtmlInput) settings.getByXPath("//input[@name='_.port']").get(0)).setValue("1");
+
+            final String shown = pressed(wc, settings, "queryHostKey");
+            final String tested = pressed(wc, settings, "testConnection");
+
+            assertThat(shown, containsString("Could not connect to 127.0.0.1:1"));
+            assertThat(tested, containsString("ESXi host 127.0.0.1"));
+        }
+    }
+
+    @Test
+    void theButtonsOfAnEsxiCloudFindItsHostToo(JenkinsRule r) throws Exception {
+        EsxiSshBackendConfig esxi = new EsxiSshBackendConfig(null);
+        esxi.setPort(1);
+        VSphereConnectionConfig config = new VSphereConnectionConfig("127.0.0.1");
+        config.setBackend(esxi);
+        vSphereCloud cloud = new vSphereCloud(config, "An ESXi host", 0, 0, false, java.util.List.of());
+        r.jenkins.clouds.add(cloud);
+
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            HtmlPage page = wc.goTo(cloud.getUrl() + "configure");
+
+            assertThat(pressed(wc, page, "queryHostKey"), containsString("Could not connect to 127.0.0.1:1"));
+        }
+    }
+
+    @Test
+    void aPlainHostNameIsWarnedAboutForAVCenterOnlyAndAWrongOneIsRefused(JenkinsRule r) {
+        VSphereConnectionConfig.DescriptorImpl descriptor =
+                r.jenkins.getDescriptorByType(VSphereConnectionConfig.DescriptorImpl.class);
+
+        // the port is there when a standalone ESXi host over SSH is chosen, and not when a vCenter is
+        assertThat(descriptor.doCheckVsHost("10.1.2.3", "22").kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost("esxi.example.com", "22").kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost("10.1.2.3", null).kind, is(FormValidation.Kind.WARNING));
+        assertThat(descriptor.doCheckVsHost("https://vc.example.com", null).kind, is(FormValidation.Kind.OK));
+        assertThat(descriptor.doCheckVsHost("https://vc.example.com/", null).kind, is(FormValidation.Kind.ERROR));
+        assertThat(descriptor.doCheckVsHost("ssh://esxi.example.com", "22").kind, is(FormValidation.Kind.ERROR));
+        assertThat(descriptor.doCheckVsHost("", null).kind, is(FormValidation.Kind.ERROR));
+    }
+
+    @Test
+    void theWarningAboutAPlainHostNameFollowsTheConnectionTypeInTheForm(JenkinsRule r) throws Exception {
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            HtmlPage page = wc.goTo("manage/cloud/new");
+            page.getForms().stream()
+                    .filter(f -> !f.getInputsByName("mode").isEmpty())
+                    .findFirst()
+                    .get()
+                    .getInputByName("name")
+                    .setValue("warning");
+            ((HtmlRadioButtonInput) page.getElementById("org.jenkinsci.plugins.vsphere.vSphereCloud")).setChecked(true);
+            HtmlPage settings = (HtmlPage) ((HtmlButton) page.getElementById("ok")).click();
+            wc.waitForBackgroundJavaScript(3000);
+            HtmlSelect type = (HtmlSelect) settings.getByXPath("//select[contains(@class,'dropdownList')]")
+                    .get(0);
+            HtmlInput host =
+                    (HtmlInput) settings.getByXPath("//input[@name='_.vsHost']").get(0);
+
+            // a vCenter, which is what is chosen first
+            type.setSelectedAttribute(type.getOptions().get(1), true);
+            wc.waitForBackgroundJavaScript(2000);
+            host.setValue("10.1.2.3");
+            host.fireEvent("change");
+            wc.waitForBackgroundJavaScript(5000);
+            assertThat(settings.asNormalizedText(), containsString("Without https://"));
+
+            // a standalone ESXi host: the same host name is fine, and it is checked again when the type changes
+            type.setSelectedAttribute(type.getOptions().get(0), true);
+            wc.waitForBackgroundJavaScript(5000);
+            assertThat(settings.asNormalizedText(), not(containsString("Without https://")));
+
+            type.setSelectedAttribute(type.getOptions().get(1), true);
+            wc.waitForBackgroundJavaScript(5000);
+            assertThat(settings.asNormalizedText(), containsString("Without https://"));
+        }
+    }
+
+    @Test
+    void anEsxiCloudThatIsOpenedHasNoWarningAboutItsPlainHostName(JenkinsRule r) throws Exception {
+        EsxiSshBackendConfig esxi = new EsxiSshBackendConfig(null);
+        VSphereConnectionConfig config = new VSphereConnectionConfig("10.1.2.3");
+        config.setBackend(esxi);
+        vSphereCloud cloud = new vSphereCloud(config, "An ESXi host", 0, 0, false, java.util.List.of());
+        r.jenkins.clouds.add(cloud);
+
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            HtmlPage page = wc.goTo(cloud.getUrl() + "configure");
+            wc.waitForBackgroundJavaScript(5000);
+
+            assertThat(page.asNormalizedText(), not(containsString("Without https://")));
+        }
+    }
+
+    @Test
+    void anAdditionalHostLeftToTheDefaultsSurvivesAFormRoundTrip(JenkinsRule r) throws Exception {
+        // no port, no credentials, "the same as for the first host" (which the form sends as an empty value)
+        EsxiSshBackendConfig esxi = new EsxiSshBackendConfig(null);
+        esxi.setAdditionalHosts(java.util.List.of(new EsxiSshHost("10.0.0.2")));
+        VSphereConnectionConfig config = new VSphereConnectionConfig("10.0.0.1");
+        config.setBackend(esxi);
+        vSphereCloud cloud = new vSphereCloud(config, "Two hosts", 0, 0, false, java.util.List.of());
+        r.jenkins.clouds.add(cloud);
+
+        submit(r, cloud);
+
+        EsxiSshHost kept = ((vSphereCloud) r.jenkins.getCloud(cloud.name))
+                .getVsConnectionConfig()
+                .getEsxiSsh()
+                .getAdditionalHosts()
+                .get(0);
+        assertThat(kept.getHost(), is("10.0.0.2"));
+        assertThat(kept.getHostKeyPolicy(), is(nullValue()));
+        assertThat(kept.getPort(), is(0));
+        assertThat(kept.getCredentialsId(), is(nullValue()));
     }
 
     private static vSphereCloud esxiCloud(JenkinsRule r, EsxiHostKeyPolicy policy) {

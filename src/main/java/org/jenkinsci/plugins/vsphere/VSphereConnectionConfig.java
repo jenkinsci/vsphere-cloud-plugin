@@ -376,18 +376,25 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return Jenkins.get().getDescriptor(VCenterBackendConfig.class);
         }
 
-        public FormValidation doCheckVsHost(@QueryParameter String value) {
+        /**
+         * @param port a setting of the connection type "standalone ESXi host over SSH", which is not there (so not sent)
+         *     for the other: that is how this tells which of the two is chosen
+         */
+        public FormValidation doCheckVsHost(@QueryParameter String value, @QueryParameter String port) {
             if (value != null && value.length() != 0) {
                 if (value.endsWith("/")) {
                     return FormValidation.error("vSphere host name must NOT end with a trailing slash");
                 }
-                if (!value.startsWith("https://")) {
-                    if (value.contains("://")) {
-                        return FormValidation.error("vSphere host must start with https:// (for vCenter), or be"
-                                + " a plain host name (for a standalone ESXi host over SSH)");
-                    }
-                    return FormValidation.warning("Without https:// this can only be a standalone ESXi host,"
-                            + " reached over SSH; vCenter needs an https:// URL");
+                // a plain name is a standalone ESXi host over SSH, which is for the connection type to say
+                if (!value.startsWith("https://") && value.contains("://")) {
+                    return FormValidation.error("vSphere host must start with https:// (for vCenter), or be"
+                            + " a plain host name (for a standalone ESXi host over SSH)");
+                }
+                if (!value.startsWith("https://") && port == null) {
+                    // vCenter is what is chosen: a plain name is not one
+                    return FormValidation.warning("Without https:// this is not a vCenter, which needs an https:// URL"
+                            + " here: a plain host name is for a standalone ESXi host, which is a connection type of its"
+                            + " own");
                 }
             }
             return FormValidation.validateRequired(value);

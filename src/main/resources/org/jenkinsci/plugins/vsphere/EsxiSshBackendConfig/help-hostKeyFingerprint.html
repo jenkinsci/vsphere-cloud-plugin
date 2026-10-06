@@ -1,9 +1,9 @@
 <div>
-  The fingerprint of the host key of the ESXi host, as <code>ssh-keygen -l</code> shows it
-  (<code>SHA256:...</code>), or an older MD5 one (<code>00:11:22:...</code>). Only a host with this host key is
-  trusted. <i>Show host key</i> asks the host which one it presents.
+  The fingerprint of the SSH host key of the ESXi host (the short name of its key, as <code>ssh-keygen -l</code>
+  shows it: <code>SHA256:...</code>, or an older MD5 one, <code>00:11:22:...</code>). Only a host that presents this
+  fingerprint is trusted. <i>Show fingerprint</i> asks the host which one it presents.
   <p>
-    With "the host key seen first" this is filled in by the first connection. Clear it to have the next
-    connection be a first one again, after a change of the host key that is expected.
+    With "the fingerprint seen first" this is filled in by the first connection. Clear it to have the next
+    connection be a first one again, after a change of the host's key that is expected.
   </p>
 </div>

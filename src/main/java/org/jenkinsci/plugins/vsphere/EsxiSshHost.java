@@ -24,6 +24,7 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
+import net.sf.json.JSONObject;
 import org.jenkinsci.Symbol;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyPolicy;
 import org.jenkinsci.plugins.vsphere.tools.esxi.EsxiHostKeyStore;
@@ -31,6 +32,7 @@ import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import org.kohsuke.stapler.StaplerRequest2;
 import org.kohsuke.stapler.interceptor.RequirePOST;
 
 /**
@@ -134,6 +136,25 @@ public class EsxiSshHost extends AbstractDescribableImpl<EsxiSshHost> implements
             return "Another ESXi host";
         }
 
+        /**
+         * What is not set is told by an empty value in the form ("the same as for the first host" is the option
+         * with none), which cannot be made into a policy or a port: it is left out, to be what it is when not set.
+         */
+        @Override
+        public EsxiSshHost newInstance(StaplerRequest2 req, JSONObject formData) throws FormException {
+            final JSONObject set = new JSONObject();
+            for (Object name : formData.keySet()) {
+                final String key = String.valueOf(name);
+                final Object value = formData.get(key);
+                final boolean empty =
+                        value instanceof String && ((String) value).trim().isEmpty();
+                if (!(empty && (key.equals("hostKeyPolicy") || key.equals("port")))) {
+                    set.put(key, value);
+                }
+            }
+            return super.newInstance(req, set);
+        }
+
         @RequirePOST
         public FormValidation doCheckHost(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull, @QueryParameter String value) {
@@ -200,8 +221,14 @@ public class EsxiSshHost extends AbstractDescribableImpl<EsxiSshHost> implements
                 @QueryParameter String hostKeyFingerprint) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             if (Util.fixEmptyAndTrim(credentialsId) == null) {
-                return FormValidation.error("Choose credentials to test with: this form cannot see those of the first"
-                        + " host, which this host uses when none are chosen");
+                // this form cannot see the credentials of the first host, which are the ones that it will use: what can
+                // be tried without them is that the host answers, and with which fingerprint
+                final FormValidation seen = EsxiSshBackendConfig.queryHostKey(host, port, null);
+                return seen.kind == FormValidation.Kind.ERROR
+                        ? seen
+                        : FormValidation.warning(seen.getMessage() + ". The login was not tried: no credentials are"
+                                + " chosen for this host, and this form cannot see those of the first host, which it"
+                                + " uses then; choose credentials here to try the login as well");
             }
             return EsxiSshBackendConfig.testConnection(
                     host, credentialsId, port, hostKeyPolicy, hostKeyFingerprint, null);

@@ -253,7 +253,7 @@ class TrileadEsxiShellTest {
 
         VSphereException e = assertThrows(VSphereException.class, () -> TrileadEsxiShell.connect(firstUse(store)));
 
-        assertThat(e.getMessage(), containsString("has changed"));
+        assertThat(e.getMessage(), containsString("has changed its fingerprint"));
         assertThat(e.getMessage(), containsString(server.hostKeySha256()));
         assertThat(e.getMessage(), containsString("SHA256:somethingElseThatWasSeenBefore"));
         assertThat(e.getMessage(), containsString("forget the remembered fingerprint"));
@@ -390,7 +390,7 @@ class TrileadEsxiShellTest {
 
         assertThat(result.isOk(), is(false));
         assertThat(result.isHostKeyTrusted(), is(false));
-        assertThat(result.getMessage(), containsString("has changed"));
+        assertThat(result.getMessage(), containsString("has changed its fingerprint"));
     }
 
     @Test

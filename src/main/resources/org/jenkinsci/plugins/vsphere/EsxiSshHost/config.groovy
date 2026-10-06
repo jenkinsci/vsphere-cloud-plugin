@@ -15,13 +15,13 @@ f.entry(title:_("Credentials"), field:"credentialsId") {
     c.select()
 }
 
-f.entry(title:_("Trust the host key"), field:"hostKeyPolicy") {
+f.entry(title:_("Fingerprint trust"), field:"hostKeyPolicy") {
     f.select(clazz:"esxi-host-key-policy", checkMethod:"post")
 }
 
-f.entry(title:_("Host key fingerprint"), field:"hostKeyFingerprint") {
+f.entry(title:_("Fingerprint"), field:"hostKeyFingerprint") {
     f.textbox(checkMethod:"post")
 }
 
-f.validateButton(title:_("Show host key"), progress:_("Asking..."), method:"queryHostKey", with:"host,port")
+f.validateButton(title:_("Show fingerprint"), progress:_("Asking..."), method:"queryHostKey", with:"host,port")
 f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"host,credentialsId,port,hostKeyPolicy,hostKeyFingerprint")

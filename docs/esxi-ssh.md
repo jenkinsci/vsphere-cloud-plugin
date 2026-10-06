@@ -76,9 +76,10 @@ To add a separate user account with similar (or constrained) privileges:
 
 ## Set up the cloud
 
-In the form of the cloud choose the **Connection type** "Standalone ESXi host over SSH", and enter:
+In the form of the cloud choose the **Connection type** "Standalone ESXi host(s) over SSH", and enter:
 
-* **vSphere Host**: the plain host name or IP address of the ESXi host, without `https://`.
+* **vSphere Host**: the plain host name or IP address of the ESXi host, without `https://` (the form warns about
+  that when the connection type is vCenter, not for this one).
   * Note: This Jenkins plugin supports file transfer operations e.g. for VM cloning
     between independent ESXi hosts which do not share a VMFS or NFS storage location.
     This requires the entered host name or IP address to be resolvable and accessible
@@ -92,34 +93,35 @@ In the form of the cloud choose the **Connection type** "Standalone ESXi host ov
   * a *Username with password*. Some hosts only take a password when it is asked for by the
     *keyboard-interactive* method, which is tried when it is not taken as such.
   * an *SSH Username with private key*, with its passphrase if it has one.
-* **Trust the host key**, and its **fingerprint**: see below.
+* **Fingerprint trust**, and the **Fingerprint** itself: see below. (The fingerprint is the short name of the
+  SSH host key of the host, as `ssh-keygen -l` shows it; it is what is shown, entered and compared here.)
 
-The **Test Connection** button checks the whole of it, without changing anything: which host key
+The **Test Connection** button checks the whole of it, without changing anything: which fingerprint
 the host presents, whether that is trusted with these settings, whether the login works, and which
 ESXi it is (such as `VMware ESXi 7.0.3 build-20036589`).
 
-### Trusting the host key
+### Trusting a host by its fingerprint
 
-So that it is the ESXi host that Jenkins talks to, and not something in between, its host key is
-checked, as `ssh` does. There are three ways to say what to trust:
+So that it is the ESXi host that Jenkins talks to, and not something in between, the fingerprint of its
+SSH host key is checked, as `ssh` does. There are three ways to say what to trust:
 
-* **Only the host key with the fingerprint given** (the default, and the safest). Nothing is
-  trusted until the fingerprint of the host's host key is entered. Press **Show host key** (it
-  asks the host which key it presents, without logging in) or **Test Connection**, check that the
+* **Only the fingerprint given** (the default, and the safest). Nothing is
+  trusted until the fingerprint of the host is entered. Press **Show fingerprint** (it
+  asks the host which one it presents, without logging in) or **Test Connection**, check that the
   fingerprint is that of the host (for example with
   `ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub` on the host), and enter it. It can be
   `SHA256:...` as `ssh-keygen -l` shows it, or an older MD5 one (`00:11:22:...`).
-* **The host key seen first.** The host key that the host presents the first time is trusted and
-  its fingerprint is remembered, in the same setting as above; from then on only that one is
-  trusted, and a changed host key is refused, with both fingerprints in the message. It is only
-  as safe as the first connection is. To trust a changed host key on purpose (a reinstalled host),
-  clear the fingerprint.
+* **The fingerprint seen first.** The fingerprint that the host presents the first time is trusted and
+  remembered, in the same setting as above; from then on only that one is
+  trusted, and a changed one is refused, with both fingerprints in the message. It is only
+  as safe as the first connection is. To trust a changed fingerprint on purpose (a reinstalled host),
+  clear the setting.
 
   **This makes Jenkins save its configuration by itself** at the first connection, to keep the
   fingerprint: the configuration of the *folder*, for a cloud that is defined in a folder,
   otherwise the configuration of Jenkins. The form warns about it, and asks for a confirmation
   when this is chosen.
-* **Any host key.** Not secure; for hosts in a network that is safe.
+* **Any fingerprint.** Not secure; for hosts in a network that is safe.
 
 A fingerprint that is given is always required to match, whichever of these is chosen.
 
@@ -420,9 +422,14 @@ jenkins:
 
 A cloud can use more than one ESXi host. The `vsHost` is the first one, and the others are listed
 as **More ESXi hosts** (`additionalHosts` in Configuration as Code). What a host does not say is
-that of the first: the port, the credentials, how its host key is trusted. Its fingerprint is always
-its own, and so is the one that "the host key seen first" remembers (the configuration is saved for
+that of the first: the port, the credentials, how its fingerprint is trusted. Its fingerprint is always
+its own, and so is the one that "the fingerprint seen first" remembers (the configuration is saved for
 it the same way).
+
+In the form, **Show fingerprint** of such a host works with the host alone. **Test Connection** of a host that has
+no credentials of its own cannot try the login, as its form cannot see the credentials of the first host, which
+the host uses then: it checks that the host answers and shows its fingerprint, and says that the login was not tried.
+Choose credentials for that host to try the login as well.
 
 ```yaml
 vsConnectionConfig:

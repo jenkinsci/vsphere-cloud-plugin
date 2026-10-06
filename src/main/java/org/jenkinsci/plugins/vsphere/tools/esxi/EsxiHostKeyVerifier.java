@@ -56,8 +56,8 @@ final class EsxiHostKeyVerifier implements ServerHostKeyVerifier {
         presented = info;
         rejection = null;
         learnedNow = false;
-        final String who = "The host key presented by " + hostname;
-        final String what = "its " + serverHostKeyAlgorithm + " key has the fingerprint " + info.getSha256();
+        final String who = "The host " + hostname;
+        final String what = "its " + serverHostKeyAlgorithm + " host key has the fingerprint " + info.getSha256();
 
         if (expectedFingerprint != null) {
             if (matches(expectedFingerprint, serverHostKey)) {
@@ -76,13 +76,14 @@ final class EsxiHostKeyVerifier implements ServerHostKeyVerifier {
                     learnedNow = first;
                     return true;
                 }
-                rejection = who + " has changed: " + what + ", but " + known + " was remembered when the host was"
-                        + " first seen. If the host was reinstalled, or its key replaced on purpose, forget the"
-                        + " remembered fingerprint to trust the new key.";
+                rejection =
+                        who + " has changed its fingerprint: " + what + ", but " + known + " was remembered when the"
+                                + " host was first seen. If the host was reinstalled, or its key replaced on purpose, clear the"
+                                + " remembered fingerprint to trust the new one.";
                 return false;
             default:
                 rejection = who + " is not trusted: " + what + ". Put that fingerprint in the settings to trust it,"
-                        + " after checking that it is the host's; or trust the host key that is seen first, or any"
+                        + " after checking that it is the host's; or trust the fingerprint that is seen first, or any"
                         + " (which is not secure).";
                 return false;
         }
@@ -92,7 +93,7 @@ final class EsxiHostKeyVerifier implements ServerHostKeyVerifier {
         return rejection != null;
     }
 
-    /** Why the host key was refused, in words that say what to do about it; null if it was not. */
+    /** Why the host was refused, in words that say what to do about it; null if it was not. */
     @CheckForNull
     String getRejection() {
         return rejection;

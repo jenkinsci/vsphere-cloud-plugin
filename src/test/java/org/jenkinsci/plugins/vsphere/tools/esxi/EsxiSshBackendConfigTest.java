@@ -134,6 +134,27 @@ class EsxiSshBackendConfigTest {
     }
 
     @Test
+    void anAdditionalHostWithNoCredentialsIsTestedForItsFingerprintOnly(JenkinsRule r) throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+
+        FormValidation result = new EsxiSshHost.DescriptorImpl()
+                .doTestConnection(null, "127.0.0.1", "", String.valueOf(server.port()), "", "");
+
+        assertThat(result.kind, is(FormValidation.Kind.WARNING));
+        assertThat(result.getMessage(), containsString("The host presents a"));
+        assertThat(result.getMessage(), containsString("The login was not tried"));
+        assertThat(result.getMessage(), containsString("those of the first host"));
+    }
+
+    @Test
+    void anAdditionalHostWithNoCredentialsThatDoesNotAnswerIsAnError(JenkinsRule r) {
+        FormValidation result = new EsxiSshHost.DescriptorImpl().doTestConnection(null, "127.0.0.1", "", "1", "", "");
+
+        assertThat(result.kind, is(FormValidation.Kind.ERROR));
+        assertThat(result.getMessage(), containsString("127.0.0.1:1"));
+    }
+
+    @Test
     void aHostThatIsDownDoesNotStopTheOthers(JenkinsRule r) throws Exception {
         server = new FakeEsxiSshServer(host, "secret", null, false);
         addPasswordCredentials("esxi-password");

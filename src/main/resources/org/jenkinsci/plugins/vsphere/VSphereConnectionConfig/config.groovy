@@ -1,6 +1,10 @@
 package org.jenkinsci.plugins.vsphere.VSphereConnectionConfig
 
 f = namespace(lib.FormTagLib)
+st = namespace("jelly:stapler")
+
+// Checks the host again when the connection type changes
+st.adjunct(includes:"org.jenkinsci.plugins.vsphere.vsHostRecheck")
 
 f.entry(title:_("vSphere Host"), field:"vsHost") {
     f.textbox()

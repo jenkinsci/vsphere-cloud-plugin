@@ -221,7 +221,8 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
     public synchronized String rememberIfAbsent(String host, int port, String fingerprint) {
         if (hostKeyFingerprint == null) {
             hostKeyFingerprint = fingerprint;
-            LOGGER.log(Level.INFO, "Remembering the host key {0} of {1}:{2}", new Object[] {fingerprint, host, port});
+            LOGGER.log(
+                    Level.INFO, "Remembering the fingerprint {0} of {1}:{2}", new Object[] {fingerprint, host, port});
             saveWhatHoldsThisConfiguration(host);
         }
         return hostKeyFingerprint;
@@ -257,7 +258,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             Jenkins.get().save();
         } catch (IOException e) {
             // It is in use for as long as this configuration lives, and saved with the next change of it
-            LOGGER.log(Level.WARNING, "Could not save the host key that was remembered for " + host, e);
+            LOGGER.log(Level.WARNING, "Could not save the fingerprint that was remembered for " + host, e);
         }
     }
 
@@ -265,11 +266,11 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
 
     static ListBoxModel hostKeyPolicyItems() {
         final ListBoxModel items = new ListBoxModel();
-        items.add("Only the host key with the fingerprint below", EsxiHostKeyPolicy.FINGERPRINT.name());
+        items.add("Only the fingerprint given below", EsxiHostKeyPolicy.FINGERPRINT.name());
         items.add(
-                "The host key seen first (remembered in the fingerprint below, and required from then on)",
+                "The fingerprint seen first (remembered below, and required from then on)",
                 EsxiHostKeyPolicy.TRUST_FIRST_USE.name());
-        items.add("Any host key (not secure)", EsxiHostKeyPolicy.ACCEPT_ANY.name());
+        items.add("Any fingerprint (not secure)", EsxiHostKeyPolicy.ACCEPT_ANY.name());
         return items;
     }
 
@@ -301,8 +302,9 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             return EsxiHostKeyPolicy.ACCEPT_ANY.name().equals(hostKeyPolicy)
                             || EsxiHostKeyPolicy.TRUST_FIRST_USE.name().equals(hostKeyPolicy)
                     ? FormValidation.ok()
-                    : FormValidation.warning("Without a fingerprint, no host key is trusted: use \"Test connection\""
-                            + " to see which one the host presents");
+                    : FormValidation.warning(
+                            "Without a fingerprint, no host is trusted: use \"Show fingerprint\" or \"Test Connection\""
+                                    + " to see which one the host presents");
         }
         if (!fingerprint.startsWith("SHA256:") && !fingerprint.matches("(?i)(MD5:)?([0-9a-f]{2}:){15}[0-9a-f]{2}")) {
             return FormValidation.warning(
@@ -503,7 +505,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
 
         @Override
         public String getDisplayName() {
-            return "Standalone ESXi host over SSH";
+            return "Standalone ESXi host(s) over SSH";
         }
 
         @RequirePOST
@@ -577,7 +579,7 @@ public class EsxiSshBackendConfig extends VSphereBackendConfig implements EsxiHo
             }
             if (EsxiHostKeyPolicy.TRUST_FIRST_USE.name().equals(value)) {
                 return FormValidation.warning("Warning: at the first connection, Jenkins saves its configuration by"
-                        + " itself to remember the host key: the one of the folder if this cloud is in a folder,"
+                        + " itself to remember the fingerprint: the one of the folder if this cloud is in a folder,"
                         + " otherwise the one of Jenkins. And it is only as safe as that first connection is.");
             }
             return FormValidation.ok();

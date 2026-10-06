@@ -4,7 +4,7 @@ f = namespace(lib.FormTagLib)
 c = namespace(lib.CredentialsTagLib)
 st = namespace("jelly:stapler")
 
-// Asks for a confirmation when the host key that is seen first is chosen to be trusted
+// Asks for a confirmation when the fingerprint that is seen first is chosen to be trusted
 st.adjunct(includes:"org.jenkinsci.plugins.vsphere.esxiFirstUse")
 
 f.entry(title:_("SSH Port"), field:"port") {
@@ -15,11 +15,11 @@ f.entry(title:_("Credentials"), field:"credentialsId") {
     c.select()
 }
 
-f.entry(title:_("Trust the host key"), field:"hostKeyPolicy") {
+f.entry(title:_("Fingerprint trust"), field:"hostKeyPolicy") {
     f.select(clazz:"esxi-host-key-policy", checkMethod:"post")
 }
 
-f.entry(title:_("Host key fingerprint"), field:"hostKeyFingerprint") {
+f.entry(title:_("Fingerprint"), field:"hostKeyFingerprint") {
     f.textbox(checkMethod:"post")
 }
 
@@ -48,6 +48,7 @@ f.advanced {
     }
 }
 
-// "../vsHost" is the host, which is a setting of the connection configuration that this is part of
-f.validateButton(title:_("Show host key"), progress:_("Asking..."), method:"queryHostKey", with:"../vsHost,port,connectTimeoutSeconds")
-f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"../vsHost,credentialsId,port,hostKeyPolicy,hostKeyFingerprint,connectTimeoutSeconds")
+// "vsHost" is the host, which is a setting of the connection configuration that this is part of (and is found by
+// its plain name: the "../vsHost" form is not, from inside the section of a connection type)
+f.validateButton(title:_("Show fingerprint"), progress:_("Asking..."), method:"queryHostKey", with:"vsHost,port,connectTimeoutSeconds")
+f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,credentialsId,port,hostKeyPolicy,hostKeyFingerprint,connectTimeoutSeconds")
