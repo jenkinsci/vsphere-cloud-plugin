@@ -50,10 +50,66 @@ public class ReconfigureDisk extends ReconfigureStep {
     private final String diskSize;
     private final String datastore;
     private DeviceAction deviceAction = DeviceAction.ADD;
+    private DiskBus diskBus = DiskBus.SCSI;
     private String deviceLabel;
     private String deviceNumber;
     private static final Pattern filenamePattern = Pattern.compile("^\\[[^]]*\\] (.*)$");
-    private static final Pattern controllerMonikerPattern = Pattern.compile("^(SCSI|IDE)\\((\\d+):(\\d+)\\)$");
+    private static final Pattern controllerMonikerPattern =
+            Pattern.compile("^(SCSI|IDE|SATA|NVME)\\((\\d+):(\\d+)\\)$", Pattern.CASE_INSENSITIVE);
+
+    /** The kinds of controller that a new disk can be put on. */
+    public enum DiskBus {
+        SCSI("SCSI", 16, 7, true),
+        IDE("IDE", 2, -1, false),
+        SATA("SATA", 30, -1, true),
+        NVME("NVMe", 15, -1, true);
+
+        private final String label;
+        private final int units;
+        private final int reservedUnit;
+        private final boolean controllerCanBeAdded;
+
+        DiskBus(String label, int units, int reservedUnit, boolean controllerCanBeAdded) {
+            this.label = label;
+            this.units = units;
+            this.reservedUnit = reservedUnit;
+            this.controllerCanBeAdded = controllerCanBeAdded;
+        }
+
+        public String getLabel() {
+            return label;
+        }
+
+        /** Whether the device is a controller of this kind. */
+        boolean isControllerOf(VirtualDevice device) {
+            switch (this) {
+                case SCSI:
+                    return device instanceof VirtualSCSIController;
+                case IDE:
+                    return device instanceof VirtualIDEController;
+                case SATA:
+                    return device instanceof VirtualSATAController;
+                default:
+                    return device instanceof VirtualNVMEController;
+            }
+        }
+
+        /** A new controller of this kind. */
+        VirtualController newController() {
+            switch (this) {
+                case SCSI:
+                    final VirtualLsiLogicController scsi = new VirtualLsiLogicController();
+                    scsi.setSharedBus(VirtualSCSISharing.noSharing);
+                    return scsi;
+                case SATA:
+                    return new VirtualAHCIController();
+                case NVME:
+                    return new VirtualNVMEController();
+                default:
+                    throw new IllegalStateException("A VM has its IDE controllers always");
+            }
+        }
+    }
 
     @DataBoundConstructor
     public ReconfigureDisk(String diskSize, String datastore) throws VSphereException {
@@ -85,6 +141,16 @@ public class ReconfigureDisk extends ReconfigureStep {
     @DataBoundSetter
     public void setDeviceAction(DeviceAction deviceAction) {
         this.deviceAction = deviceAction == null ? DeviceAction.ADD : deviceAction;
+    }
+
+    /** The kind of controller that a new disk is put on (when the action is to add one). */
+    public DiskBus getDiskBus() {
+        return diskBus;
+    }
+
+    @DataBoundSetter
+    public void setDiskBus(DiskBus diskBus) {
+        this.diskBus = diskBus == null ? DiskBus.SCSI : diskBus;
     }
 
     public String getDeviceLabel() {
@@ -181,7 +247,9 @@ public class ReconfigureDisk extends ReconfigureStep {
         VirtualDeviceConfigSpec diskSpec = new VirtualDeviceConfigSpec();
         VirtualDisk disk = new VirtualDisk();
         VirtualDiskFlatVer2BackingInfo diskfileBacking = new VirtualDiskFlatVer2BackingInfo();
-        VirtualSCSIController scsiController = null;
+        VirtualController controller = null;
+        int controllerUnit = -1;
+        final VirtualDevice[] devices = vm.getConfig().getHardware().getDevice();
 
         int key = 0;
         int unitNumber;
@@ -190,11 +258,14 @@ public class ReconfigureDisk extends ReconfigureStep {
         String diskMode = "persistent";
         HashMap<String, Boolean> diskNames = new HashMap<String, Boolean>();
 
-        for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
-            if (vmDevice instanceof VirtualSCSIController) {
-                int[] list = ((VirtualSCSIController) vmDevice).getDevice();
-                if (scsiController == null && (list == null || list.length < 15)) {
-                    scsiController = (VirtualSCSIController) vmDevice;
+        for (VirtualDevice vmDevice : devices) {
+            if (diskBus.isControllerOf(vmDevice)) {
+                if (controller == null) {
+                    final int free = selectUnitNumber(devices, (VirtualController) vmDevice, diskBus);
+                    if (free >= 0) {
+                        controller = (VirtualController) vmDevice;
+                        controllerUnit = free;
+                    }
                 }
             } else if (vmDevice instanceof VirtualDisk) {
                 if (vmDevice.getBacking() instanceof VirtualDeviceFileBackingInfo) {
@@ -215,17 +286,21 @@ public class ReconfigureDisk extends ReconfigureStep {
 
         VSphereLogger.vsLogger(jLogger, String.format("Preparing to add disk %s of %dGB", diskName, diskSize));
 
-        if (scsiController == null) {
-            if (retry > 1) {
-                throw new VSphereException("Unable to add a SCSI Controller");
+        if (controller == null) {
+            if (!diskBus.controllerCanBeAdded) {
+                throw new VSphereException("The " + diskBus.getLabel()
+                        + " controllers of the VM have no free unit, and a VM cannot have more of them");
             }
-            VSphereLogger.vsLogger(jLogger, String.format("Adding a SCSI Controller"));
-            addSCSIController(vm);
+            if (retry > 1) {
+                throw new VSphereException("Unable to add a " + diskBus.getLabel() + " Controller");
+            }
+            VSphereLogger.vsLogger(jLogger, String.format("Adding a %s Controller", diskBus.getLabel()));
+            addController(vm, diskBus);
             return createAddDiskConfigSpec(vm, diskSize, label, deviceNumber, jLogger, retry + 1);
         }
 
-        unitNumber = selectUnitNumber(vm, scsiController);
-        key = scsiController.getKey();
+        unitNumber = controllerUnit;
+        key = controller.getKey();
 
         VSphereLogger.vsLogger(jLogger, String.format("Controller key: %d Unit Number %d", key, unitNumber));
 
@@ -337,8 +412,8 @@ public class ReconfigureDisk extends ReconfigureStep {
     /**
      * Finds an existing disk. Disks are matched by any of: their vSphere device label (e.g. "Hard disk 1"),
      * their backing file's base name (e.g. "kube15_1", derived from "[datastore1] kube15/kube15_1.vmdk"),
-     * or a controller moniker matching how vSphere itself displays the disk's address, e.g. "SCSI(0:2)"
-     * or "IDE(1:0)" (controller bus number : unit number). If no label is given, {@code allowAutoSelectSingleDisk}
+     * or a controller moniker matching how vSphere itself displays the disk's address, e.g. "SCSI(0:2)",
+     * "IDE(1:0)", "SATA(0:1)" or "NVME(0:0)" (controller bus number : unit number). If no label is given, {@code allowAutoSelectSingleDisk}
      * controls whether a VM with exactly one disk may use it without a label.
      */
     VirtualDisk findDiskByLabel(VirtualDevice[] devices, String vmName, String label, boolean allowAutoSelectSingleDisk)
@@ -397,6 +472,15 @@ public class ReconfigureDisk extends ReconfigureStep {
         return match;
     }
 
+    private static DiskBus busNamed(String name) {
+        for (DiskBus bus : DiskBus.values()) {
+            if (bus.name().equalsIgnoreCase(name)) {
+                return bus;
+            }
+        }
+        return null;
+    }
+
     boolean matchesControllerMoniker(
             VirtualDevice[] devices, VirtualDisk disk, String controllerType, int busNumber, int unitNumber) {
         if (disk.getUnitNumber() == null || disk.getUnitNumber() != unitNumber || disk.getControllerKey() == null) {
@@ -406,13 +490,10 @@ public class ReconfigureDisk extends ReconfigureStep {
             if (!(vmDevice instanceof VirtualController) || vmDevice.getKey() != disk.getControllerKey()) {
                 continue;
             }
-            if ("SCSI".equals(controllerType) && vmDevice instanceof VirtualSCSIController) {
-                return ((VirtualController) vmDevice).getBusNumber() == busNumber;
-            }
-            if ("IDE".equals(controllerType) && vmDevice instanceof VirtualIDEController) {
-                return ((VirtualController) vmDevice).getBusNumber() == busNumber;
-            }
-            return false;
+            final DiskBus bus = busNamed(controllerType);
+            return bus != null
+                    && bus.isControllerOf(vmDevice)
+                    && ((VirtualController) vmDevice).getBusNumber() == busNumber;
         }
         return false;
     }
@@ -455,17 +536,16 @@ public class ReconfigureDisk extends ReconfigureStep {
         return baseName;
     }
 
-    private VirtualLsiLogicController addSCSIController(VirtualMachine vm) throws Exception {
+    private VirtualController addController(VirtualMachine vm, DiskBus bus) throws Exception {
         VirtualMachineConfigInfo vmConfig = vm.getConfig();
         VirtualPCIController pci = null;
-        Set<Integer> scsiBuses = new HashSet<Integer>();
+        Set<Integer> buses = new HashSet<Integer>();
 
         for (VirtualDevice vmDevice : vmConfig.getHardware().getDevice()) {
             if (vmDevice instanceof VirtualPCIController) {
                 pci = (VirtualPCIController) vmDevice;
-            } else if (vmDevice instanceof VirtualSCSIController) {
-                VirtualSCSIController ctrl = (VirtualSCSIController) vmDevice;
-                scsiBuses.add(ctrl.getBusNumber());
+            } else if (bus.isControllerOf(vmDevice)) {
+                buses.add(((VirtualController) vmDevice).getBusNumber());
             }
         }
         if (pci == null) {
@@ -474,29 +554,30 @@ public class ReconfigureDisk extends ReconfigureStep {
         VirtualMachineConfigSpec vmSpec = new VirtualMachineConfigSpec();
         VirtualDeviceConfigSpec deviceSpec = new VirtualDeviceConfigSpec();
         deviceSpec.setOperation(VirtualDeviceConfigSpecOperation.add);
-        VirtualLsiLogicController scsiCtrl = new VirtualLsiLogicController();
-        scsiCtrl.setControllerKey(pci.getKey());
-        scsiCtrl.setSharedBus(VirtualSCSISharing.noSharing);
-        for (int i = 0; ; ++i) {
-            if (!scsiBuses.contains(Integer.valueOf(i))) {
-                scsiCtrl.setBusNumber(i);
-                break;
-            }
+        VirtualController controller = bus.newController();
+        controller.setControllerKey(pci.getKey());
+        int number = 0;
+        while (buses.contains(Integer.valueOf(number))) {
+            number++;
         }
-        deviceSpec.setDevice(scsiCtrl);
+        if (number >= 4) {
+            throw new VSphereException("A VM has no more than 4 " + bus.getLabel() + " controllers");
+        }
+        controller.setBusNumber(number);
+        deviceSpec.setDevice(controller);
         vmSpec.setDeviceChange(new VirtualDeviceConfigSpec[] {deviceSpec});
         Task task = vm.reconfigVM_Task(vmSpec);
         task.waitForTask();
-        return scsiCtrl;
+        return controller;
     }
 
-    private int selectUnitNumber(VirtualMachine vm, VirtualController controller) {
+    /** The lowest unit of the controller that has nothing on it, or -1 if there is none. */
+    private int selectUnitNumber(VirtualDevice[] devices, VirtualController controller, DiskBus bus) {
         HashMap<Integer, Boolean> map = new HashMap<Integer, Boolean>();
-        int unitNumber = 0;
-
-        map.put(7, true); // Unit number 7 is reserved for the controller
-
-        for (VirtualDevice vmDevice : vm.getConfig().getHardware().getDevice()) {
+        if (bus.reservedUnit >= 0) {
+            map.put(bus.reservedUnit, true); // reserved for the controller itself
+        }
+        for (VirtualDevice vmDevice : devices) {
             // getControllerKey() is optional in the API, so compare from the controller's own key to keep a
             // device without one from unboxing null
             if (vmDevice.getUnitNumber() != null
@@ -505,10 +586,12 @@ public class ReconfigureDisk extends ReconfigureStep {
                 map.put(vmDevice.getUnitNumber(), true);
             }
         }
-        while (map.containsKey(unitNumber)) {
-            unitNumber++;
+        for (int unit = 0; unit < bus.units; unit++) {
+            if (!map.containsKey(unit)) {
+                return unit;
+            }
         }
-        return unitNumber;
+        return -1;
     }
 
     private String selectDatastore(int sizeInKB, PrintStream jLogger) throws Exception {

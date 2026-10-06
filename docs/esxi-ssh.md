@@ -354,8 +354,10 @@ powered off** (a running VM is refused, with a message saying so).
   (`scsiN`, `ideN`, `sataN`, `nvmeN`), with the units that the bus has (SCSI 0 to 15 without 7, IDE
   0 and 1, SATA 0 to 29, NVMe 0 to 14). A VM always has its two IDE controllers: they cannot be added
   or removed, only disks put on them, and the host does not power on a VM with an IDE slave (unit 1) and
-  no master (unit 0), so that is refused. The disk step of the plugin adds a SCSI controller by itself
-  when the VM has none, and makes SCSI disks.
+  no master (unit 0), so that is refused. The disk step of the plugin has a **Disk bus** (SCSI, the default, IDE, SATA or NVMe), on vCenter as on
+  a host: it uses the first controller of that kind with a free unit, and adds a SCSI, SATA or NVMe controller by
+  itself when there is none (it cannot for IDE, which has two controllers of two units). Disks are found by
+  monikers such as `SATA(0:1)` or `NVME(0:0)` too.
 * **Not available**: distributed switches, and devices other than network adapters, disks and their
   controllers.
 * There is no command to consolidate disks apart from removing snapshots, which consolidates what

@@ -1,0 +1,7 @@
+<div>
+  The kind of controller that a new disk is put on (when the action is Add; default SCSI). The first controller of
+  that kind that has a free unit is used. If there is none, a SCSI, SATA or NVMe controller is added; a VM has two
+  IDE controllers always, with two units each, which cannot be added to, so the step fails if they are full.
+  An IDE disk is put on the first free unit, the master (unit 0) before the slave, as a host will not start a VM
+  that has a slave and no master.
+</div>

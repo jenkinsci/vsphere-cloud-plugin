@@ -378,6 +378,79 @@ class EsxiDiskReconfigureTest {
 
     // -- the other buses: IDE, SATA, NVMe, and a second SCSI controller --
 
+    private static ReconfigureDisk diskOn(ReconfigureDisk.DiskBus bus) throws Exception {
+        final ReconfigureDisk step = new ReconfigureDisk("1", "datastore1");
+        step.setDiskBus(bus);
+        return step;
+    }
+
+    @Test
+    void theStepPutsADiskOnTheBusThatIsAskedFor() throws Exception {
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.IDE));
+        assertThat(vmx().get("ide0:0.fileName"), is("web_1.vmdk"));
+        assertThat(vmx().get("ide0:0.deviceType"), is("ata-hardDisk"));
+
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.IDE));
+        assertThat(vmx().get("ide0:1.fileName"), is("web_2.vmdk"));
+    }
+
+    @Test
+    void theStepAddsASataControllerWhenThereIsNoneAndThenUsesIt() throws Exception {
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.SATA));
+        assertThat(vmx().get("sata0.present"), is("TRUE"));
+        assertThat(vmx().get("sata0:0.fileName"), is("web_1.vmdk"));
+
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.SATA));
+        assertThat(vmx().get("sata0:1.fileName"), is("web_2.vmdk"));
+        assertThat(vmx().get("sata1.present"), is(nullValue()));
+    }
+
+    @Test
+    void theStepAddsAnNvmeControllerWhenThereIsNone() throws Exception {
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.NVME));
+
+        assertThat(vmx().get("nvme0.present"), is("TRUE"));
+        assertThat(vmx().get("nvme0:0.fileName"), is("web_1.vmdk"));
+    }
+
+    @Test
+    void theStepStillDefaultsToScsiAndSkipsTheReservedUnit() throws Exception {
+        final VmxFile with = vmx();
+        for (int unit = 1; unit < 7; unit++) {
+            with.put("scsi0:" + unit + ".present", "TRUE");
+            with.put("scsi0:" + unit + ".fileName", "x" + unit + ".vmdk");
+        }
+        host.addFile(VMX_PATH, with.toString());
+
+        reconfigure(new ReconfigureDisk("1", "datastore1"));
+
+        assertThat(vmx().get("scsi0:8.fileName"), is("web_1.vmdk"));
+        assertThat(vmx().get("scsi0:7.fileName"), is(nullValue()));
+    }
+
+    @Test
+    void theStepFailsWhenTheTwoIdeControllersAreFull() throws Exception {
+        final VmxFile with = vmx();
+        for (String unit : new String[] {"ide0:0", "ide0:1", "ide1:0", "ide1:1"}) {
+            with.put(unit + ".present", "TRUE");
+            with.put(unit + ".fileName", unit.replace(':', '_') + ".vmdk");
+        }
+        host.addFile(VMX_PATH, with.toString());
+
+        final Exception e = assertThrows(Exception.class, () -> reconfigure(diskOn(ReconfigureDisk.DiskBus.IDE)));
+
+        assertThat(String.valueOf(e.getMessage()), containsString("have no free unit"));
+    }
+
+    @Test
+    void theStepFindsADiskOnSataByItsMoniker() throws Exception {
+        reconfigure(diskOn(ReconfigureDisk.DiskBus.SATA));
+
+        reconfigure(disk(DeviceAction.EDIT, "2", "SATA(0:0)"));
+
+        assertThat(host.file(FOLDER + "/web_1.vmdk"), containsString("RW 4194304 VMFS"));
+    }
+
     private static VirtualDisk newDisk(int controllerKey, Integer unit, String file, long kb) {
         final VirtualDiskFlatVer2BackingInfo backing = new VirtualDiskFlatVer2BackingInfo();
         backing.setFileName(file);
