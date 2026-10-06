@@ -31,14 +31,14 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 
 ## What can be done this way
 
-| Operation                                                    | ESXi over SSH |
-|--------------------------------------------------------------|---------------|
+| Operation                                                     | ESXi over SSH |
+|---------------------------------------------------------------|---------------|
 | Find VMs by name, count them, read their hardware and state   | yes           |
 | Power on, power off (also gracefully), suspend                | yes           |
 | IP address of a VM (needs VMware Tools in it)                 | yes           |
 | Take a snapshot                                               | yes           |
 | Delete a VM                                                   | yes           |
-| Clone and deploy VMs, linked or full ([see below](#cloning))   | yes           |
+| Clone and deploy VMs, linked or full ([see below](#cloning))  | yes           |
 | Reconfigure CPUs, memory, reservations and limits, annotation, extra configuration, network adapters, disks and their controllers (SCSI, SATA, NVMe; IDE for disks); rename a VM ([see below](#reconfiguring)) | yes (VM powered off) |
 | List datastores and resource pools, tell which ones hold a VM, tell whether a name is the host's own | yes |
 | Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
@@ -52,20 +52,41 @@ What is not available says so with a message, when it is used.
 
 SSH is disabled on an ESXi host by default, and has to be enabled for this to work:
 
-1. In the web interface of the host, go to **Host** &rarr; **Manage** &rarr; **Services**.
+1. In the web-UI interface of the host, go to **Host** / **Manage** / **Services**.
 2. Select **TSM-SSH**.
-3. In its **Actions** menu choose **Policy** &rarr; **Start and stop with host**, so that SSH is
-   available again after the host has been restarted.
+3. In its **Actions** menu (or right mouse button context menu on the line) choose
+   **Policy** / **Start and stop with host**, so that SSH is available again after
+   the host has been restarted.
 4. In the same menu choose **Start**, so that it is available now.
 
-The user that Jenkins logs in as has to be allowed to log in over SSH and to run `vim-cmd`, which
-normally means `root`.
+The user that Jenkins logs in as has to be allowed to log in over SSH and to run
+`vim-cmd`, `esxcli` and other commands, which normally means `root`.
+
+To add a separate user account with similar (or constrained) privileges:
+
+1. In the web-UI interface of the host, go to **Host** / **Manage** / **Security & users**.
+2. Press **Add user** and enter at least the fields marked required: **User name**,
+   **Password** and its confirmation, as well as **Enable shell access** checkbox.
+3. In the main **Host** page open the **Actions** menu (or right mouse button
+   context menu on the Host line in left Navigator panel) and select **Permissions**.
+4. **Add user** (for a role on this host), enter the name and either select the
+   individual permissions from the list below, or a predefined role from the
+   drop-down to the right, e.g. "Administrator".
+5. Press **Add user** button below to confirm, and **Close** the permissions window.
 
 ## Set up the cloud
 
 In the form of the cloud choose the **Connection type** "Standalone ESXi host over SSH", and enter:
 
 * **vSphere Host**: the plain host name or IP address of the ESXi host, without `https://`.
+  * Note: This Jenkins plugin supports file transfer operations e.g. for VM cloning
+    between independent ESXi hosts which do not share a VMFS or NFS storage location.
+    This requires the entered host name or IP address to be resolvable and accessible
+    by the ESXi host machines doing such communications. The firewall permissions for
+    outgoing (SSH Client) traffic can be persistently enabled by the administrator,
+    or would be raised and shut by the plugin during transfers. Alternatively, the
+    Jenkins controller that this plugin runs on may be used to relay information
+    between ESXi hosts which can not communicate directly.
 * **SSH Port**: if it is not 22.
 * **Credentials**: either kind of credential that can log in over SSH:
   * a *Username with password*. Some hosts only take a password when it is asked for by the
