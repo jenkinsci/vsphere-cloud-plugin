@@ -256,7 +256,7 @@ class TrileadEsxiShellTest {
         assertThat(e.getMessage(), containsString("has changed its fingerprint"));
         assertThat(e.getMessage(), containsString(server.hostKeySha256()));
         assertThat(e.getMessage(), containsString("SHA256:somethingElseThatWasSeenBefore"));
-        assertThat(e.getMessage(), containsString("forget the remembered fingerprint"));
+        assertThat(e.getMessage(), containsString("clear the remembered fingerprint"));
         // and what was remembered is not replaced by what is seen now
         assertThat(store.get("127.0.0.1", server.port()), is("SHA256:somethingElseThatWasSeenBefore"));
     }
