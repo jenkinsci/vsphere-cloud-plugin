@@ -99,6 +99,10 @@ public class PowerOn extends VSphereBuildStep {
             expandedVm = env.expand(vm);
         }
 
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Powering on VM " + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm)
+                        + "...");
         long startTimeNanos = System.nanoTime();
         vsphere.startVm(expandedVm, timeoutInSeconds);
         long elapsedTime = TimeUnit.SECONDS.convert(System.nanoTime() - startTimeNanos, TimeUnit.NANOSECONDS);
@@ -108,8 +112,8 @@ public class PowerOn extends VSphereBuildStep {
         IP = vsphere.getIp(vsphere.getVmByName(expandedVm), secondsToWaitForIp);
 
         if (IP == null) {
-            final String message =
-                    "Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for \"" + expandedVm + "\"";
+            final String message = "Timed out after waiting " + secondsToWaitForIp + " seconds to get IP for VM "
+                    + VSphereLogger.quoted(expandedVm);
             if (failOnNoAddress) {
                 throw new VSphereException(message);
             }
@@ -118,7 +122,8 @@ public class PowerOn extends VSphereBuildStep {
             return true;
         }
 
-        VSphereLogger.vsLogger(jLogger, "Successfully retrieved IP for \"" + expandedVm + "\" : " + IP);
+        VSphereLogger.vsLogger(
+                jLogger, "Successfully retrieved IP for VM " + VSphereLogger.quoted(expandedVm) + ": " + IP);
 
         // useful to tell user about the environment variable
         VSphereLogger.vsLogger(jLogger, "Exposing " + IP + " as environment variable VSPHERE_IP");

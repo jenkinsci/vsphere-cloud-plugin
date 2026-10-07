@@ -153,7 +153,7 @@ public abstract class ReconfigureStep extends AbstractDescribableImpl<Reconfigur
             }
             VSphereLogger.vsLogger(
                     log,
-                    "vCenter refused the reconfiguration (" + first.getMessage()
+                    "The server refused the reconfiguration (" + first.getMessage()
                             + "); retrying once without declaring the MAC address as a manual one...");
             final VirtualMachineConfigSpec retrySpec = new VirtualMachineConfigSpec();
             for (ReconfigureStep step : retrySteps) {

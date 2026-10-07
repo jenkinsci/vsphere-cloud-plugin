@@ -69,6 +69,16 @@ public class VSphereConnectionPool {
     private final int sessionMaxAgeSecs;
     private final int sessionMaxUses;
     private final int idleTimeoutSecs;
+    private final Connector connector;
+    private final long verifyAfterIdleMs;
+
+    /** Makes the connection that the pool holds. */
+    interface Connector {
+        VSphere connect(VSphereConnectionConfig config) throws VSphereException;
+    }
+
+    /** How long a connection that has to be checked when it is handed out may have gone unused before it is. */
+    static final long VERIFY_AFTER_IDLE_MS = 10_000L;
 
     /* Guarded by this */
     private VSphere connection;
@@ -105,6 +115,28 @@ public class VSphereConnectionPool {
             int sessionMaxAgeSecs,
             int sessionMaxUses,
             int idleTimeoutSecs) {
+        this(
+                config,
+                owner,
+                healthCheckIntervalSecs,
+                sessionMaxAgeSecs,
+                sessionMaxUses,
+                idleTimeoutSecs,
+                VSphere::connect,
+                VERIFY_AFTER_IDLE_MS);
+    }
+
+    VSphereConnectionPool(
+            @NonNull VSphereConnectionConfig config,
+            @CheckForNull Cloud owner,
+            int healthCheckIntervalSecs,
+            int sessionMaxAgeSecs,
+            int sessionMaxUses,
+            int idleTimeoutSecs,
+            Connector connector,
+            long verifyAfterIdleMs) {
+        this.connector = connector;
+        this.verifyAfterIdleMs = verifyAfterIdleMs;
         this.config = config;
         this.owner = owner == null ? null : new WeakReference<>(owner);
         this.healthCheckIntervalSecs = Math.max(0, healthCheckIntervalSecs);
@@ -228,11 +260,22 @@ public class VSphereConnectionPool {
                     + (ageExpired ? "max age reached" : "max uses reached"));
             disconnectQuietly();
             connect();
+            return;
+        }
+        // A connection that is only a connection (SSH) may have died while it was not used, which is found out by
+        // using it: so it is, before it is handed out, if it was not used for a while
+        if (connection.shouldBeCheckedWhenAcquired()
+                && System.currentTimeMillis() - lastAcquiredAtMs > verifyAfterIdleMs
+                && !connection.isSessionAlive()) {
+            LOGGER.info("vSphere connection pool [" + config.getVsHost()
+                    + "]: the session does not answer after being idle - reconnecting");
+            disconnectQuietly();
+            connect();
         }
     }
 
     private void connect() throws VSphereException {
-        connection = VSphere.connect(config);
+        connection = connector.connect(config);
         connection.markAsPooled(this);
         connectionCreatedAtMs = System.currentTimeMillis();
         lastAcquiredAtMs = connectionCreatedAtMs;

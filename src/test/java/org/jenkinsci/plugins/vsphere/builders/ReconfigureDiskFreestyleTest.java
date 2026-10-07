@@ -6,9 +6,9 @@ import static org.hamcrest.Matchers.is;
 
 import hudson.model.FreeStyleProject;
 import java.util.List;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStepContainer;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 import org.jvnet.hudson.test.JenkinsRule;

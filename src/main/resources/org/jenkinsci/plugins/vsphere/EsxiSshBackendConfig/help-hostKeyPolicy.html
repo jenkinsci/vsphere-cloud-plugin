@@ -1,0 +1,23 @@
+<div>
+  Which fingerprint to trust, so that it is the ESXi host that is talked to, and not something in between.
+  <ul>
+    <li>
+      <b>Only the fingerprint given below</b> (the default, and the safest): nothing is trusted until the
+      fingerprint of the host is given. <i>Show fingerprint</i> and <i>Test Connection</i> show which one the host
+      presents now, to put in the setting after checking that it is the host's own (for example on its console, or
+      with <code>ssh-keygen -l -f /etc/ssh/ssh_host_rsa_key.pub</code> there).
+    </li>
+    <li>
+      <b>The fingerprint seen first</b>: the fingerprint that is presented the first time is trusted, and remembered
+      in the setting below; from then on only it is. A changed fingerprint (a reinstalled host, or something in
+      between) is refused, until the setting is cleared. Only as safe as the first connection is.
+      <p>
+        <b>This makes Jenkins save its configuration by itself</b> at the first connection, to keep the
+        fingerprint: the configuration of the folder, for a cloud that is defined in a folder, otherwise the
+        configuration of Jenkins.
+      </p>
+    </li>
+    <li><b>Any fingerprint</b>: not secure; for hosts in a network that is safe.</li>
+  </ul>
+  A fingerprint that is given always has to match, whichever is chosen here.
+</div>

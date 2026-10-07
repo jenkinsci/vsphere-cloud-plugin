@@ -72,7 +72,6 @@ public class ConvertToTemplate extends VSphereBuildStep {
     private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
             throws VSphereException {
         PrintStream jLogger = listener.getLogger();
-        VSphereLogger.vsLogger(jLogger, "Converting VM to template. Please wait ...");
         String expandedVm = vm;
         EnvVars env;
         try {
@@ -89,8 +88,12 @@ public class ConvertToTemplate extends VSphereBuildStep {
             expandedVm = env.expand(vm);
         }
 
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Converting VM " + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm)
+                        + " to a template. Please wait ...");
         vsphere.markAsTemplate(expandedVm, df.format(date), force);
-        VSphereLogger.vsLogger(jLogger, "\"" + expandedVm + "\" is now a template.");
+        VSphereLogger.vsLogger(jLogger, "VM " + VSphereLogger.quoted(expandedVm) + " is now a template");
 
         return true;
     }

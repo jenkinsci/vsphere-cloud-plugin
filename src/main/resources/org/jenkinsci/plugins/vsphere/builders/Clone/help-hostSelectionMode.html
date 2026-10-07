@@ -38,7 +38,20 @@
       DRS, so that Jenkins agent placement follows the same policy as everything else in
       the cluster.
     </li>
+    <li>
+      <b>Fewest running VMs</b> - for standalone ESXi hosts over SSH only (not offered, and
+      of no use, for a vCenter): the host with the fewest VMs that are powered on, then the
+      fewest that are registered, then the first as configured. DRS, in turn, is not offered
+      for standalone ESXi hosts, which have none.
+    </li>
   </ul>
+  <p>
+  With standalone ESXi hosts over SSH, there is no vCenter to decide: if no mode is set
+  (or it is "Explicitly none"), the clone is made on the host where the source VM is
+  registered, if that host can make it, else on the host with the fewest VMs that are on.
+  "Least loaded host" and "DRS recommendation" both rank the hosts by their CPU and
+  memory in use.
+  </p>
   <p>
   Either automatic mode needs a cluster to search: if "Cluster" above is left blank, this
   plugin will use the only cluster in the vCenter's inventory if there is exactly one:

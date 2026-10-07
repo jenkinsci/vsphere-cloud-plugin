@@ -135,19 +135,24 @@ public class PowerOff extends VSphereBuildStep implements SimpleBuildStep {
             expandedVm = env.expand(vm);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Shutting Down VM " + expandedVm + "...");
         VirtualMachine vsphereVm = vsphere.getVmByName(expandedVm);
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Shutting down VM " + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, vsphereVm)
+                        + "...");
         if (vsphereVm == null && !ignoreIfNotExists) {
-            throw new RuntimeException(Messages.validation_notFound("vm " + expandedVm));
+            throw new RuntimeException(Messages.validation_notFound("VM " + VSphereLogger.quoted(expandedVm)));
         }
 
         if (vsphereVm != null) {
             vsphere.powerOffVm(vsphereVm, evenIfSuspended, shutdownGracefully ? getGracefulShutdownTimeout() : 0);
 
-            VSphereLogger.vsLogger(jLogger, "Successfully shutdown \"" + expandedVm + "\"");
+            VSphereLogger.vsLogger(jLogger, "Successfully shut down VM " + VSphereLogger.quoted(expandedVm));
         } else {
             VSphereLogger.vsLogger(
-                    jLogger, "Does not exist, BUT we can ignore it for shutdown goals! \"" + expandedVm + "\"");
+                    jLogger,
+                    "VM " + VSphereLogger.quoted(expandedVm)
+                            + " does not exist, but that can be ignored for a shutdown");
         }
 
         return true;

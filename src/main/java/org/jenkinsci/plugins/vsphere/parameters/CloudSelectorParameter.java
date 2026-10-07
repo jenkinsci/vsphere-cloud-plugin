@@ -10,7 +10,7 @@ import hudson.model.StringParameterValue;
 import hudson.util.ListBoxModel;
 import java.util.List;
 import net.sf.json.JSONObject;
-import org.jenkinsci.plugins.vSphereCloud;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.StaplerRequest2;

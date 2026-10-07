@@ -37,7 +37,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
@@ -46,6 +45,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -275,7 +275,7 @@ public class Clone extends VSphereBuildStep {
     /**
      * For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain
      * string. Blank means "inherit the cloud's default candidate list" (see {@link
-     * org.jenkinsci.plugins.vSphereCloud#getHostSelectionCandidates()}); a single comma
+     * org.jenkinsci.plugins.vsphere.vSphereCloud#getHostSelectionCandidates()}); a single comma
      * explicitly overrides to "no restriction at this call site" - see {@link
      * VSphereHostSelection#toAllowListString}.
      */
@@ -681,13 +681,13 @@ public class Clone extends VSphereBuildStep {
             return FormValidation.ok();
         }
 
-        public ListBoxModel doFillHostSelectionModeItems() {
-            ListBoxModel items = new ListBoxModel();
-            items.add("(none - inherit the cloud's default)", "");
-            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
-            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
-            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
-            return items;
+        /** The modes that the type of the connection of the chosen cloud has (all of them if it is not known). */
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionModeItems(
+                @AncestorInPath Item context, @QueryParameter String serverName) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return VSphereHostSelection.modeItems(
+                    "(none - inherit the cloud's default)", true, VSphereBuildStepDescriptor.backendTypeOf(serverName));
         }
 
         @RequirePOST

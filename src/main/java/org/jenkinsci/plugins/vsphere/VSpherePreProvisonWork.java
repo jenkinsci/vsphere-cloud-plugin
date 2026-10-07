@@ -8,8 +8,6 @@ import hudson.slaves.Cloud;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 

@@ -1,0 +1,72 @@
+jenkins:
+  systemMessage: "Hello World"
+  clouds:
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "Standalone ESXi"
+        vsConnectionConfig:
+          vsHost: "esxi7.example.com"
+          backend:
+            esxiSsh:
+              credentialsId: "esxi-ssh"
+              port: 2222
+              hostKeyPolicy: TRUST_FIRST_USE
+              hostKeyFingerprint: "SHA256:abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG"
+              connectTimeoutSeconds: 15
+              commandTimeoutSeconds: 120
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "Defaults of ESXi"
+        vsConnectionConfig:
+          vsHost: "esxi8.example.com"
+          backend:
+            esxiSsh:
+              credentialsId: "esxi-key"
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "A vCenter"
+        vsConnectionConfig:
+          vsHost: "https://vcenter.example.com"
+          backend:
+            vCenter:
+              credentialsId: "vcenter"
+              allowUntrustedCertificate: true
+              httpClientClassName: "ApacheHttpClient"
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "A vCenter in the old layout"
+        vsConnectionConfig:
+          vsHost: "https://old.example.com"
+          credentialsId: "old-vcenter"
+          allowUntrustedCertificate: true
+          httpClientClassName: "ApacheHttpClient"
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "A vCenter with nothing but its host"
+        vsConnectionConfig:
+          vsHost: "https://bare.example.com"
+    - vSphere:
+        instanceCap: 0
+        maxOnlineSlaves: 0
+        vsDescription: "A cluster of ESXi hosts"
+        vsConnectionConfig:
+          vsHost: "esxi-a.example.com"
+          backend:
+            esxiSsh:
+              credentialsId: "esxi-ssh"
+              replicateMasters: true
+              transferMode: SSH_DIRECT
+              relayCompression: GZIP
+              transferIdleSeconds: 120
+              additionalHosts:
+                - host: "esxi-b.example.com"
+                - host: "esxi-c.example.com"
+                  port: 2200
+                  credentialsId: "esxi-c"
+                  hostKeyPolicy: ACCEPT_ANY
+                  hostKeyFingerprint: "SHA256:cccccccccccccccccccccccccccccccccccccccccc"

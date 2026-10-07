@@ -12,7 +12,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
+import org.jenkinsci.plugins.vsphere.vSphereCloudSlaveTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

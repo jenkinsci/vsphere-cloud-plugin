@@ -21,6 +21,11 @@ limitations under the License.
             ${it.getLabel()}
         </f:enum>
     </f:entry>
+    <f:entry title="${%Disk bus}" field="diskBus">
+        <f:enum>
+            ${it.getLabel()}
+        </f:enum>
+    </f:entry>
     <f:entry title="${%Device Label}" field="deviceLabel">
         <f:textbox />
     </f:entry>

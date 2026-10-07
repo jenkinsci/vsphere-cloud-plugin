@@ -36,10 +36,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
-import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep.VSphereBuildStepDescriptor;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
@@ -231,7 +230,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
                 if (property instanceof FolderVSphereCloudProperty) {
 
                     FolderVSphereCloudProperty vSphereCloudProperty = (FolderVSphereCloudProperty) property;
-                    for (org.jenkinsci.plugins.vSphereCloud vSphereCloud : vSphereCloudProperty.getClouds()) {
+                    for (org.jenkinsci.plugins.vsphere.vSphereCloud vSphereCloud : vSphereCloudProperty.getClouds()) {
                         select.add(vSphereCloud.getVsDescription());
                     }
                     hasVsphereClouds = true;

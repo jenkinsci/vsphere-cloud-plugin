@@ -138,14 +138,17 @@ public class RenameSnapshot extends VSphereBuildStep implements SimpleBuildStep 
 
         VSphereLogger.vsLogger(
                 jLogger,
-                "Renaming snapshot of VM \"" + expandedVm + "\" from \"" + expandedOldName + "\" to \""
-                        + expandedNewName + "\" with description \"" + expandedNewDescription + "\". Please wait ...");
+                "Renaming snapshot " + VSphereLogger.quoted(expandedOldName) + " of VM "
+                        + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm) + " to "
+                        + VSphereLogger.quoted(expandedNewName) + " with description "
+                        + VSphereLogger.quoted(expandedNewDescription) + ". Please wait ...");
         try {
             boolean renamed = vsphere.renameVmSnapshot(
                     expandedVm, expandedOldName, expandedNewName, expandedNewDescription, isFailOnNoExist());
             if (!renamed) {
                 VSphereLogger.vsLogger(
-                        jLogger, "Snapshot \"" + expandedOldName + "\" does not exist; nothing to rename.");
+                        jLogger,
+                        "Snapshot " + VSphereLogger.quoted(expandedOldName) + " does not exist; nothing to rename");
                 return true;
             }
         } catch (Exception e) {

@@ -77,7 +77,6 @@ public class ConvertToVm extends VSphereBuildStep {
     private boolean convert(final Run<?, ?> run, final Launcher launcher, final TaskListener listener)
             throws VSphereException {
         PrintStream jLogger = listener.getLogger();
-        VSphereLogger.vsLogger(jLogger, "Converting template to VM. Please wait ...");
         String expandedTemplate = template;
         String expandedCluster = cluster;
         String expandedResourcePool = resourcePool;
@@ -96,8 +95,12 @@ public class ConvertToVm extends VSphereBuildStep {
             expandedResourcePool = env.expand(resourcePool);
         }
 
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Converting template " + VSphereLogger.quoted(expandedTemplate)
+                        + VSphereLogger.onHost(vsphere, expandedTemplate) + " to a VM. Please wait ...");
         vsphere.markAsVm(expandedTemplate, expandedResourcePool, expandedCluster);
-        VSphereLogger.vsLogger(jLogger, "\"" + expandedTemplate + "\" is a VM!");
+        VSphereLogger.vsLogger(jLogger, "Template " + VSphereLogger.quoted(expandedTemplate) + " is now a VM");
 
         return true;
     }

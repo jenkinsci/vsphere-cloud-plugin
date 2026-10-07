@@ -9,7 +9,7 @@ import io.jenkins.plugins.casc.misc.JenkinsConfiguredWithCodeRule;
 import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import org.jenkinsci.plugins.vSphereCloud;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.junit.jupiter.api.Test;
 
 /**

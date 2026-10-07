@@ -7,7 +7,7 @@ import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.UUID;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
+import org.jenkinsci.plugins.vsphere.vSphereCloudSlaveTemplate;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 

@@ -11,7 +11,6 @@ import java.util.Collection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
 
 /**
  * A {@link NodeProvisioner.Strategy} that immediately provisions capacity to meet demand.

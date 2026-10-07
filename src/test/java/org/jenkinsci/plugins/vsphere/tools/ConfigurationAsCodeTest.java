@@ -22,10 +22,10 @@ import io.jenkins.plugins.casc.misc.junit.jupiter.WithJenkinsConfiguredWithCode;
 import io.jenkins.plugins.casc.model.CNode;
 import java.util.List;
 import java.util.Set;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
 import org.jenkinsci.plugins.vsphere.RunOnceCloudRetentionStrategy;
 import org.jenkinsci.plugins.vsphere.VSphereGuestInfoProperty;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
+import org.jenkinsci.plugins.vsphere.vSphereCloudSlaveTemplate;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.Issue;
 

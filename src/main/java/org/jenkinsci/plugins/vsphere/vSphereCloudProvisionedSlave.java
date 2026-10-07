@@ -1,0 +1,125 @@
+/*
+ * To change this template, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package org.jenkinsci.plugins.vsphere;
+
+import hudson.AbortException;
+import hudson.Extension;
+import hudson.model.Computer;
+import hudson.model.Descriptor.FormException;
+import hudson.model.TaskListener;
+import hudson.slaves.*;
+import java.io.IOException;
+import java.util.List;
+import org.kohsuke.stapler.DataBoundConstructor;
+
+/**
+ *
+ * @author Admin
+ */
+public class vSphereCloudProvisionedSlave extends vSphereCloudSlave {
+    @DataBoundConstructor
+    public vSphereCloudProvisionedSlave(
+            String name,
+            String nodeDescription,
+            String remoteFS,
+            String numExecutors,
+            Mode mode,
+            String labelString,
+            ComputerLauncher delegateLauncher,
+            RetentionStrategy retentionStrategy,
+            List<? extends NodeProperty<?>> nodeProperties,
+            String vsDescription,
+            String vmName,
+            boolean launchSupportForced,
+            boolean waitForVMTools,
+            String snapName,
+            String launchDelay,
+            String idleOption,
+            String LimitedTestRunCount)
+            throws FormException, IOException {
+        super(
+                name,
+                nodeDescription,
+                remoteFS,
+                numExecutors,
+                mode,
+                labelString,
+                delegateLauncher,
+                retentionStrategy,
+                nodeProperties,
+                vsDescription,
+                vmName,
+                launchSupportForced,
+                waitForVMTools,
+                snapName,
+                launchDelay,
+                idleOption,
+                LimitedTestRunCount);
+    }
+
+    @Override
+    protected void _terminate(TaskListener listener) throws IOException, InterruptedException {
+        super._terminate(listener);
+        try {
+            final ComputerLauncher l = getLauncher();
+            final vSphereCloud cloud = findOurVsInstance(l);
+            final Computer computer = this.getComputer();
+            if (cloud != null && computer != null) {
+                cloud.provisionedSlaveHasTerminated(computer.getName());
+            } else {
+                vSphereCloud.Log(
+                        listener,
+                        "%1s._terminate for vmName %2s failed as getLauncher() returned %3s and getComputer() returned %4s",
+                        getClass().getSimpleName(),
+                        getVmName(),
+                        l,
+                        computer);
+            }
+        } catch (RuntimeException ex) {
+            vSphereCloud.Log(
+                    listener,
+                    ex,
+                    "%1s._terminate for vmName %2s failed",
+                    getClass().getSimpleName(),
+                    getVmName());
+        }
+    }
+
+    @Extension
+    public static class vSphereCloudComputerListener extends ComputerListener {
+
+        @Override
+        public void preLaunch(Computer c, TaskListener taskListener) throws IOException, InterruptedException {
+            /* We may be called on any agent type so check that we should
+             * be in here. */
+            if (!(c.getNode() instanceof vSphereCloudProvisionedSlave)) {
+                return;
+            }
+
+            vSphereCloudLauncher vsL = (vSphereCloudLauncher) ((SlaveComputer) c).getLauncher();
+            vSphereCloud vsC = vsL.findOurVsInstance();
+            if (!vsC.markVMOnline(c.getDisplayName(), vsL.getVmName())) {
+                throw new AbortException("The vSphere cloud will not allow this slave to start at this time.");
+            }
+        }
+    }
+
+    @Extension
+    public static final class DescriptorImpl extends vSphereCloudSlave.DescriptorImpl {
+        @Override
+        public String getDisplayName() {
+            return super.getDisplayName() + ", auto-provisioned by Jenkins from cloud template";
+        }
+
+        @Override
+        public boolean isInstantiable() {
+            /*
+             * This type of agent can't be directly created by the user through the UI.
+             * The user defines a vSphere agent template and _that_ then creates these "on demand".
+             */
+            return false;
+        }
+    }
+}

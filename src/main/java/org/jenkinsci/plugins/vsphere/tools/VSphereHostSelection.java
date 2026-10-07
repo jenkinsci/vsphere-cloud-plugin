@@ -1,11 +1,14 @@
 package org.jenkinsci.plugins.vsphere.tools;
 
+import hudson.util.ListBoxModel;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 
 /**
  * Pure, yavijava-free logic for picking a "best" ESXi host out of a
@@ -355,6 +358,73 @@ public final class VSphereHostSelection {
 
         public double getScore() {
             return score;
+        }
+    }
+
+    /** The mode of an ESXi cluster that asks for the host with the fewest VMs that are on. */
+    public static final String HOST_SELECTION_MODE_FEWEST_RUNNING_VMS = "FEWEST_RUNNING_VMS";
+
+    /**
+     * The choices of a host selection mode, for the type of connection that they are for: DRS is that of a vCenter, so
+     * a standalone ESXi host is not offered it (and has no use for it: it is ranked as the least loaded host), and
+     * the fewest running VMs are those of the standalone hosts, which a vCenter has no use for.
+     *
+     * @param noneLabel what the choice of no mode is called there, where it is a choice of the cloud's default or none
+     * @param withExplicitNone whether to offer the choice that overrides the cloud's default (not for the cloud itself)
+     * @param backend the type of connection, or null if it is not known (then everything is offered)
+     */
+    public static ListBoxModel modeItems(
+            String noneLabel, boolean withExplicitNone, VSphereConnectionConfig.BackendType backend) {
+        final ListBoxModel items = new ListBoxModel();
+        items.add(noneLabel, "");
+        if (withExplicitNone) {
+            items.add("Explicitly none (override the cloud's default)", HOST_SELECTION_MODE_NONE);
+        }
+        items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
+        if (backend != VSphereConnectionConfig.BackendType.ESXI_SSH) {
+            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
+        }
+        if (backend != VSphereConnectionConfig.BackendType.VCENTER) {
+            items.add(
+                    "Fewest running VMs (standalone ESXi hosts over SSH only)", HOST_SELECTION_MODE_FEWEST_RUNNING_VMS);
+        }
+        return items;
+    }
+
+    /**
+     * Says how the candidates were ranked, as a table with a line for each host: the weights (or the lower of free
+     * CPU and memory), the hosts that are left out for having no usage statistics, and the score of each of the others
+     * with the free CPU and memory that it is made of. The same for vCenter hosts and ESXi hosts.
+     *
+     * @param say where each line goes
+     * @param considered the candidates that were ranked, which {@code ranking} is of
+     * @param ranking the result of {@link #rank}
+     */
+    public static void logRanking(
+            Consumer<String> say, List<HostCandidate> considered, HostWeights weights, List<ScoredHost> ranking) {
+        final HostWeights w = weights == null ? HostWeights.DEFAULT : weights;
+        say.accept("Ranking " + considered.size() + " candidate host(s) by "
+                + (w.isDefault()
+                        ? "the lower of free CPU and free memory (percentage), no weights configured"
+                        : w.toString())
+                + ":");
+        for (HostCandidate candidate : considered) {
+            if (candidate.loadFraction() == null) {
+                say.accept(
+                        "  Host \"" + candidate.getName() + "\" ruled out: no CPU/memory usage statistics available.");
+            }
+        }
+        for (ScoredHost scored : ranking) {
+            final HostCandidate c = scored.getHost();
+            say.accept(String.format(
+                    java.util.Locale.ROOT,
+                    "  Host \"%s\": score %.3f (free CPU %.0f MHz = %.0f%%, free memory %.0f MB = %.0f%%)",
+                    c.getName(),
+                    scored.getScore(),
+                    c.freeCpuMhz(),
+                    c.freeCpuFraction() * 100,
+                    c.freeMemMB(),
+                    c.freeMemFraction() * 100));
         }
     }
 
