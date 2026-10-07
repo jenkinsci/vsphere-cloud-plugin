@@ -112,6 +112,17 @@ public interface VSphere {
     boolean isSessionAlive();
 
     /**
+     * The name of the host that the VM is registered on (as a vCenter, or the cloud's configuration, calls it), to say
+     * so in the log. Best effort, for what is to be done to the VM, and so it never throws.
+     *
+     * @return the name of the host, or null if it is not known
+     */
+    @CheckForNull
+    default String hostNameOf(@CheckForNull VirtualMachine vm) {
+        return null;
+    }
+
+    /**
      * Whether a connection of this kind is to be checked with {@link #isSessionAlive()} when the pool hands it out
      * after it has been idle for a while. Not for a vCenter session, which the server keeps and times out itself;
      * but a session over SSH is only a connection, which a host, a firewall or a restart can have ended without

@@ -180,6 +180,11 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     }
 
     @Override
+    public String hostNameOf(VirtualMachine vm) {
+        return vm == null ? null : getLabel();
+    }
+
+    @Override
     public boolean isSessionAlive() {
         try {
             return shell.run("true").succeeded();
@@ -908,7 +913,7 @@ public class VSphereEsxiSsh extends AbstractVSphere {
         }
         if (!isPoweredOff(vm)) {
             if (!force) {
-                throw new VSphereException("Could not mark as Template. Check its power state or select \"force.\"");
+                throw new VSphereException("Could not mark as Template. Check its power state or select \"force\".");
             }
             powerOffVm(vm, true, 0);
         }

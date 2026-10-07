@@ -14,6 +14,8 @@
  */
 package org.jenkinsci.plugins.vsphere.tools;
 
+import com.vmware.vim25.mo.VirtualMachine;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
 import java.io.PrintStream;
 
 public class VSphereLogger {
@@ -28,6 +30,30 @@ public class VSphereLogger {
     public static void vsLogger(PrintStream logger, String str) {
         if (logger != null) {
             logger.println("[" + Messages.VSphereLogger_title() + "] " + str);
+        }
+    }
+
+    /** A name of a VM (or another thing) as the log has it: in double quotes, and any punctuation after them. */
+    public static String quoted(String name) {
+        return "\"" + name + "\"";
+    }
+
+    /**
+     * Where the VM is, to follow its name in the log: {@code " on esxi8"}, or nothing if that is not known.
+     *
+     * @param vm the VM, or null (as one that was not found is)
+     */
+    public static String onHost(VSphere vsphere, @CheckForNull VirtualMachine vm) {
+        final String host = vm == null ? null : vsphere.hostNameOf(vm);
+        return host == null || host.isEmpty() ? "" : " on " + host;
+    }
+
+    /** The same for a VM that is looked up by its name here; a lookup that fails is left for what is done next to report. */
+    public static String onHost(VSphere vsphere, String vmName) {
+        try {
+            return onHost(vsphere, vsphere.getVmByName(vmName));
+        } catch (Exception e) {
+            return "";
         }
     }
 

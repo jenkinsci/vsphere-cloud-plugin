@@ -71,6 +71,7 @@ import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection;
+import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.AncestorInPath;
@@ -804,7 +805,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
             } catch (Exception logOnly) {
                 LOGGER.log(
                         Level.SEVERE,
-                        "Unable to create and power-on new VM " + cloneName + " (cloned from image "
+                        "Unable to create and power-on new VM " + VSphereLogger.quoted(cloneName)
+                                + " (cloned from image "
                                 + this.masterImageName
                                 + ") and, worse, bits of the VM may still exist as the attempt to delete the remains also failed.",
                         logOnly);

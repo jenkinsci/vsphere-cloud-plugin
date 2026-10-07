@@ -33,6 +33,7 @@ import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphereDuplicateException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
 import org.junit.jupiter.api.AfterEach;
@@ -189,6 +190,16 @@ class EsxiClusterTest {
         assertThat(hostB.commands.stream().anyMatch(c -> c.contains("snapshot.create")), is(false));
         // the others are as before
         assertThat(cluster.getVmByName("on-b"), is(notNullValue()));
+    }
+
+    @Test
+    void theHostOfAVmIsToldForTheLog() throws Exception {
+        final VSphereEsxiCluster cluster = cluster();
+
+        assertThat(VSphereLogger.onHost(cluster, "master"), is(" on a.example"));
+        assertThat(VSphereLogger.onHost(cluster, "on-b"), is(" on b.example"));
+        assertThat(VSphereLogger.onHost(cluster, "nope"), is(""));
+        assertThat(VSphereLogger.quoted("on-b"), is("\"on-b\""));
     }
 
     @Test

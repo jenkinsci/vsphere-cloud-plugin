@@ -16,6 +16,7 @@ package org.jenkinsci.plugins.vsphere.builders;
 
 import static org.jenkinsci.plugins.vsphere.tools.PermissionUtils.throwUnlessUserHasPermissionToConfigureJob;
 
+import com.vmware.vim25.mo.VirtualMachine;
 import edu.umd.cs.findbugs.annotations.NonNull;
 import hudson.*;
 import hudson.model.*;
@@ -97,10 +98,13 @@ public class SuspendVm extends VSphereBuildStep implements SimpleBuildStep {
             expandedVm = env.expand(vm);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Suspending VM...");
-        vsphere.suspendVm(vsphere.getVmByName(expandedVm));
+        final VirtualMachine vsphereVm = vsphere.getVmByName(expandedVm);
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Suspending VM " + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, vsphereVm) + "...");
+        vsphere.suspendVm(vsphereVm);
 
-        VSphereLogger.vsLogger(jLogger, "Successfully suspended \"" + expandedVm + "\"");
+        VSphereLogger.vsLogger(jLogger, "Successfully suspended VM " + VSphereLogger.quoted(expandedVm));
 
         return true;
     }

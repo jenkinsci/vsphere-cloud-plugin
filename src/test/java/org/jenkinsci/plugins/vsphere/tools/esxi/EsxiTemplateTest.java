@@ -90,7 +90,7 @@ class EsxiTemplateTest {
         host.vm(5).power = "Powered on";
 
         final VSphereException e = assertThrows(VSphereException.class, () -> esxi.markAsTemplate("base", "x", false));
-        assertThat(e.getMessage(), containsString("select \"force.\""));
+        assertThat(e.getMessage(), containsString("select \"force\"."));
         assertThat(isTemplate(), is(false));
 
         esxi.markAsTemplate("base", "x", true);

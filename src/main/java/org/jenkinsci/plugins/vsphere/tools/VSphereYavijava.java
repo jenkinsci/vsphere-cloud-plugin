@@ -131,6 +131,18 @@ public class VSphereYavijava extends AbstractVSphere {
         this.getServiceInstance().getServerConnection().logout();
     }
 
+    @Override
+    public String hostNameOf(VirtualMachine vm) {
+        try {
+            final ManagedObjectReference host =
+                    vm == null ? null : vm.getRuntime().getHost();
+            return host == null ? null : new HostSystem(vm.getServerConnection(), host).getName();
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "The host of a VM is not known", e);
+            return null;
+        }
+    }
+
     /**
      * Checks whether the current vSphere session is still alive by issuing a
      * lightweight {@code currentTime()} call.
@@ -718,7 +730,7 @@ public class VSphereYavijava extends AbstractVSphere {
     @Override
     public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
 
-        final String message = "Could not mark as Template. Check it's power state or select \"force.\"";
+        final String message = "Could not mark as Template. Check its power state or select \"force\".";
         try {
             VirtualMachine vm = getVmByName(vmName);
             if (vm.getConfig().template) return;

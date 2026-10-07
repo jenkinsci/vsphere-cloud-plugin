@@ -38,6 +38,7 @@ import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
+import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
@@ -963,7 +964,10 @@ public class vSphereCloud extends Cloud {
             vSphere.disconnect();
             vSphere = null;
         } catch (VSphereException ex) {
-            VSLOG.log(Level.SEVERE, why + ": Exception while trying to destroy VM " + cloneName, ex);
+            VSLOG.log(
+                    Level.SEVERE,
+                    why + ": Exception while trying to destroy VM " + VSphereLogger.quoted(cloneName),
+                    ex);
         } finally {
             synchronized (templateState) {
                 if (successfullyDeleted) {

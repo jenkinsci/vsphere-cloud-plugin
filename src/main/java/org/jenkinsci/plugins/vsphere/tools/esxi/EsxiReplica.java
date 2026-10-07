@@ -130,7 +130,8 @@ final class EsxiReplica {
             metadata = EsxiSnapshotMetadata.parse(sourceFiles.read(EsxiSnapshotMetadata.pathFor(vmxPath)));
             index = metadata.indexOfUid(snapshotUid);
             if (index < 0) {
-                throw new VSphereException("The snapshot " + snapshotUid + " is not in the snapshots of " + master);
+                throw new VSphereException("The snapshot " + snapshotUid + " is not in the snapshots of VM "
+                        + VSphereLogger.quoted(master.getName()));
             }
         }
         final List<Frozen> frozen = new ArrayList<>();
@@ -207,7 +208,7 @@ final class EsxiReplica {
                     && stamp.equals(vmx.get(KEY_STAMP))) {
                 holder.vm = (EsxiVirtualMachine) vm;
             } else {
-                throw new VSphereException("The VM " + name + " on " + target.getLabel()
+                throw new VSphereException("The VM " + VSphereLogger.quoted(name) + " on " + target.getLabel()
                         + " has the name of a replica but is not the replica of this state of the master");
             }
         }

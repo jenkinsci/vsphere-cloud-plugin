@@ -224,6 +224,13 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         refresh(true);
     }
 
+    @Override
+    public String hostNameOf(VirtualMachine vm) {
+        return vm instanceof EsxiVirtualMachine
+                ? ((EsxiVirtualMachine) vm).getHost().getLabel()
+                : null;
+    }
+
     /** Alive as long as one host is; the others are tried again when they are due. */
     @Override
     public boolean isSessionAlive() {
