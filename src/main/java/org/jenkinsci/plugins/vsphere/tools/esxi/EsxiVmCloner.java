@@ -30,8 +30,9 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereNotFoundException;
 import org.jenkinsci.plugins.vsphere.tools.VmSize;
 
 /**
- * Makes a copy of a VM on a standalone ESXi host, which has no way of cloning, by working on the files, as the
- * {@code esxi-linked-clone} scripts do:
+ * Makes a copy of a VM on a standalone ESXi host, which lacks the officially supported commands to clone a VM by
+ * itself, by scripting what it does have (its own commands, and the common ones) and finishing by editing the
+ * metadata files of the new VM on the datastore:
  *
  * <ul>
  *   <li>a <b>linked clone</b> takes, for each disk of the master, the newest snapshot disk (the "delta" that

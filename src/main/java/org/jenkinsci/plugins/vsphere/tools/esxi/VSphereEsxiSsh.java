@@ -649,8 +649,8 @@ public class VSphereEsxiSsh extends AbstractVSphere {
     }
 
     /**
-     * Makes a resource pool (below the top one, with expandable reservations and normal shares, as the
-     * esxi-linked-clone scripts do), unless there is one by this name; returns it either way.
+     * Makes a resource pool (below the top one, with expandable reservations and normal shares), unless there is
+     * one by this name; returns it either way.
      */
     public EsxiResourcePool createResourcePool(String name) throws VSphereException {
         final EsxiResourcePool known = getResourcePoolByName(name);

@@ -26,8 +26,8 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * The samples are laid out like what {@code vim-cmd} prints (see the notes in the esxi-linked-clone scripts for
- * some of them). They have not been checked against every ESXi version: confirm with the real output of a host.
+ * The samples are laid out like what {@code vim-cmd} prints on ESXi hosts. They have not been checked against every
+ * ESXi version: confirm with the real output of a host.
  */
 class VimCmdParsersTest {
 
