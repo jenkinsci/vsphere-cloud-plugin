@@ -1,10 +1,11 @@
 <div>
   <p>
-    When enabled, all vSphere API calls made by this cloud share one long-lived session
+    When enabled, all vSphere API or individual ESXi host calls made by this cloud share
+    one long-lived session (for a standalone ESXi connection, one SSH session per host)
     instead of performing a full <em>login → operation → logout</em> cycle for every
     individual request (clone, power-on, snapshot revert, delete, …).
     This eliminates dozens of redundant authentication round-trips per agent lifecycle,
-    reducing load on the vCenter and speeding up provisioning.
+    reducing load on the vCenter or ESXi host and speeding up provisioning.
   </p>
   <p>
     The shared session is created on the first request and kept alive in the background

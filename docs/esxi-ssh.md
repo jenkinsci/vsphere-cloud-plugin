@@ -426,7 +426,7 @@ jenkins:
 
 ## Keeping the SSH connections: the connection pool
 
-The settings of the connection pool of a cloud (**Use vSphere connection pool**, and its health check, session
+The settings of the connection pool of a cloud (**Use vSphere/ESXi connection pool**, and its health check, session
 age, uses and idle timeout, in the advanced settings of the cloud) apply to this connection type too: the pool then
 keeps one SSH session to the host (to each of the hosts, for several) instead of logging in for every operation.
 A login to an ESXi host takes 0.6 to 0.75 seconds (measured on ESXi 7.0.3 and 8.0.1, over a LAN), and a step of a job

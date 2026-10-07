@@ -33,7 +33,7 @@
             <f:checkbox/>
         </f:entry>
 
-        <f:entry title="${%Use vSphere connection pool}" field="useConnectionPool">
+        <f:entry title="${%Use vSphere/ESXi connection pool}" field="useConnectionPool">
             <f:checkbox/>
         </f:entry>
         <f:entry title="${%Pool health check interval in seconds}" field="poolHealthCheckIntervalSecs"
