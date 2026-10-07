@@ -176,6 +176,22 @@ class EsxiClusterTest {
     }
 
     @Test
+    void aNameThatSeveralHostsHaveRegisteredIsRefusedAndNothingIsDone() throws Exception {
+        hostA.addVm(3, "twice", "shared", "twice-a/twice.vmx", "displayName = \"twice\"\n");
+        hostB.addVm(4, "twice", "shared", "twice-b/twice.vmx", "displayName = \"twice\"\n");
+        final VSphereEsxiCluster cluster = cluster();
+
+        final EsxiAmbiguousVmException refused =
+                assertThrows(EsxiAmbiguousVmException.class, () -> cluster.getVmByName("twice"));
+        assertThat(refused.getMessage(), containsString("a.example, b.example"));
+        assertThrows(EsxiAmbiguousVmException.class, () -> cluster.takeSnapshot("twice", "s", "", false));
+        assertThat(hostA.commands.stream().anyMatch(c -> c.contains("snapshot.create")), is(false));
+        assertThat(hostB.commands.stream().anyMatch(c -> c.contains("snapshot.create")), is(false));
+        // the others are as before
+        assertThat(cluster.getVmByName("on-b"), is(notNullValue()));
+    }
+
+    @Test
     void whatIsDoneToAVmIsDoneByItsHost() throws Exception {
         final VSphereEsxiCluster cluster = cluster();
 

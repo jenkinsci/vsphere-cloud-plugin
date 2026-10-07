@@ -487,7 +487,8 @@ and the load of a host is not measured. What it does:
 
 * **VMs are looked up on all the hosts** that can be reached, and whatever is done to a VM (power,
   snapshots, reconfiguring, deleting, ...) is done by the host it is registered on. A name that is
-  registered on more than one host is found on the first one, as the hosts are listed.
+  registered on more than one host is refused (`EsxiAmbiguousVmException`, naming the hosts), as it cannot be
+  told which of the independent hosts is meant, and nothing is done to either: rename or unregister the others.
 * **A clone is made on one of the hosts that can see the files of its master**, which they can if they
   have a datastore in common: an NFS datastore, or VMFS on shared storage. The volume is the same one
   if it has the same **UUID** (an NFS share that is mounted from the same server and path gets the same

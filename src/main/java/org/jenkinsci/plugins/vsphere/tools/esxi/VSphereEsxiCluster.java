@@ -239,22 +239,32 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
 
     @Override
     public VirtualMachine getVmByName(String vmName) throws VSphereException {
+        // all the hosts are asked: the same name on two independent hosts is not one VM to choose from (the host that is
+        // down is not known to have it, though)
         VSphereException last = null;
+        VirtualMachine found = null;
+        final List<String> owners = new ArrayList<>();
         for (VSphereEsxiSsh member : availableMembers()) {
             try {
                 final VirtualMachine vm = member.getVmByName(vmName);
                 if (vm != null) {
-                    return vm;
+                    if (found == null) {
+                        found = vm;
+                    }
+                    owners.add(member.getLabel());
                 }
             } catch (VSphereException e) {
                 last = e;
                 lost(member, e);
             }
         }
-        if (last != null && availableMembers().isEmpty()) {
+        if (owners.size() > 1) {
+            throw new EsxiAmbiguousVmException(vmName, owners);
+        }
+        if (found == null && last != null && availableMembers().isEmpty()) {
             throw last;
         }
-        return null;
+        return found;
     }
 
     /** The host that has the VM registered, or null. */
