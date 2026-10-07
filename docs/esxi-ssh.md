@@ -26,8 +26,9 @@ the ESXi server and its storage location (e.g. a dedicated directory shared over
 or physical host, if this ESXi is a VM itself) dedicated to this role, so any data loss is cheap
 and easy to recover from (a few template VM backups would be it)!
 
-Which of the two a cloud uses is its **Connection type**, chosen in the form of the cloud, and
-what the other settings are depends on it. A cloud that does not say is a vCenter, as always.
+Which of the two backends a cloud uses is its **Connection type**, chosen in the web-UI form
+of the cloud configuration, and what the other settings are depends on it. A cloud that does
+not say is a vCenter, as always.
 
 ## What can be done this way
 
@@ -44,7 +45,9 @@ what the other settings are depends on it. A cloud that does not say is a vCente
 | Convert a VM to a template and back, with a mark in the `.vmx` ([see below](#templates)) | yes (VM powered off) |
 | Revert to a snapshot, delete one                              | yes           |
 | Rename a snapshot (in the `.vmsd` file, VM powered off)       | yes           |
-| Whatever needs vCenter: folders, clusters, customization specs, distributed switches, choosing a host, moving a VM to another host | no |
+| Choose the host of a clone among the several ESXi hosts of a cloud ([see below](#several-esxi-hosts-a-poor-mans-cluster)) | yes |
+| Move a VM to another host as one operation (keeping its identity and its snapshots), live or not ([see below](#moving-a-vm-to-another-host)): a *cold* move can be had by cloning on the other host and deleting the original | no |
+| Whatever needs vCenter: folders, clusters, customization specs, distributed switches | no |
 
 What is not available says so with a message, when it is used.
 
@@ -102,8 +105,9 @@ ESXi it is (such as `VMware ESXi 7.0.3 build-20036589`).
 
 ### Trusting a host by its fingerprint
 
-So that it is the ESXi host that Jenkins talks to, and not something in between, the fingerprint of its
-SSH host key is checked, as `ssh` does. There are three ways to say what to trust:
+To ensure that it is indeed the expected ESXi host that Jenkins talks to, and not
+something in between nor a mix-up of hosts, the fingerprint of its SSH host key is
+checked, same way as `ssh` does. There are three ways to say what to trust:
 
 * **Only the fingerprint given** (the default, and the safest). Nothing is
   trusted until the fingerprint of the host is entered. Press **Show fingerprint** (it
@@ -127,10 +131,11 @@ A fingerprint that is given is always required to match, whichever of these is c
 
 ## Cloning
 
-An ESXi host cannot clone a VM by itself, so the plugin does what the `esxi-linked-clone` scripts
-do, on the files of the datastore: copies what makes the clone, writes its own `.vmx`, registers
-it with the host, and starts it if asked to. Cloning and deploying a VM (also what the cloud
-templates do) work this way, with the "master" VM as the source.
+An ESXi host lacks the officially supported commands to clone a VM by itself, so the plugin
+does some scripting with commands available and common Linux commands, and finalized by editing
+the newly cloned VM metadata files of the datastore: copies what makes up the clone, writes its
+own `.vmx`, registers it with the host, and starts it if asked to. Cloning and deploying a VM
+(also what the cloud templates do) work this way, with the "master" VM as the source.
 
 * A **linked clone** shares the data of its master. For each disk of the master it takes the
   newest snapshot disk that can be read (the small "delta" with the changes since the snapshot),
@@ -165,9 +170,9 @@ and a cluster or a VM folder is ignored, with a note in the log. The name of a c
 ### Resource pools
 
 The *resource pool* of a clone (or deployment) is a resource pool of the host: the clone is
-registered in it. One that the host does not have is made, as the `esxi-linked-clone` scripts did
-(below the top pool, with expandable reservations and normal shares); the name has to be plain, as
-for a clone. "Resources" or nothing means the top pool, which every host has. Pools are listed in
+registered in it. One that the host does not have is made (below the top pool, with expandable
+reservations and normal shares); the name has to be plain, as for a clone. The value of
+"Resources" or nothing means the top pool, which every host has. Pools are listed in
 `/etc/vmware/hostd/pools.xml`, and made and removed with `vim-cmd hostsvc/rsrc/...`; the backend can
 list them, find one, make one and remove one, and a VM can tell which one it is in (the host is
 asked for `resourcePool` in the configuration of the VM, and one it does not name is the top pool).
@@ -533,10 +538,42 @@ compression that is set (`relayCompression`: `PIGZ`, the default, `GZIP`, `BZIP2
 `transferIdleSeconds` (300) of nothing moving. Host selection does not weigh the cost of making a replica: to keep
 clones of a big master off hosts that have none yet, name the host or the candidates.
 
-What it does not do: moving a VM to another host (cold migration is possible by hand: power it off,
-unregister it on one host, register its `.vmx` on the other, from the same datastore), or
+What it does not do: [moving a VM to another host](#moving-a-vm-to-another-host), or
 keeping replicas up to date (a master that has changed gets a new replica, and the old ones stay until
 they are removed).
+
+## Moving a VM to another host
+
+There is **no step or operation that moves a VM** from one ESXi host to another: the calls for it
+(migrate, relocate) are refused, with the message of a platform constraint, and a **live move (vMotion) needs
+vCenter**. What can be done today is a **cold** move, with the VM powered off (or from a snapshot of it), in two ways.
+
+**1. By a clone and a delete** (with the steps that there are; it needs nothing to be done by hand):
+
+```groovy
+vSphere(serverName: 'esxi-cloud', buildStep: [$class: 'Clone', sourceName: 'myvm', clone: 'myvm-moved',
+        host: 'esxi-b.example.com', linkedClone: false, powerOn: false])
+// check that it is as wanted (power it on, ...), then:
+vSphere(serverName: 'esxi-cloud', buildStep: [$class: 'Delete', vm: 'myvm', failOnNoExist: false])
+```
+
+* The clone is made on the host that is named (`host`), as for any clone in a cloud of several hosts. If that host
+  does not share a datastore with the master, **Make replicas of masters** has to be on, and the VM is copied to the
+  host as a replica first, and then cloned from it (so it is copied twice there, which a move would not do).
+* **It is not the same VM**: the clone has a new identity (its UUIDs, its MAC addresses, which the *Reconfigure* step
+  can set again), the name that it is given, and **one state of the disks** (the newest, or that of the snapshot that
+  is named): the snapshots of the original are not carried over, nor is a memory state. The original stays until it
+  is deleted, which the plugin refuses while a linked clone is of it.
+
+**2. By hand, where the hosts share the datastore of the VM** (this keeps what the VM is, and copies nothing): power the
+VM off, unregister it on the first host (`vim-cmd vmsvc/unregister ID`), and register its `.vmx` on the second
+(`vim-cmd solo/registervm /vmfs/volumes/DATASTORE/FOLDER/NAME.vmx`). The second host asks, when the VM is started,
+whether it was moved or copied: `uuid.action = "keep"` in the `.vmx` answers "moved" beforehand.
+
+What is **not there yet**, and is left for later, is one step that does the second for a shared datastore, and for
+hosts that do not share one copies the whole folder (the snapshots with it) over the relay, SSH or netcat, with the
+checks of the copies, fixes the paths in the `.vmx` and `.vmsd`, registers the VM on the target, and removes the
+source once the target is as expected.
 
 ## The layout of the settings of a connection
 
