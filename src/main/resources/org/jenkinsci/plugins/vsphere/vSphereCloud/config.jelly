@@ -1,5 +1,7 @@
 <?jelly escape-by-default='true'?>
 <j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+    <!-- hides the host selection modes that the chosen type of connection has no use for -->
+    <st:adjunct includes="org.jenkinsci.plugins.vsphere.hostSelectionModes"/>
     <f:entry title="${%Name of this Cloud}" field="vsDescription">
         <f:textbox/>
     </f:entry>

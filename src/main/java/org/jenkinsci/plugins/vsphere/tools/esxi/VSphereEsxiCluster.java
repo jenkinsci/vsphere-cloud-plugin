@@ -665,7 +665,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
     }
 
     /** The mode that asks for the host with the fewest VMs that are on (not what no mode, or {@code NONE}, means). */
-    public static final String MODE_FEWEST_RUNNING_VMS = "FEWEST_RUNNING_VMS";
+    public static final String MODE_FEWEST_RUNNING_VMS = VSphereHostSelection.HOST_SELECTION_MODE_FEWEST_RUNNING_VMS;
 
     /**
      * Picks the host to make the clone on, by the mode of host selection: {@code FEWEST_RUNNING_VMS} counts the VMs that are on (then the VMs that are registered); {@code LEAST_LOADED} (and

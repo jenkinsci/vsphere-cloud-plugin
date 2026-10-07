@@ -38,6 +38,12 @@
       DRS, so that Jenkins agent placement follows the same policy as everything else in
       the cluster.
     </li>
+    <li>
+      <b>Fewest running VMs</b> - for standalone ESXi hosts over SSH only (not offered, and
+      of no use, for a vCenter): the host with the fewest VMs that are powered on, then the
+      fewest that are registered, then the first as configured. DRS, in turn, is not offered
+      for standalone ESXi hosts, which have none.
+    </li>
   </ul>
   <p>
   Either automatic mode needs a cluster to search: if "Cluster" above is left blank, this

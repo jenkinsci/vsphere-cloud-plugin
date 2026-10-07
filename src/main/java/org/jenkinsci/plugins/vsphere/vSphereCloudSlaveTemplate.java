@@ -958,12 +958,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         }
 
         public ListBoxModel doFillHostSelectionModeItems() {
-            ListBoxModel items = new ListBoxModel();
-            items.add("(none - inherit the cloud's default)", "");
-            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
-            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
-            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
-            return items;
+            // all of them: the form hides those that the type of connection of the cloud has no use for
+            return VSphereHostSelection.modeItems("(none - inherit the cloud's default)", true, null);
         }
 
         @RequirePOST

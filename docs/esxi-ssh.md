@@ -504,7 +504,7 @@ and the load of a host is not measured. What it does:
   * none (not set, or `NONE`): the host where the master is registered, as it is with a vCenter, if it can make
     the clone (it is up, and it sees the datastore asked for); if not, the one that is least busy as below. The log
     says which it was;
-  * `FEWEST_RUNNING_VMS` (only by JCasC, the UI does not offer it): the host with the fewest VMs that are on, then
+  * `FEWEST_RUNNING_VMS` (offered by the forms for standalone ESXi hosts only, as DRS is not): the host with the fewest VMs that are on, then
     the fewest that are registered, then the first as configured;
   * `LEAST_LOADED`: the hosts are ranked by what they say is used of their CPU and memory
     (`vim-cmd hostsvc/hostsummary`, whose `quickStats` are a few seconds old), by the weights of the host

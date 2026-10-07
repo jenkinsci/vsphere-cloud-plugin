@@ -593,16 +593,13 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
             return FormValidation.validateNonNegativeInteger(value);
         }
 
-        public ListBoxModel doFillHostSelectionModeItems() {
-            ListBoxModel items = new ListBoxModel();
-            items.add("(none - inherit the cloud's default)", "");
-            items.add("Explicitly none (override the cloud's default)", VSphereHostSelection.HOST_SELECTION_MODE_NONE);
-            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
-            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
-            items.add(
-                    "Fewest running VMs (ESXi hosts over SSH; vCenter ranks by load as for the least loaded host)",
-                    "FEWEST_RUNNING_VMS");
-            return items;
+        /** The modes that the type of the connection of the chosen cloud has (all of them if it is not known). */
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionModeItems(
+                @AncestorInPath Item context, @QueryParameter String serverName) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return VSphereHostSelection.modeItems(
+                    "(none - inherit the cloud's default)", true, VSphereBuildStepDescriptor.backendTypeOf(serverName));
         }
 
         @RequirePOST

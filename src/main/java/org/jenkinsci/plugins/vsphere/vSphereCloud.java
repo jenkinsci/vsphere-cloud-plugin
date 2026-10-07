@@ -1217,11 +1217,9 @@ public class vSphereCloud extends Cloud {
         }
 
         public ListBoxModel doFillHostSelectionModeItems() {
-            ListBoxModel items = new ListBoxModel();
-            items.add("(none - no cloud-wide default)", "");
-            items.add("Least loaded host (CPU/memory, no DRS license required)", "LEAST_LOADED");
-            items.add("DRS recommendation (requires DRS enabled + licensed on the cluster)", "DRS_RECOMMENDED");
-            return items;
+            // all of them: the form hides those that the chosen type of connection has no use for
+            // (hostSelectionModes.js)
+            return VSphereHostSelection.modeItems("(none - no cloud-wide default)", false, null);
         }
     }
 }

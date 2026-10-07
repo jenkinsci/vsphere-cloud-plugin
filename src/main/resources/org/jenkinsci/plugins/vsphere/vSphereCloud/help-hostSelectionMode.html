@@ -16,6 +16,9 @@
     <li><b>DRS recommendation</b> - requires DRS enabled and licensed on the cluster;
     falls back to "Least loaded host" if unavailable. See the same option's description
     on the Clone/Deploy build steps or vSphere templates for details.</li>
+    <li><b>Fewest running VMs</b> - for standalone ESXi hosts over SSH only: the host with the
+    fewest VMs that are powered on. DRS is for a vCenter only, and is hidden for standalone ESXi hosts
+    (and this mode for a vCenter), unless it is the one that is set already.</li>
   </ul>
   <p>
   A template or build step using this cloud can override this default with its own
