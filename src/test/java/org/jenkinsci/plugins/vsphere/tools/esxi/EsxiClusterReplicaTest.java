@@ -103,6 +103,18 @@ class EsxiClusterReplicaTest {
     private void clone(
             VSphereEsxiCluster cluster, String name, boolean linked, String host, boolean useCurrent, String snapshot)
             throws Exception {
+        clone(cluster, name, linked, host, useCurrent, snapshot, null);
+    }
+
+    private void clone(
+            VSphereEsxiCluster cluster,
+            String name,
+            boolean linked,
+            String host,
+            boolean useCurrent,
+            String snapshot,
+            String mode)
+            throws Exception {
         cluster.cloneOrDeployVm(
                 name,
                 "master",
@@ -117,7 +129,7 @@ class EsxiClusterReplicaTest {
                 null,
                 "",
                 host,
-                null,
+                mode,
                 null,
                 null,
                 VmSize.NONE,
@@ -227,7 +239,7 @@ class EsxiClusterReplicaTest {
     void whenTheHostsAreBalancedAReplicaIsMadeWhereTheClonesGo() throws Exception {
         hostA.addVm(3, "busy", "ds1", "busy/busy.vmx", "displayName = \"busy\"\n").power = "Powered on";
 
-        clone(cluster(true), "lc", true, null, true, null);
+        clone(cluster(true), "lc", true, null, true, null, VSphereEsxiCluster.MODE_FEWEST_RUNNING_VMS);
 
         // b has fewer VMs on: the clone goes there, though it does not see the master
         assertThat(hostB.vmNamed("lc"), is(notNullValue()));
