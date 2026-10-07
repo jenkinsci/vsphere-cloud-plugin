@@ -539,8 +539,9 @@ class EsxiClusterTest {
         final String said = cloneRanked("LEAST_LOADED", null);
 
         assertThat(where(), is("b"));
-        assertThat(said, containsString("Ranked the ESXi hosts by the lower of free CPU and memory:"));
-        assertThat(said, containsString("b.example=0.9"));
+        assertThat(
+                said, containsString("by the lower of free CPU and free memory (percentage), no weights configured:"));
+        assertThat(said, containsString("Host \"b.example\": score 0.9"));
     }
 
     @Test
@@ -577,7 +578,7 @@ class EsxiClusterTest {
                 cloneRanked("LEAST_LOADED", new HostSelectionOptions(false, false, true).withVmSize(null, 4000L));
 
         assertThat(where(), is("a"));
-        assertThat(said, containsString("Not using the ESXi host b.example"));
+        assertThat(said, containsString("Host \"b.example\" ruled out:"));
     }
 
     @Test

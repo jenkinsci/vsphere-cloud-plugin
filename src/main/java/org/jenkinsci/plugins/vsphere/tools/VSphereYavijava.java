@@ -595,34 +595,8 @@ public class VSphereYavijava extends AbstractVSphere {
         }
 
         final HostWeights weights = opts.getWeights();
-        logMessage(
-                jLogger,
-                "Ranking " + filtered.size() + " candidate host(s) by "
-                        + (weights.isDefault()
-                                ? "the lower of free CPU and free memory (percentage), no weights configured"
-                                : weights.toString())
-                        + ":");
         final List<VSphereHostSelection.ScoredHost> ranking = VSphereHostSelection.rank(filtered, weights);
-        for (HostCandidate candidate : filtered) {
-            if (candidate.loadFraction() == null) {
-                logMessage(
-                        jLogger,
-                        "  Host \"" + candidate.getName() + "\" ruled out: no CPU/memory usage statistics available.");
-            }
-        }
-        for (VSphereHostSelection.ScoredHost scored : ranking) {
-            final HostCandidate c = scored.getHost();
-            logMessage(
-                    jLogger,
-                    String.format(
-                            "  Host \"%s\": score %.3f (free CPU %.0f MHz = %.0f%%, free memory %.0f MB = %.0f%%)",
-                            c.getName(),
-                            scored.getScore(),
-                            c.freeCpuMhz(),
-                            c.freeCpuFraction() * 100,
-                            c.freeMemMB(),
-                            c.freeMemFraction() * 100));
-        }
+        VSphereHostSelection.logRanking(message -> logMessage(jLogger, message), filtered, weights, ranking);
         final HostCandidate winner = ranking.isEmpty() ? null : ranking.get(0).getHost();
         if (winner == null) {
             logMessage(

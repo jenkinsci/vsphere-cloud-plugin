@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Pure, yavijava-free logic for picking a "best" ESXi host out of a
@@ -355,6 +356,43 @@ public final class VSphereHostSelection {
 
         public double getScore() {
             return score;
+        }
+    }
+
+    /**
+     * Says how the candidates were ranked, as a table with a line for each host: the weights (or the lower of free
+     * CPU and memory), the hosts that are left out for having no usage statistics, and the score of each of the others
+     * with the free CPU and memory that it is made of. The same for vCenter hosts and ESXi hosts.
+     *
+     * @param say where each line goes
+     * @param considered the candidates that were ranked, which {@code ranking} is of
+     * @param ranking the result of {@link #rank}
+     */
+    public static void logRanking(
+            Consumer<String> say, List<HostCandidate> considered, HostWeights weights, List<ScoredHost> ranking) {
+        final HostWeights w = weights == null ? HostWeights.DEFAULT : weights;
+        say.accept("Ranking " + considered.size() + " candidate host(s) by "
+                + (w.isDefault()
+                        ? "the lower of free CPU and free memory (percentage), no weights configured"
+                        : w.toString())
+                + ":");
+        for (HostCandidate candidate : considered) {
+            if (candidate.loadFraction() == null) {
+                say.accept(
+                        "  Host \"" + candidate.getName() + "\" ruled out: no CPU/memory usage statistics available.");
+            }
+        }
+        for (ScoredHost scored : ranking) {
+            final HostCandidate c = scored.getHost();
+            say.accept(String.format(
+                    java.util.Locale.ROOT,
+                    "  Host \"%s\": score %.3f (free CPU %.0f MHz = %.0f%%, free memory %.0f MB = %.0f%%)",
+                    c.getName(),
+                    scored.getScore(),
+                    c.freeCpuMhz(),
+                    c.freeCpuFraction() * 100,
+                    c.freeMemMB(),
+                    c.freeMemFraction() * 100));
         }
     }
 

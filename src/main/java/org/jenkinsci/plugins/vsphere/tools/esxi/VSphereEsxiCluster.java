@@ -240,7 +240,8 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
 
     @Override
     public VirtualMachine getVmByName(String vmName) throws VSphereException {
-        // all the hosts are asked: the same name on two independent hosts is not one VM to choose from (the host that is
+        // all the hosts are asked: the same name on two independent hosts is not one VM to choose from (the host that
+        // is
         // down is not known to have it, though)
         VSphereException last = null;
         VirtualMachine found = null;
@@ -536,8 +537,10 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         } else if (hostSelectionMode == null
                 || hostSelectionMode.trim().isEmpty()
                 || VSphereHostSelection.HOST_SELECTION_MODE_NONE.equals(hostSelectionMode)) {
-            // no choice was made: the clone is where its master is registered, as it is with a vCenter, if that host can
-            // do it (the master is on a host that is up, and it sees the datastore asked for), else the one that is least busy
+            // no choice was made: the clone is where its master is registered, as it is with a vCenter, if that host
+            // can
+            // do it (the master is on a host that is up, and it sees the datastore asked for), else the one that is
+            // least busy
             if (candidates.contains(owner)) {
                 target = owner;
                 if (jLogger != null) {
@@ -679,6 +682,10 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
                     log, "A standalone ESXi host has no DRS to ask; ranking the hosts by how busy they are instead");
         }
         final HostSelectionOptions opts = options == null ? HostSelectionOptions.NONE : options;
+        if (log != null) {
+            VSphereLogger.vsLogger(
+                    log, "Host selection (" + mode + ") among " + candidates.size() + " ESXi host(s) that can do it.");
+        }
         final Map<VSphereHostSelection.HostCandidate, VSphereEsxiSsh> byCandidate = new LinkedHashMap<>();
         for (VSphereEsxiSsh host : candidates) {
             try {
@@ -713,7 +720,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
             if (shortfall == null) {
                 kept.add(candidate);
             } else if (log != null) {
-                VSphereLogger.vsLogger(log, "Not using the ESXi host " + candidate.getName() + ": it " + shortfall);
+                VSphereLogger.vsLogger(log, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
             }
         }
         final List<VSphereHostSelection.ScoredHost> ranked = VSphereHostSelection.rank(kept, opts.getWeights());
@@ -731,16 +738,8 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
             return leastBusy(fit.isEmpty() ? candidates : fit);
         }
         if (log != null) {
-            final StringBuilder said = new StringBuilder("Ranked the ESXi hosts by ")
-                    .append(opts.getWeights().isDefault() ? "the lower of free CPU and memory" : "their weights")
-                    .append(":");
-            for (VSphereHostSelection.ScoredHost scored : ranked) {
-                said.append(' ')
-                        .append(scored.getHost().getName())
-                        .append('=')
-                        .append(String.format(java.util.Locale.ROOT, "%.2f", scored.getScore()));
-            }
-            VSphereLogger.vsLogger(log, said.toString());
+            VSphereHostSelection.logRanking(
+                    message -> VSphereLogger.vsLogger(log, message), kept, opts.getWeights(), ranked);
         }
         return byCandidate.get(ranked.get(0).getHost());
     }
