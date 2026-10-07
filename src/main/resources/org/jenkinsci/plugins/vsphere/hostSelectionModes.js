@@ -21,8 +21,14 @@ Behaviour.specify("select[name='_.hostSelectionMode']", "host-selection-modes", 
     const esxi = esxiChosen();
     Array.from(select.options).forEach(function (option) {
       const unfit = esxi ? option.value === "DRS_RECOMMENDED" : option.value === "FEWEST_RUNNING_VMS";
-      option.hidden = unfit && !option.selected;
-      option.disabled = option.hidden;
+      const hide = unfit && !option.selected;
+      // write only a change: even the same value set again makes a browser redraw the list that may be open
+      if (option.hidden !== hide) {
+        option.hidden = hide;
+      }
+      if (option.disabled !== hide) {
+        option.disabled = hide;
+      }
     });
   };
   apply();
