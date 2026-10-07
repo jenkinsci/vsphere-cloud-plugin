@@ -450,10 +450,12 @@ that of the first: the port, the credentials, how its fingerprint is trusted. It
 its own, and so is the one that "the fingerprint seen first" remembers (the configuration is saved for
 it the same way).
 
-In the form, **Show fingerprint** of such a host works with the host alone. **Test Connection** of a host that has
-no credentials of its own cannot try the login, as its form cannot see the credentials of the first host, which
-the host uses then: it checks that the host answers and shows its fingerprint, and says that the login was not tried.
-Choose credentials for that host to try the login as well.
+In the form, **Show fingerprint** and **Test Connection** of such a host use what it does not say as the first host's
+(its credentials, its port, how its fingerprint is trusted), as they are chosen in the form at that moment, even if
+not saved yet: the form keeps hidden copies of those fields next to each host's, for the buttons to send (the copies
+are not part of what is saved). The fingerprint is always the host's own. If neither the host nor the first host has
+credentials, **Test Connection** can only check that the host answers and show its fingerprint, and says that the
+login was not tried.
 
 ```yaml
 vsConnectionConfig:
