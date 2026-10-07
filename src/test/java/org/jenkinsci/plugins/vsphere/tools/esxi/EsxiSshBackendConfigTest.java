@@ -18,6 +18,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
@@ -137,6 +138,95 @@ class EsxiSshBackendConfigTest {
     }
 
     @Test
+    void anAdditionalHostThatDoesNotSayIsTestedWithTheCredentialsPortAndTrustOfTheFirstHost(JenkinsRule r)
+            throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        addPasswordCredentials("esxi-password");
+
+        // nothing of its own: not the credentials, nor the port (0), nor how the fingerprint is trusted
+        FormValidation result = new EsxiSshHost.DescriptorImpl()
+                .doTestConnection(
+                        null,
+                        "127.0.0.1",
+                        "",
+                        "0",
+                        "",
+                        "",
+                        "esxi-password",
+                        String.valueOf(server.port()),
+                        EsxiHostKeyPolicy.ACCEPT_ANY.name());
+
+        assertThat(result.kind, is(FormValidation.Kind.OK));
+        assertThat(result.getMessage(), containsString("Logged in to ssh://root@127.0.0.1"));
+        // and the fingerprint is asked for on the port of the first host as well
+        assertThat(
+                new EsxiSshHost.DescriptorImpl()
+                        .doQueryHostKey(null, "127.0.0.1", "", String.valueOf(server.port()))
+                        .kind,
+                is(FormValidation.Kind.OK));
+    }
+
+    @Test
+    void anAdditionalHostIsTestedInTheFormWithWhatTheFirstHostHasChosenAndNothingOfItIsSaved(JenkinsRule r)
+            throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        addPasswordCredentials("esxi-password");
+        EsxiSshBackendConfig esxi = new EsxiSshBackendConfig(null);
+        esxi.setPort(server.port());
+        esxi.setHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY);
+        // it says nothing but where it is, and the first host has no credentials yet
+        esxi.setAdditionalHosts(List.of(new EsxiSshHost("127.0.0.1")));
+        VSphereConnectionConfig config = new VSphereConnectionConfig("127.0.0.1");
+        config.setBackend(esxi);
+        vSphereCloud cloud = new vSphereCloud(config, "Two hosts", 0, 0, false, List.of());
+        r.jenkins.clouds.add(cloud);
+
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            HtmlPage page = wc.goTo(cloud.getUrl() + "configure");
+            wc.waitForBackgroundJavaScript(3000);
+            DomElement button = (DomElement) page.getByXPath("//button[@data-validate-button-method='testConnection']")
+                    .get(1);
+            button.click();
+            wc.waitForBackgroundJavaScript(15_000);
+            assertThat(button.getParentNode().asNormalizedText(), containsString("The login was not tried"));
+
+            // the credentials are chosen for the first host, in the form: the host that is added follows
+            ((HtmlSelect) page.getByXPath("//select[contains(@class,'credentials-select') and @name='_.credentialsId']")
+                            .get(0))
+                    .setSelectedAttribute("esxi-password", true);
+            button.click();
+            wc.waitForBackgroundJavaScript(15_000);
+            assertThat(button.getParentNode().asNormalizedText(), containsString("Logged in to ssh://root@127.0.0.1"));
+
+            // and the copies of the settings are in the form, and not in what it saves
+            r.submit(page.getFormByName("config"));
+        }
+        final vSphereCloud saved = (vSphereCloud) r.jenkins.getCloud(cloud.name);
+        assertThat(saved.getVsConnectionConfig().getEsxiSsh().getCredentialsId(), is("esxi-password"));
+        assertThat(
+                saved.getVsConnectionConfig().getEsxiSsh().getAdditionalHosts().size(), is(1));
+        assertThat(
+                saved.getVsConnectionConfig()
+                        .getEsxiSsh()
+                        .getAdditionalHosts()
+                        .get(0)
+                        .getCredentialsId(),
+                is((String) null));
+        final String xml = jenkins.model.Jenkins.XSTREAM2.toXML(saved);
+        assertThat(xml, not(containsString("firstCredentialsId")));
+        assertThat(xml, not(containsString("firstPort")));
+        assertThat(xml, not(containsString("firstHostKeyPolicy")));
+        final String exported =
+                r.jenkins.getRootDir().toPath().resolve("config.xml").toFile().exists()
+                        ? new String(
+                                java.nio.file.Files.readAllBytes(
+                                        r.jenkins.getRootDir().toPath().resolve("config.xml")),
+                                java.nio.charset.StandardCharsets.UTF_8)
+                        : "";
+        assertThat(exported, not(containsString("firstCredentialsId")));
+    }
+
+    @Test
     void theTestOfTheFirstHostInTheFormUsesItsOwnSettingsWhenThereAreMoreHosts(JenkinsRule r) throws Exception {
         server = new FakeEsxiSshServer(host, "secret", null, false);
         addPasswordCredentials("esxi-password");
@@ -173,17 +263,18 @@ class EsxiSshBackendConfigTest {
         server = new FakeEsxiSshServer(host, "secret", null, false);
 
         FormValidation result = new EsxiSshHost.DescriptorImpl()
-                .doTestConnection(null, "127.0.0.1", "", String.valueOf(server.port()), "", "");
+                .doTestConnection(null, "127.0.0.1", "", String.valueOf(server.port()), "", "", "", "", "");
 
         assertThat(result.kind, is(FormValidation.Kind.WARNING));
         assertThat(result.getMessage(), containsString("The host presents a"));
         assertThat(result.getMessage(), containsString("The login was not tried"));
-        assertThat(result.getMessage(), containsString("those of the first host"));
+        assertThat(result.getMessage(), containsString("nor for the first host"));
     }
 
     @Test
     void anAdditionalHostWithNoCredentialsThatDoesNotAnswerIsAnError(JenkinsRule r) {
-        FormValidation result = new EsxiSshHost.DescriptorImpl().doTestConnection(null, "127.0.0.1", "", "1", "", "");
+        FormValidation result =
+                new EsxiSshHost.DescriptorImpl().doTestConnection(null, "127.0.0.1", "", "1", "", "", "", "", "");
 
         assertThat(result.kind, is(FormValidation.Kind.ERROR));
         assertThat(result.getMessage(), containsString("127.0.0.1:1"));

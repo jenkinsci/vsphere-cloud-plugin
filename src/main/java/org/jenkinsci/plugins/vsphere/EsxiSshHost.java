@@ -200,17 +200,33 @@ public class EsxiSshHost extends AbstractDescribableImpl<EsxiSshHost> implements
             return EsxiSshBackendConfig.checkFingerprint(value, hostKeyPolicy);
         }
 
-        /** Finds out which host key the host presents, without logging in. */
+        /**
+         * Finds out which fingerprint the host presents, without logging in.
+         *
+         * @param port the port of this host, or none for that of the first host
+         * @param firstPort the port of the first host
+         */
         @RequirePOST
         public FormValidation doQueryHostKey(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull,
                 @QueryParameter String host,
-                @QueryParameter String port) {
+                @QueryParameter String port,
+                @QueryParameter String firstPort) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            return EsxiSshBackendConfig.queryHostKey(host, port, null);
+            return EsxiSshBackendConfig.queryHostKey(host, own(port, firstPort), null);
         }
 
-        /** Tests the connection with what is given here (the credentials have to be given, there is no first host). */
+        /** What is given for this host, or else what is given for the first host (a number that is none is 0). */
+        private static String own(String own, String first) {
+            final String given = Util.fixEmptyAndTrim(own);
+            return given == null || "0".equals(given) ? Util.fixEmptyAndTrim(first) : given;
+        }
+
+        /**
+         * Tests the connection with what is given here, and what is not is that of the first host, as it is when it is
+         * used: the credentials, the port and the way to trust the fingerprint. (The fingerprint is always the host's
+         * own.) If there are no credentials for the host, nor for the first one, the login cannot be tried.
+         */
         @RequirePOST
         public FormValidation doTestConnection(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull,
@@ -218,20 +234,29 @@ public class EsxiSshHost extends AbstractDescribableImpl<EsxiSshHost> implements
                 @QueryParameter String credentialsId,
                 @QueryParameter String port,
                 @QueryParameter String hostKeyPolicy,
-                @QueryParameter String hostKeyFingerprint) {
+                @QueryParameter String hostKeyFingerprint,
+                @QueryParameter String firstCredentialsId,
+                @QueryParameter String firstPort,
+                @QueryParameter String firstHostKeyPolicy) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            if (Util.fixEmptyAndTrim(credentialsId) == null) {
-                // this form cannot see the credentials of the first host, which are the ones that it will use: what can
-                // be tried without them is that the host answers, and with which fingerprint
-                final FormValidation seen = EsxiSshBackendConfig.queryHostKey(host, port, null);
+            final String credentials = Util.fixEmptyAndTrim(credentialsId) != null ? credentialsId : firstCredentialsId;
+            final String effectivePort = own(port, firstPort);
+            if (Util.fixEmptyAndTrim(credentials) == null) {
+                // what can be tried without them is that the host answers, and with which fingerprint
+                final FormValidation seen = EsxiSshBackendConfig.queryHostKey(host, effectivePort, null);
                 return seen.kind == FormValidation.Kind.ERROR
                         ? seen
                         : FormValidation.warning(seen.getMessage() + ". The login was not tried: no credentials are"
-                                + " chosen for this host, and this form cannot see those of the first host, which it"
-                                + " uses then; choose credentials here to try the login as well");
+                                + " chosen for this host, nor for the first host, which it uses then; choose some to try"
+                                + " the login as well");
             }
             return EsxiSshBackendConfig.testConnection(
-                    host, credentialsId, port, hostKeyPolicy, hostKeyFingerprint, null);
+                    host,
+                    credentials,
+                    effectivePort,
+                    Util.fixEmptyAndTrim(hostKeyPolicy) != null ? hostKeyPolicy : firstHostKeyPolicy,
+                    hostKeyFingerprint,
+                    null);
         }
     }
 }
