@@ -10,7 +10,8 @@ In that new logger, add the logger
 (which covers the plugin code, as it is all in this Java package and its sub-packages),
 and set its Log level to `ALL`.
 
-Before the classes were moved into that package (see [below](#classes-that-were-moved)), a logger
+With 5.x and older releases of this plugin, i.e. before the classes were moved into that
+single Java package namespace (see [below](#classes-that-were-moved)), a logger
 called `vsphere-cloud` and a logger for every Java class of the plugin (including
 `org.jenkinsci.plugins.workflow.vSphereStep`, as its package holds lots of general Jenkins logs)
 were needed: if you have a log recorder like that, it no longer logs the cloud, nor the step,
@@ -67,8 +68,8 @@ their code was heavily copied to make this plugin.
 ## Classes that were moved
 
 For historical reasons, a number of classes of this plugin were directly in the `org.jenkinsci.plugins`
-Java package, which made it hard to set up logging and auditing for the plugin alone. They are now in
-`org.jenkinsci.plugins.vsphere`, with the same simple names:
+Java package, which made it hard to set up logging and auditing for the plugin alone. Since major release
+of the plugin numbered v6.x, they are now in `org.jenkinsci.plugins.vsphere`, with the same simple names:
 
 | Before                                          | Now                                                  |
 |-------------------------------------------------|------------------------------------------------------|
