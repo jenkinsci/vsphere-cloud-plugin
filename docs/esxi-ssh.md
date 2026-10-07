@@ -501,8 +501,11 @@ and the load of a host is not measured. What it does:
   calls itself by), that one, if it can be used. Otherwise, of the hosts that can see the master (and
   the datastore the clone is asked to be on), and are in the list of *host selection candidates*, if there
   is one: by the **host selection mode**:
-  * none, or `FEWEST_RUNNING_VMS`: the host with the fewest VMs that are on, then the fewest that
-    are registered, then the first as configured;
+  * none (not set, or `NONE`): the host where the master is registered, as it is with a vCenter, if it can make
+    the clone (it is up, and it sees the datastore asked for); if not, the one that is least busy as below. The log
+    says which it was;
+  * `FEWEST_RUNNING_VMS` (only by JCasC, the UI does not offer it): the host with the fewest VMs that are on, then
+    the fewest that are registered, then the first as configured;
   * `LEAST_LOADED`: the hosts are ranked by what they say is used of their CPU and memory
     (`vim-cmd hostsvc/hostsummary`, whose `quickStats` are a few seconds old), by the weights of the host
     selection options, as the hosts of a vCenter cluster are: by default the lower of free CPU and

@@ -265,10 +265,10 @@ class EsxiClusterTest {
     // -- clones --
 
     @Test
-    void aCloneGoesToTheHostThatHasFewerVmsOn() throws Exception {
+    void aCloneGoesToTheHostThatHasFewerVmsOnIfAskedFor() throws Exception {
         hostA.addVm(3, "busy", "shared", "busy/busy.vmx", "displayName = \"busy\"\n").power = "Powered on";
 
-        clone(cluster(), "lc", true, null, null);
+        clone(cluster(), "lc", true, null, VSphereEsxiCluster.MODE_FEWEST_RUNNING_VMS);
 
         assertThat(hostB.vmNamed("lc"), is(notNullValue()));
         assertThat(hostA.vmNamed("lc"), is(nullValue()));
@@ -277,6 +277,18 @@ class EsxiClusterTest {
                 hostA.file(SHARED + "/lc/master-000001.vmdk"),
                 containsString("parentFileNameHint=\"" + REAL + "/master/master.vmdk\""));
         assertThat(hostA.file(SHARED + "/lc/lc.vmx"), containsString("displayName = \"lc\""));
+    }
+
+    @Test
+    void withNoModeTheCloneStaysWithTheMasterThoughAnotherHostHasLessToDo() throws Exception {
+        hostA.addVm(3, "busy", "shared", "busy/busy.vmx", "displayName = \"busy\"\n").power = "Powered on";
+
+        clone(cluster(), "lc", true, null, null);
+        clone(cluster(), "lc2", true, null, "");
+
+        assertThat(hostA.vmNamed("lc"), is(notNullValue()));
+        assertThat(hostA.vmNamed("lc2"), is(notNullValue()));
+        assertThat(hostB.vmNamed("lc"), is(nullValue()));
     }
 
     @Test

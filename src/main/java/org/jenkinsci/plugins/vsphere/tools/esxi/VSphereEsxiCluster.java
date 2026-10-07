@@ -50,8 +50,9 @@ import org.jenkinsci.plugins.vsphere.tools.VmSize;
  * looks for them again; as long as one host is up, the cluster is. All the sessions are part of this one object, so
  * the connection pool, which holds one connection for a cloud, holds all of them.
  *
- * <p>Where a clone goes, when no host is asked for: of the hosts that can see its master, the one with the fewest
- * VMs that are on, then the fewest that are registered, then the first as configured. The master is not moved, nor
+ * <p>Where a clone goes, when no host is asked for and no host selection mode is set: the host where its master is
+ * registered, if that can make it, else the one of the hosts that can see its master with the fewest VMs that are
+ * on, then the fewest that are registered, then the first as configured. The master is not moved, nor
  * any of the other VMs; this is not vMotion, nor a scheduler, and the load of a host is not measured.
  */
 public final class VSphereEsxiCluster extends AbstractVSphere {
@@ -532,8 +533,29 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         final VSphereEsxiSsh target;
         if (candidates.size() == 1) {
             target = candidates.get(0);
-        } else if (VSphereHostSelection.HOST_SELECTION_MODE_NONE.equals(hostSelectionMode)) {
-            target = candidates.contains(owner) ? owner : candidates.get(0);
+        } else if (hostSelectionMode == null
+                || hostSelectionMode.trim().isEmpty()
+                || VSphereHostSelection.HOST_SELECTION_MODE_NONE.equals(hostSelectionMode)) {
+            // no choice was made: the clone is where its master is registered, as it is with a vCenter, if that host can
+            // do it (the master is on a host that is up, and it sees the datastore asked for), else the one that is least busy
+            if (candidates.contains(owner)) {
+                target = owner;
+                if (jLogger != null) {
+                    VSphereLogger.vsLogger(
+                            jLogger,
+                            "No host selection mode is set: using " + owner.getLabel() + ", where \"" + sourceName
+                                    + "\" is registered");
+                }
+            } else {
+                target = leastBusy(candidates);
+                if (jLogger != null) {
+                    VSphereLogger.vsLogger(
+                            jLogger,
+                            "No host selection mode is set, and " + owner.getLabel() + ", where \"" + sourceName
+                                    + "\" is registered, cannot make the clone: using the host with the fewest VMs on, "
+                                    + target.getLabel());
+                }
+            }
         } else {
             target = choose(candidates, hostSelectionMode, hostSelectionOptions, master, vmSize, jLogger);
         }
@@ -632,12 +654,11 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
         return current;
     }
 
-    /** The mode that asks for the host with the fewest VMs that are on. */
+    /** The mode that asks for the host with the fewest VMs that are on (not what no mode, or {@code NONE}, means). */
     public static final String MODE_FEWEST_RUNNING_VMS = "FEWEST_RUNNING_VMS";
 
     /**
-     * Picks the host to make the clone on, by the mode of host selection: {@code FEWEST_RUNNING_VMS}, which is also
-     * what no mode means, counts the VMs that are on (then the VMs that are registered); {@code LEAST_LOADED} (and
+     * Picks the host to make the clone on, by the mode of host selection: {@code FEWEST_RUNNING_VMS} counts the VMs that are on (then the VMs that are registered); {@code LEAST_LOADED} (and
      * {@code DRS_RECOMMENDED}, which a standalone host has no counterpart for) ranks the hosts by the CPU and
      * memory that they say are used, with the weights of the host selection options, as it does for the hosts of a
      * vCenter cluster, and drops those that are in maintenance mode or too small for the VM if the options ask for
@@ -650,7 +671,7 @@ public final class VSphereEsxiCluster extends AbstractVSphere {
             EsxiVirtualMachine master,
             @CheckForNull VmSize vmSize,
             @CheckForNull PrintStream log) {
-        if (mode == null || mode.isEmpty() || MODE_FEWEST_RUNNING_VMS.equals(mode)) {
+        if (MODE_FEWEST_RUNNING_VMS.equals(mode)) {
             return leastBusy(candidates);
         }
         if ("DRS_RECOMMENDED".equals(mode) && log != null) {
