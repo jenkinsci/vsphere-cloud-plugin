@@ -23,6 +23,13 @@ f.entry(title:_("Fingerprint"), field:"hostKeyFingerprint") {
     f.textbox(checkMethod:"post")
 }
 
+// These are here, before the settings of the other hosts (which have fields of the same names), so that what they
+// look for by name is found in the settings above, which are the first host's, and not in those of another host.
+// "vsHost" is the host, which is a setting of the connection configuration that this is part of (and is found by
+// its plain name: the "../vsHost" form is not, from inside the section of a connection type)
+f.validateButton(title:_("Show fingerprint"), progress:_("Asking..."), method:"queryHostKey", with:"vsHost,port,connectTimeoutSeconds")
+f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,credentialsId,port,hostKeyPolicy,hostKeyFingerprint,connectTimeoutSeconds")
+
 f.entry(title:_("More ESXi hosts"), field:"additionalHosts") {
     f.repeatableProperty(field:"additionalHosts", add:_("Add another ESXi host"))
 }
@@ -47,8 +54,3 @@ f.advanced {
         f.number(clazz:"required", min:1, step:1, default:600)
     }
 }
-
-// "vsHost" is the host, which is a setting of the connection configuration that this is part of (and is found by
-// its plain name: the "../vsHost" form is not, from inside the section of a connection type)
-f.validateButton(title:_("Show fingerprint"), progress:_("Asking..."), method:"queryHostKey", with:"vsHost,port,connectTimeoutSeconds")
-f.validateButton(title:_("Test Connection"), progress:_("Testing..."), method:"testConnection", with:"vsHost,credentialsId,port,hostKeyPolicy,hostKeyFingerprint,connectTimeoutSeconds")

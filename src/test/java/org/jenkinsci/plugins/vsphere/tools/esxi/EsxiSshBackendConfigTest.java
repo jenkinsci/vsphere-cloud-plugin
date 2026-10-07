@@ -30,6 +30,9 @@ import com.cloudbees.plugins.credentials.impl.UsernamePasswordCredentialsImpl;
 import hudson.util.FormValidation;
 import java.security.KeyPair;
 import java.util.List;
+import org.htmlunit.html.DomElement;
+import org.htmlunit.html.HtmlPage;
+import org.htmlunit.html.HtmlSelect;
 import org.jenkinsci.plugins.vsphere.EsxiSshBackendConfig;
 import org.jenkinsci.plugins.vsphere.EsxiSshHost;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
@@ -130,6 +133,38 @@ class EsxiSshBackendConfigTest {
             }
         } finally {
             other.close();
+        }
+    }
+
+    @Test
+    void theTestOfTheFirstHostInTheFormUsesItsOwnSettingsWhenThereAreMoreHosts(JenkinsRule r) throws Exception {
+        server = new FakeEsxiSshServer(host, "secret", null, false);
+        addPasswordCredentials("esxi-password");
+        // the other host has fields of the same names (credentials, port, ...), which are not what the first host is
+        // tested with
+        EsxiSshBackendConfig esxi = new EsxiSshBackendConfig(null);
+        esxi.setPort(server.port());
+        esxi.setHostKeyPolicy(EsxiHostKeyPolicy.ACCEPT_ANY);
+        esxi.setAdditionalHosts(List.of(new EsxiSshHost("127.0.0.1")));
+        VSphereConnectionConfig config = new VSphereConnectionConfig("127.0.0.1");
+        config.setBackend(esxi);
+        vSphereCloud cloud = new vSphereCloud(config, "Two hosts", 0, 0, false, List.of());
+        r.jenkins.clouds.add(cloud);
+
+        try (JenkinsRule.WebClient wc = r.createWebClient()) {
+            HtmlPage page = wc.goTo(cloud.getUrl() + "configure");
+            wc.waitForBackgroundJavaScript(3000);
+            // the credentials are chosen in the form, for the first host: the first select of them
+            ((HtmlSelect) page.getByXPath("//select[contains(@class,'credentials-select') and @name='_.credentialsId']")
+                            .get(0))
+                    .setSelectedAttribute("esxi-password", true);
+            // and the first of the buttons is that of the first host
+            DomElement button = (DomElement) page.getByXPath("//button[@data-validate-button-method='testConnection']")
+                    .get(0);
+            button.click();
+            wc.waitForBackgroundJavaScript(15_000);
+
+            assertThat(button.getParentNode().asNormalizedText(), containsString("Logged in to ssh://root@127.0.0.1"));
         }
     }
 
