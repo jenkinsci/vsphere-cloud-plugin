@@ -60,14 +60,14 @@
   </Match>
 
   <!--
-    EndLimitedTestRun() catches NullPointerException as a defensive belt-and-suspenders
+    endLimitedTest() (behind EndLimitedTestRun/EndLimitedPipelineRun) catches NullPointerException as a defensive belt-and-suspenders
     measure around several Jenkins core calls (setTemporarilyOffline/waitUntilOffline/
     disconnect); removing it changes behaviour (an NPE would then propagate and abort the
     calling thread) without a clear replacement null-check to add in its place.
   -->
   <Match>
     <Class name="org.jenkinsci.plugins.vSphereCloudSlave"/>
-    <Method name="EndLimitedTestRun"/>
+    <Method name="endLimitedTest"/>
     <Bug pattern="DCN_NULLPOINTER_EXCEPTION"/>
   </Match>
 
