@@ -23,6 +23,7 @@ public final class HostSelectionOptions {
     private final long waitSeconds;
     private final @CheckForNull Listener waitListener;
     private final boolean ignoreWaitListenerErrors;
+    private final double scoreDeviation;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
         this(requireCores, requireMemory, false);
@@ -39,7 +40,8 @@ public final class HostSelectionOptions {
                 HostLimits.NONE,
                 0,
                 null,
-                false);
+                false,
+                0);
     }
 
     private HostSelectionOptions(
@@ -52,7 +54,9 @@ public final class HostSelectionOptions {
             HostLimits limits,
             long waitSeconds,
             @CheckForNull Listener waitListener,
-            boolean ignoreWaitListenerErrors) {
+            boolean ignoreWaitListenerErrors,
+            double scoreDeviation) {
+        this.scoreDeviation = scoreDeviation;
         this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.limits = limits == null ? HostLimits.NONE : limits;
@@ -81,7 +85,8 @@ public final class HostSelectionOptions {
                 limits,
                 waitSeconds,
                 waitListener,
-                ignoreWaitListenerErrors);
+                ignoreWaitListenerErrors,
+                scoreDeviation);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
@@ -96,7 +101,8 @@ public final class HostSelectionOptions {
                 limits,
                 waitSeconds,
                 waitListener,
-                ignoreWaitListenerErrors);
+                ignoreWaitListenerErrors,
+                scoreDeviation);
     }
 
     /** Same options, keeping hosts with less free resources than these limits off the candidate list. */
@@ -111,7 +117,8 @@ public final class HostSelectionOptions {
                 limits,
                 waitSeconds,
                 waitListener,
-                ignoreWaitListenerErrors);
+                ignoreWaitListenerErrors,
+                scoreDeviation);
     }
 
     /**
@@ -130,7 +137,8 @@ public final class HostSelectionOptions {
                 limits,
                 waitSeconds,
                 waitListener,
-                ignoreWaitListenerErrors);
+                ignoreWaitListenerErrors,
+                scoreDeviation);
     }
 
     /**
@@ -149,7 +157,69 @@ public final class HostSelectionOptions {
                 limits,
                 waitSeconds,
                 waitListener,
-                ignoreErrors);
+                ignoreErrors,
+                scoreDeviation);
+    }
+
+    /**
+     * Same options, choosing at random among the hosts scoring within this fraction (0..1) of the best
+     * one; a negative number always takes the single top host.
+     */
+    public HostSelectionOptions withScoreDeviation(double scoreDeviation) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation);
+    }
+
+    /** As {@link #withScoreDeviation}, but a null (not set at the call site) keeps the current value. */
+    public HostSelectionOptions withScoreDeviationOverride(@CheckForNull Double scoreDeviation) {
+        return scoreDeviation == null ? this : withScoreDeviation(scoreDeviation.doubleValue());
+    }
+
+    /**
+     * How far below the best score a host may be and still be a candidate for the final random pick:
+     * 0 (the default) only equally scored ones, up to 1 for all that have a score; above 1: any available host
+     * at random, including those with no usage statistics; negative: always the single top host.
+     */
+    public double getScoreDeviation() {
+        return scoreDeviation;
+    }
+
+    /** True if the deviation is above 1: any available host is chosen at random, whatever its load. */
+    public boolean isPickAnyHostAtRandom() {
+        return scoreDeviation > 1;
+    }
+
+    /**
+     * Parses a call site's own deviation, already variable-expanded: blank means not set (null, inherit
+     * the cloud's); else a number, where anything below 0 means always the top host and anything above 1
+     * any available host at random.
+     *
+     * @throws VSphereException if it is not a number
+     */
+    public static @CheckForNull Double parseScoreDeviation(@CheckForNull String value) throws VSphereException {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            final double parsed = Double.parseDouble(value.trim());
+            if (Double.isNaN(parsed) || Double.isInfinite(parsed)) {
+                throw new NumberFormatException(value);
+            }
+            return Double.valueOf(parsed < 0 ? -1d : parsed);
+        } catch (NumberFormatException e) {
+            throw new VSphereException("hostSelectionScoreDeviation must be a number between 0 and 1 (or negative"
+                    + " to always take the top host, or above 1 to take any host at random), but is \"" + value + "\"");
+        }
     }
 
     /** Told that host selection found no host to use at the moment; see {@link #withWaitListener}. */

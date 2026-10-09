@@ -129,6 +129,10 @@ limitations under the License.
     <f:entry title="${%Seconds to wait for a host within the limits}" field="hostSelectionWaitSeconds">
       <f:textbox/>
     </f:entry>
+
+    <f:entry title="${%Score deviation for picking among the best hosts}" field="hostSelectionScoreDeviation">
+      <f:textbox/>
+    </f:entry>
   </f:advanced>
 
   <f:validateButton title="${%Check Data}" progress="${%Testing...}" method="testData" with="serverName,template,clone,resourcePool,cluster,host,hostSelectionCandidatesAsString"/>

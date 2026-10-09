@@ -122,6 +122,7 @@ buildStep: [$class: 'Clone',
             hostMinFreeMemoryMB: '',
             hostMinFreeMemoryPercent: '',
             hostSelectionWaitSeconds: ''    // (optional) if no host is available at the moment, wait this long for one: blank = the cloud's setting, '0' = not at all, '-1' or 'infinite' = as long as it takes
+            hostSelectionScoreDeviation: ''  // (optional) pick randomly among hosts scoring within this fraction (0..1) of the best: blank = the cloud's setting (default 0: only equal scores), negative = always the top host, above 1 = any available host at random
            ]
 ```
 

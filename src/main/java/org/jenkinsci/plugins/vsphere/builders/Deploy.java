@@ -107,6 +107,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
      * takes. Blank inherits the cloud's setting.
      */
     private String hostSelectionWaitSeconds;
+
+    private String hostSelectionScoreDeviation;
     /**
      * Pipeline only: a closure called with ({@code String} message, {@link HostSelectionWaitReason} reason)
      * whenever host selection finds no host to use at the moment, right after that is logged. Deliberately
@@ -439,6 +441,16 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         this.hostSelectionWaitNotificationIgnoreErrors = hostSelectionWaitNotificationIgnoreErrors;
     }
 
+    public String getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** Overrides the cloud's score deviation (0..1, negative: top host only, above 1: any host); blank inherits it. */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(String hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
     public String getHostSelectionWaitSeconds() {
         return hostSelectionWaitSeconds;
     }
@@ -596,6 +608,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                                 hostMinFreeCpuPercent == null ? null : env.expand(hostMinFreeCpuPercent),
                                 hostMinFreeMemoryMB == null ? null : env.expand(hostMinFreeMemoryMB),
                                 hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)))
+                .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(
+                        hostSelectionScoreDeviation == null ? null : env.expand(hostSelectionScoreDeviation)))
                 .withWaitListener(
                         HostSelectionWaitNotification.of(hostSelectionWaitNotification),
                         hostSelectionWaitNotificationIgnoreErrors);

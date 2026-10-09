@@ -150,6 +150,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
      * inherits the cloud's setting.
      */
     private String hostSelectionWaitSeconds;
+
+    private String hostSelectionScoreDeviation;
     /**
      * Optional free resource limits for this call, same meaning as on the vSphere Cloud but as text. If
      * any of the four is set, they replace the cloud's limits as a whole (blank ones count as 0); if none
@@ -523,6 +525,16 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
         this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
     }
 
+    public String getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** Overrides the cloud's score deviation (0..1, negative: top host only, above 1: any host); blank inherits it. */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(String hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
     public String getHostSelectionWaitSeconds() {
         return hostSelectionWaitSeconds;
     }
@@ -768,6 +780,7 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                                 hostMinFreeCpuPercent,
                                 hostMinFreeMemoryMB,
                                 hostMinFreeMemoryPercent))
+                .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(hostSelectionScoreDeviation))
                 .withVmSize(reconfiguredCpuCores(), reconfiguredMemoryMB());
     }
 

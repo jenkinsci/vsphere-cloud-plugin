@@ -113,6 +113,7 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getHostMinFreeMemoryMB(), is(2048L));
         assertThat(cloud.getHostMinFreeMemoryPercent(), is(15));
         assertThat(cloud.getHostSelectionWaitSeconds(), is(-1L));
+        assertThat(cloud.getHostSelectionScoreDeviation(), is(0.25d));
     }
 
     @Test
@@ -125,6 +126,7 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.hostWeights().isDefault(), is(true));
         assertThat(cloud.hostLimits().isActive(), is(false));
         assertThat(cloud.getHostSelectionWaitSeconds(), is(0L));
+        assertThat(cloud.hostScoreDeviation(), is(0d));
     }
 
     @Test

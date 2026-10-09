@@ -1169,6 +1169,16 @@ public class VSphere {
                     "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
         }
 
+        if (opts.isPickAnyHostAtRandom()) {
+            final HostCandidate any = filtered.get(
+                    java.util.concurrent.ThreadLocalRandom.current().nextInt(filtered.size()));
+            logMessage(
+                    jLogger,
+                    "hostSelectionScoreDeviation is above 1: chose host \"" + any.getName() + "\" at random among the "
+                            + filtered.size() + " available host(s), whatever their load.");
+            return findHostSystemByName(hostSystems, any.getName());
+        }
+
         final HostWeights weights = opts.getWeights();
         logMessage(
                 jLogger,
@@ -1198,12 +1208,24 @@ public class VSphere {
                             c.freeMemMB(),
                             c.freeMemFraction() * 100));
         }
-        final HostCandidate winner = ranking.isEmpty() ? null : ranking.get(0).getHost();
-        if (winner == null) {
+        if (ranking.isEmpty()) {
             logMessage(
                     jLogger,
                     "Unable to determine current load for any candidate host; letting vSphere decide placement.");
             return null;
+        }
+        final double deviation = opts.getScoreDeviation();
+        final List<VSphereHostSelection.ScoredHost> contenders = VSphereHostSelection.topContenders(ranking, deviation);
+        HostCandidate winner = ranking.get(0).getHost();
+        if (contenders.size() > 1) {
+            winner = contenders
+                    .get(java.util.concurrent.ThreadLocalRandom.current().nextInt(contenders.size()))
+                    .getHost();
+            logMessage(
+                    jLogger,
+                    String.format(
+                            "  %d host(s) score within %.3g of the best one (hostSelectionScoreDeviation): chose \"%s\" among them at random.",
+                            contenders.size(), deviation, winner.getName()));
         }
         return findHostSystemByName(hostSystems, winner.getName());
     }
@@ -1264,7 +1286,8 @@ public class VSphere {
                             + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
                             + " of the VM.");
         }
-        if (opts.isRequireAvailableMemory()) {
+        if (opts.isRequireAvailableMemory()
+                && !(opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode))) {
             filtered = filterBySize(jLogger, filtered, opts, vmCpus, vmMemoryMB, true);
             if (filtered.isEmpty()) {
                 return VSphereHostSelection.Evaluation.none(
@@ -1272,6 +1295,12 @@ public class VSphere {
                         "no candidate host in cluster \"" + cluster.getName() + "\" has the VM's memory size ("
                                 + vmMemoryMB + " MB) free right now.");
             }
+        }
+
+        // Asked to pick any host at random: only the checks above (reachable, in service, big enough
+        // where known) count, not the load, so hosts that report no usage are as good as any.
+        if (opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            return VSphereHostSelection.Evaluation.eligible(filtered);
         }
 
         // Ranking by load needs the statistics; DRS does its own.

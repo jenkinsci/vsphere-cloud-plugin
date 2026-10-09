@@ -502,6 +502,27 @@ jenkins:
         hostSelectionWaitSeconds: 900   # up to 15 minutes
 ```
 
+##### Not sending every request to the same host
+
+The load of a host only shows after a new VM has started on it, so requests that arrive in quick
+succession would all pick the same best-scoring host. `hostSelectionScoreDeviation` (a number from 0
+to 1, or beyond) makes every host that scores at least *(1 - deviation)* times the best score an equally good
+candidate, and picks one of them at random; the build log says so when it happens:
+
+* `0` (the default): random among hosts with exactly the best score only;
+* e.g. `0.1`: hosts within 10% of the best score;
+* `1`: any host that has a score, i.e. reports usage;
+* above `1` (e.g. `2`): **any available host at random**, whatever its load: reachable, not in
+  maintenance, among the candidate hosts and not too small where its size is known - including hosts
+  that report no usage statistics. The free resource limits and *Require enough free RAM*, which need
+  usage figures, are not applied;
+* a negative number: always the single top host (the first one on a tie), as before.
+
+It can be set on the cloud, and overridden by a template or a *Clone VM*/*Deploy VM* step
+(`hostSelectionScoreDeviation: '0.05'`; blank inherits the cloud's, any value set replaces it).
+It does not apply when DRS recommends the host. In Configuration as Code, write the number in
+quotes (`hostSelectionScoreDeviation: "0.1"`): an unquoted fraction is not picked up.
+
 ##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)

@@ -133,6 +133,9 @@ public class vSphereCloud extends Cloud {
      */
     private long hostSelectionWaitSeconds;
 
+    /** 0..1: pick randomly among hosts scoring this close to the best; negative: always the best. */
+    private Double hostSelectionScoreDeviation;
+
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
@@ -536,7 +539,8 @@ public class vSphereCloud extends Cloud {
                 .withWaitSeconds(
                         waitSecondsOverride != null
                                 ? waitSecondsOverride.longValue()
-                                : (cloud == null ? 0 : cloud.getHostSelectionWaitSeconds()));
+                                : (cloud == null ? 0 : cloud.getHostSelectionWaitSeconds()))
+                .withScoreDeviation(cloud == null ? 0 : cloud.hostScoreDeviation());
     }
 
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
@@ -646,6 +650,26 @@ public class vSphereCloud extends Cloud {
     @DataBoundSetter
     public void setHostSelectionWaitSeconds(long hostSelectionWaitSeconds) {
         this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
+    public Double getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** The deviation as a number: unset is 0. */
+    public double hostScoreDeviation() {
+        return hostSelectionScoreDeviation == null ? 0d : hostSelectionScoreDeviation.doubleValue();
+    }
+
+    /**
+     * Hosts scoring within this fraction (0..1) of the best one are equally good candidates, and one of
+     * them is picked at random, so that many requests in a short time do not all land on the same host;
+     * 0 (the default) only counts equally scored hosts, a negative value always takes the top host, a
+     * value above 1 picks any available host at random.
+     */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(Double hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
     }
 
     /** The four limits as one value; {@link HostLimits#NONE} if none is set. */
@@ -1304,6 +1328,20 @@ public class vSphereCloud extends Cloud {
         /** 0 for not waiting, -1 for waiting as long as it takes. */
         public FormValidation doCheckHostSelectionWaitSeconds(@QueryParameter String value) {
             return FormValidation.validateIntegerInRange(value, -1, Integer.MAX_VALUE);
+        }
+
+        /** A number; negative means always the top host, above 1 any host at random. */
+        public FormValidation doCheckHostSelectionScoreDeviation(@QueryParameter String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (value == null || value.trim().isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                HostSelectionOptions.parseScoreDeviation(value);
+                return FormValidation.ok();
+            } catch (VSphereException e) {
+                return FormValidation.error(e.getMessage());
+            }
         }
 
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {

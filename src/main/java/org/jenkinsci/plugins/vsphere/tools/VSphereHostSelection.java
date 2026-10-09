@@ -553,6 +553,29 @@ public final class VSphereHostSelection {
         return ranked;
     }
 
+    /**
+     * The hosts at the top of a {@link #rank ranking} that are close enough to the winner to be as good
+     * as it: those scoring at least {@code (1 - deviation)} times the best score, so with 0 only the
+     * equally scored ones. A negative deviation means "exactly the top host", the first one. The
+     * result keeps the ranking's order, so its first element is always the winner.
+     */
+    public static List<ScoredHost> topContenders(List<ScoredHost> ranked, double deviation) {
+        if (ranked.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (deviation < 0 || Double.isNaN(deviation)) {
+            return new ArrayList<>(ranked.subList(0, 1));
+        }
+        final double threshold = ranked.get(0).getScore() * (1d - Math.min(deviation, 1d));
+        List<ScoredHost> top = new ArrayList<>();
+        for (ScoredHost scored : ranked) {
+            if (scored.getScore() >= threshold) {
+                top.add(scored);
+            }
+        }
+        return top;
+    }
+
     /** The most available candidate according to {@link #rank}, or null if none has statistics. */
     public static HostCandidate pickBest(List<HostCandidate> candidates, HostWeights weights) {
         List<ScoredHost> ranked = rank(candidates, weights);
