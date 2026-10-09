@@ -45,6 +45,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.verb.POST;
 
 /**
  * @author Admin
@@ -1331,6 +1332,7 @@ public class vSphereCloud extends Cloud {
         }
 
         /** A number; negative means always the top host, above 1 any host at random. */
+        @POST
         public FormValidation doCheckHostSelectionScoreDeviation(@QueryParameter String value) {
             Jenkins.get().checkPermission(Jenkins.ADMINISTER);
             if (value == null || value.trim().isEmpty()) {
