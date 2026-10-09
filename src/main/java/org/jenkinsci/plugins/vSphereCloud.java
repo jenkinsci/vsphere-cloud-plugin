@@ -1290,7 +1290,7 @@ public class vSphereCloud extends Cloud {
         }
 
         public FormValidation doCheckHostMinFreeCpuPercent(@QueryParameter String value) {
-            return validatePercent(value);
+            return FormValidation.validateIntegerInRange(value, 0, 100);
         }
 
         public FormValidation doCheckHostMinFreeMemoryMB(@QueryParameter String value) {
@@ -1298,27 +1298,12 @@ public class vSphereCloud extends Cloud {
         }
 
         public FormValidation doCheckHostMinFreeMemoryPercent(@QueryParameter String value) {
-            return validatePercent(value);
+            return FormValidation.validateIntegerInRange(value, 0, 100);
         }
 
+        /** 0 for not waiting, -1 for waiting as long as it takes. */
         public FormValidation doCheckHostSelectionWaitSeconds(@QueryParameter String value) {
-            try {
-                Long.parseLong(value == null ? "0" : value.trim());
-                return FormValidation.ok();
-            } catch (NumberFormatException e) {
-                return FormValidation.error(
-                        "A whole number of seconds: 0 for not waiting, -1 for waiting as long as it takes");
-            }
-        }
-
-        private static FormValidation validatePercent(String value) {
-            final FormValidation nonNegative = FormValidation.validateNonNegativeInteger(value);
-            if (nonNegative.kind != FormValidation.Kind.OK) {
-                return nonNegative;
-            }
-            return value != null && !value.trim().isEmpty() && Integer.parseInt(value.trim()) > 100
-                    ? FormValidation.error("A percentage cannot be more than 100")
-                    : FormValidation.ok();
+            return FormValidation.validateIntegerInRange(value, -1, Integer.MAX_VALUE);
         }
 
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {
