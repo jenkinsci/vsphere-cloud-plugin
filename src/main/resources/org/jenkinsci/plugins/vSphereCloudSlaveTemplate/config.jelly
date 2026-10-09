@@ -86,6 +86,30 @@
               <f:textbox/>
             </f:entry>
 
+            <f:entry title="${%Host limit: minimal free CPU in MHz}" field="hostMinFreeCpuMhz">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host limit: minimal free CPU as percent of the host}" field="hostMinFreeCpuPercent">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host limit: minimal free RAM in MB}" field="hostMinFreeMemoryMB">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Host limit: minimal free RAM as percent of the host}" field="hostMinFreeMemoryPercent">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Seconds to wait for a host within the limits}" field="hostSelectionWaitSeconds">
+              <f:textbox/>
+            </f:entry>
+
+            <f:entry title="${%Score deviation for picking among the best hosts}" field="hostSelectionScoreDeviation">
+              <f:textbox/>
+            </f:entry>
+
             <f:entry title="${%Customization Specification}" field="customizationSpec">
                 <f:textbox/>
             </f:entry>

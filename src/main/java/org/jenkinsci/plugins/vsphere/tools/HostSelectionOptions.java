@@ -19,6 +19,11 @@ public final class HostSelectionOptions {
     private final @CheckForNull Integer vmCpus;
     private final @CheckForNull Long vmMemoryMB;
     private final HostWeights weights;
+    private final HostLimits limits;
+    private final long waitSeconds;
+    private final @CheckForNull Listener waitListener;
+    private final boolean ignoreWaitListenerErrors;
+    private final double scoreDeviation;
     private final boolean folderFollowsHost;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
@@ -26,7 +31,19 @@ public final class HostSelectionOptions {
     }
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory, boolean requireAvailableMemory) {
-        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT, false);
+        this(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                null,
+                null,
+                HostWeights.DEFAULT,
+                HostLimits.NONE,
+                0,
+                null,
+                false,
+                0,
+                false);
     }
 
     private HostSelectionOptions(
@@ -36,10 +53,20 @@ public final class HostSelectionOptions {
             @CheckForNull Integer vmCpus,
             @CheckForNull Long vmMemoryMB,
             HostWeights weights,
+            HostLimits limits,
+            long waitSeconds,
+            @CheckForNull Listener waitListener,
+            boolean ignoreWaitListenerErrors,
+            double scoreDeviation,
             boolean folderFollowsHost) {
-        this.requireAvailableMemory = requireAvailableMemory;
+        this.scoreDeviation = scoreDeviation;
         this.folderFollowsHost = folderFollowsHost;
+        this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
+        this.limits = limits == null ? HostLimits.NONE : limits;
+        this.waitListener = waitListener;
+        this.ignoreWaitListenerErrors = ignoreWaitListenerErrors;
+        this.waitSeconds = waitSeconds < 0 ? VSphereHostSelection.WAIT_FOREVER : waitSeconds;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
         this.vmCpus = vmCpus;
@@ -53,13 +80,114 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
     public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /** Same options, keeping hosts with less free resources than these limits off the candidate list. */
+    public HostSelectionOptions withLimits(@CheckForNull HostLimits limits) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /**
+     * Same options, but if the limits (or nothing else) leave no host, wait up to this many seconds for
+     * one to free up: 0 does not wait, a negative number ({@link VSphereHostSelection#WAIT_FOREVER}) waits
+     * for as long as it takes.
+     */
+    public HostSelectionOptions withWaitSeconds(long waitSeconds) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /**
+     * Same options, telling this listener whenever no host is available at the moment, right after that is
+     * logged. For a pipeline's {@code hostSelectionWaitNotification}; it only lives as long as the call. If
+     * the listener throws, the clone/deploy fails, unless {@code ignoreErrors}, when that is only logged.
+     */
+    public HostSelectionOptions withWaitListener(@CheckForNull Listener waitListener, boolean ignoreErrors) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreErrors,
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /**
+     * Same options, choosing at random among the hosts scoring within this fraction (0..1) of the best
+     * one; a negative number always takes the single top host.
+     */
+    public HostSelectionOptions withScoreDeviation(double scoreDeviation) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /**
@@ -69,12 +197,119 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withFolderFollowsHost(boolean folderFollowsHost) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /** Whether the clone's default folder follows the host chosen for it. */
     public boolean isFolderFollowsHost() {
         return folderFollowsHost;
+    }
+
+    /** As {@link #withScoreDeviation}, but a null (not set at the call site) keeps the current value. */
+    public HostSelectionOptions withScoreDeviationOverride(@CheckForNull Double scoreDeviation) {
+        return scoreDeviation == null ? this : withScoreDeviation(scoreDeviation.doubleValue());
+    }
+
+    /**
+     * How far below the best score a host may be and still be a candidate for the final random pick:
+     * 0 (the default) only equally scored ones, up to 1 for all that have a score; above 1: any available host
+     * at random, including those with no usage statistics; negative: always the single top host.
+     */
+    public double getScoreDeviation() {
+        return scoreDeviation;
+    }
+
+    /** True if the deviation is above 1: any available host is chosen at random, whatever its load. */
+    public boolean isPickAnyHostAtRandom() {
+        return scoreDeviation > 1;
+    }
+
+    /**
+     * Parses a call site's own deviation, already variable-expanded: blank means not set (null, inherit
+     * the cloud's); else a number, where anything below 0 means always the top host and anything above 1
+     * any available host at random.
+     *
+     * @throws VSphereException if it is not a number
+     */
+    public static @CheckForNull Double parseScoreDeviation(@CheckForNull String value) throws VSphereException {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            final double parsed = Double.parseDouble(value.trim());
+            if (Double.isNaN(parsed) || Double.isInfinite(parsed)) {
+                throw new NumberFormatException(value);
+            }
+            return Double.valueOf(parsed < 0 ? -1d : parsed);
+        } catch (NumberFormatException e) {
+            throw new VSphereException("hostSelectionScoreDeviation must be a number between 0 and 1 (or negative"
+                    + " to always take the top host, or above 1 to take any host at random), but is \"" + value + "\"");
+        }
+    }
+
+    /** Told that host selection found no host to use at the moment; see {@link #withWaitListener}. */
+    @FunctionalInterface
+    public interface Listener {
+        /**
+         * @param message what was written to the build log about it, including what happens next
+         * @param reason which situation this is
+         */
+        void hostSelectionWaiting(String message, HostSelectionWaitReason reason);
+    }
+
+    /** True if a failing {@link #getWaitListener() listener} is only logged, rather than failing the call. */
+    public boolean isIgnoreWaitListenerErrors() {
+        return ignoreWaitListenerErrors;
+    }
+
+    /** Who to tell when no host is available at the moment, or null. */
+    public @CheckForNull Listener getWaitListener() {
+        return waitListener;
+    }
+
+    /** Minimal free resources of a candidate host; {@link HostLimits#NONE} for no limits. */
+    public HostLimits getLimits() {
+        return limits;
+    }
+
+    /** How long to wait for a host within the limits: 0 not at all, negative forever. */
+    public long getWaitSeconds() {
+        return waitSeconds;
+    }
+
+    /**
+     * Parses a call site's own wait time, already variable-expanded: blank means not set (null, inherit
+     * the cloud's); a whole number of seconds, where a negative one or {@code infinite}/{@code forever}
+     * means to wait for as long as it takes.
+     *
+     * @throws VSphereException if it is none of these
+     */
+    public static @CheckForNull Long parseWaitSeconds(@CheckForNull String value) throws VSphereException {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        final String trimmed = value.trim();
+        if ("infinite".equalsIgnoreCase(trimmed) || "forever".equalsIgnoreCase(trimmed)) {
+            return Long.valueOf(VSphereHostSelection.WAIT_FOREVER);
+        }
+        try {
+            final long parsed = Long.parseLong(trimmed);
+            return Long.valueOf(parsed < 0 ? VSphereHostSelection.WAIT_FOREVER : parsed);
+        } catch (NumberFormatException e) {
+            throw new VSphereException("hostSelectionWaitSeconds must be a whole number of seconds (0 for none, -1 or"
+                    + " \"infinite\" for no limit), but is \"" + value + "\"");
+        }
     }
 
     /** What "most available host" means; {@link HostWeights#DEFAULT} for the original ranking. */

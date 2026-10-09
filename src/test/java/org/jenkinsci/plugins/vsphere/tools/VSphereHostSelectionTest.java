@@ -435,4 +435,60 @@ class VSphereHostSelectionTest {
         return new HostCandidate(
                 name, connected, inMaintenanceMode, cpuUsageMhz, cpuCapacityMhz, memUsageMB, memCapacityMB);
     }
+
+    private static List<VSphereHostSelection.ScoredHost> ranked(double... scores) {
+        List<VSphereHostSelection.ScoredHost> list = new java.util.ArrayList<>();
+        for (int i = 0; i < scores.length; i++) {
+            list.add(new VSphereHostSelection.ScoredHost(
+                    new VSphereHostSelection.HostCandidate("h" + i, true, false, 0, 10000, 0, 10000L), scores[i]));
+        }
+        return list;
+    }
+
+    @Test
+    void deviationZeroKeepsOnlyTheEquallyScoredHosts() {
+        List<VSphereHostSelection.ScoredHost> top = VSphereHostSelection.topContenders(ranked(0.8, 0.8, 0.79, 0.1), 0);
+        assertThat(top.size(), is(2));
+    }
+
+    @Test
+    void deviationIsAFractionOfTheBestScore() {
+        List<VSphereHostSelection.ScoredHost> r = ranked(0.8, 0.75, 0.71, 0.5);
+        assertThat(VSphereHostSelection.topContenders(r, 0.05).size(), is(1)); // >= 0.76
+        assertThat(VSphereHostSelection.topContenders(r, 0.1).size(), is(2)); // >= 0.72
+        assertThat(VSphereHostSelection.topContenders(r, 0.15).size(), is(3)); // >= 0.68
+        assertThat(VSphereHostSelection.topContenders(r, 1).size(), is(4));
+        assertThat(VSphereHostSelection.topContenders(r, 7).size(), is(4));
+    }
+
+    @Test
+    void negativeDeviationTakesJustTheTopHost() {
+        List<VSphereHostSelection.ScoredHost> top = VSphereHostSelection.topContenders(ranked(0.8, 0.8, 0.8), -1);
+        assertThat(top.size(), is(1));
+        assertThat(top.get(0).getHost().getName(), is("h0"));
+        assertThat(VSphereHostSelection.topContenders(ranked(), 0.5).isEmpty(), is(true));
+    }
+
+    @Test
+    void deviationParsing() throws Exception {
+        assertThat(HostSelectionOptions.parseScoreDeviation(null), nullValue());
+        assertThat(HostSelectionOptions.parseScoreDeviation("  "), nullValue());
+        assertThat(HostSelectionOptions.parseScoreDeviation("0.25"), is(0.25d));
+        assertThat(HostSelectionOptions.parseScoreDeviation("-3"), is(-1d));
+        assertThat(HostSelectionOptions.parseScoreDeviation("2"), is(2d));
+        assertThat(HostSelectionOptions.NONE.withScoreDeviation(2).isPickAnyHostAtRandom(), is(true));
+        assertThat(HostSelectionOptions.NONE.withScoreDeviation(1).isPickAnyHostAtRandom(), is(false));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                VSphereException.class, () -> HostSelectionOptions.parseScoreDeviation("NaN"));
+        org.junit.jupiter.api.Assertions.assertThrows(
+                VSphereException.class, () -> HostSelectionOptions.parseScoreDeviation("lots"));
+        assertThat(HostSelectionOptions.NONE.getScoreDeviation(), is(0d));
+        assertThat(
+                HostSelectionOptions.NONE
+                        .withScoreDeviationOverride(0.3)
+                        .withWaitSeconds(5)
+                        .withScoreDeviationOverride(null)
+                        .getScoreDeviation(),
+                is(0.3d));
+    }
 }

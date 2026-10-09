@@ -107,7 +107,7 @@ allowing a lower "Delay between launch and boot complete" value without sacrific
 * Delay between launch and boot complete:
 Number of seconds to delay after starting the virtual machine (or after waiting for VMTools) before assuming the node is operational.
 * Disconnect after Limited Builds: Will force the node agent to disconnect after the specified number of builds have been performed, triggering the disconnect action.
-**Note:** Currently, the "Disconnect After Limited Builds" configuration parameter is not used.
+A Pipeline run counts as one build, however many `node {}` blocks it runs; the agent is disconnected when the run that reaches the limit is over.
 * GuestInfo Properties:
 you can use "guestinfos" to provide properties (e.g. the URL to the Jenkins Master and the JNLP "secret") to the clone.
 This is especially useful if you chose "Java Web Start" (JNLP) as launch method, e.g. for a Windows VM.
@@ -411,11 +411,11 @@ The four measures of each host, as the formula sees them (the best free MHz, 541
 free MB, 1027075, are the reference of the two absolute ones), approximately because the log rounds
 the percentages:
 
-| Host | MHz `a` (weight 1) | CPU % `b` (1) | MB `c` (5) | RAM % `d` (5) | Score |
-|------|------|------|------|------|------|
-| virthost3 | 0.90 | 0.51 | 0.99 | 0.49 | 0.73 |
-| virthost1 | 1.00 | 0.57 | 0.96 | 0.47 | 0.73 |
-| virthost2 | 0.78 | 0.44 | 1.00 | 0.49 | 0.72 |
+| Host      | MHz `a` (weight 1) | CPU % `b` (1) | MB `c` (5) | RAM % `d` (5) | Score |
+|-----------|--------------------|---------------|------------|---------------|-------|
+| virthost3 | 0.90               | 0.51          | 0.99       | 0.49          | 0.73  |
+| virthost1 | 1.00               | 0.57          | 0.96       | 0.47          | 0.73  |
+| virthost2 | 0.78               | 0.44          | 1.00       | 0.49          | 0.72  |
 
 Things this shows:
 
@@ -429,6 +429,108 @@ Things this shows:
   like `5, 5, 1, 1` would pick `virthost1` clearly (about `0.77` against `0.71` for `virthost3`
   and `0.63` for `virthost2`), and `1, 1, 1, 1` would pick it as well (`0.75`, `0.72`, `0.68`).
   Which of the hosts is "right" is the decision the weights express, not something the plugin can tell.
+
+##### Keeping overloaded hosts off the list, and waiting for a free one
+
+Weights only choose among the hosts that are acceptable; **limits** decide which hosts are
+acceptable at all. On the vSphere Cloud (under *Advanced*) an admin can set the minimal free
+resources a host must have *right now* to be considered:
+
+| Setting                    | Meaning                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `hostMinFreeCpuMhz`        | free CPU in MHz (absolute)                                            |
+| `hostMinFreeCpuPercent`    | free CPU as a percentage of the host's own capacity, 0-100 (relative) |
+| `hostMinFreeMemoryMB`      | free RAM in MB (absolute)                                             |
+| `hostMinFreeMemoryPercent` | free RAM as a percentage of the host's own memory, 0-100 (relative)   |
+
+A host with less free than a limit is ruled out (the log says which limit); a host must satisfy
+every limit that is set, and one whose usage is unknown cannot be shown to, so it is ruled out too.
+`0`, the default, switches a limit off, so nothing changes until you set one. Use the absolute
+limits for farms of similar hosts, and the relative ones for mixed farms - e.g.
+`hostMinFreeCpuPercent: 20` and `hostMinFreeMemoryPercent: 10` mean "never start a new VM on a
+host that is over 80% CPU-busy or has less than a tenth of its RAM free".
+
+A template or build step can set the same four limits for itself (given as text, so variables
+work), with the same rule as for weights: leave all four blank to use the cloud's; if **any** is
+set, the four values replace the cloud's limits as a whole and the blank ones count as `0`. Setting
+all four to `0` therefore lifts the cloud's limits for that call.
+
+Limits apply whenever automatic host selection runs (`LEAST_LOADED` or `DRS_RECOMMENDED`). They
+are not applied to a fixed `host`, which always wins, nor when no mode is set.
+
+Because the limits can leave **no** host - and so can other situations - automatic host selection
+can **wait** for a suitable host to become available. `hostSelectionWaitSeconds` says for how long:
+
+* `0` (the default): do not wait;
+* a positive number: look at the hosts' load again every 15 seconds for up to that many seconds,
+  and carry on as soon as one qualifies;
+* `-1` (or, in the text fields of build steps and templates, `infinite`): wait for as long as it
+  takes. An aborted build stops waiting.
+
+It applies whenever no host can be used at the moment, whatever the reason, and the build log says
+which one, whether the build will wait (and for how long) or give up right away, and what giving up
+means, at the moment the situation is found:
+
+| Reason (`HostSelectionWaitReason`) | Situation | Assumed to be |
+| ---------------------------------- | --- | --- |
+| `BELOW_FREE_RESOURCE_LIMITS`       | every usable host has less free CPU/RAM than the limits | transient |
+| `NO_HOST_WITH_FREE_RAM_FOR_VM`     | with *Require enough free RAM*, no host has the VM's memory size free right now | transient |
+| `NO_USABLE_HOSTS`                  | all hosts disconnected, in maintenance mode, or not among the candidates | persistent |
+| `NO_HOST_FITS_VM_SIZE`             | no host has enough cores/RAM for the VM, as the *Require enough ...* settings ask | persistent |
+| `NO_USAGE_STATISTICS`              | no candidate host reports CPU/memory usage (`LEAST_LOADED` needs it; `DRS_RECOMMENDED` does not) | persistent |
+
+*Giving up* (not waiting, or the time ran out) means **failing** the clone/deploy when it was the
+free resource limits that ruled out every host - vCenter must not then place the VM regardless of
+them - and, in all other situations, leaving the placement to vCenter, as it always was. So with the
+default of `0` nothing changes for setups without limits. After a wait, the situation may have
+changed; what counts is the last one seen.
+
+Set it on the cloud for a default, and override it per template or per *Clone VM*/*Deploy VM*
+step (`hostSelectionWaitSeconds: '600'`; blank inherits). While waiting, the build occupies its
+executor and a connection to vCenter, so a finite wait is advisable on busy farms.
+
+A pipeline can also be told, at the moment the situation is found and logged - see
+[the pipeline documentation](pipeline.md#being-told-that-no-host-is-available).
+
+```yaml
+jenkins:
+  clouds:
+    - vSphere:
+        hostSelectionMode: "LEAST_LOADED"
+        hostMinFreeCpuPercent: 20
+        hostMinFreeMemoryMB: 4096
+        hostSelectionWaitSeconds: 900   # up to 15 minutes
+```
+
+##### Not sending every request to the same host
+
+The load of a host only shows after a new VM has started on it, so requests that arrive in quick
+succession would all pick the same best-scoring host. `hostSelectionScoreDeviation` (a number from 0
+to 1, or beyond) makes every host that scores at least *(1 - deviation)* times the best score an equally good
+candidate, and picks one of them at random; the build log says so when it happens:
+
+* `0` (the default): random among hosts with exactly the best score only;
+* e.g. `0.1`: hosts within 10% of the best score;
+* `1`: any host that has a score, i.e. reports usage;
+* above `1` (e.g. `2`): **any available host at random**, whatever its load: reachable, not in
+  maintenance, among the candidate hosts and not too small where its size is known - including hosts
+  that report no usage statistics. The free resource limits and *Require enough free RAM*, which need
+  usage figures, are not applied;
+* a negative number: always the single top host (the first one on a tie), as before.
+
+It can be set on the cloud, and overridden by a template or a *Clone VM*/*Deploy VM* step
+(`hostSelectionScoreDeviation: '0.05'`; blank inherits the cloud's, any value set replaces it).
+It does not apply when DRS recommends the host. In Configuration as Code, write the number in
+quotes (`hostSelectionScoreDeviation: "0.1"`): an unquoted fraction is not picked up.
+
+##### Seeing why a host was chosen
+
+With a host selection mode set, the build console log (and the template's provisioning log)
+lists the cluster's hosts, each with the reason it was ruled out (not connected, in
+maintenance mode, not in the candidate list, too few cores, too little RAM, no usage
+statistics), then every remaining candidate with its score and free CPU/memory, best first,
+and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
+scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
 
 ##### Per-host VM folders
 
@@ -448,15 +550,6 @@ alike. If the source's folder path does not name its host, or there is no such f
 host, the source's own folder is used and the log says so. An explicit folder always wins, and it
 applies to any host the plugin sets - a fixed `host` too - and is only about where the VM is
 listed, not where it runs.
-
-##### Seeing why a host was chosen
-
-With a host selection mode set, the build console log (and the template's provisioning log)
-lists the cluster's hosts, each with the reason it was ruled out (not connected, in
-maintenance mode, not in the candidate list, too few cores, too little RAM, no usage
-statistics), then every remaining candidate with its score and free CPU/memory, best first,
-and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
-scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
 
 ##### Settings for the classic UI, pipeline and JCasC YAML
 

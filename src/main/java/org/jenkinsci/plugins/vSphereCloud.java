@@ -45,6 +45,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.verb.POST;
 
 /**
  * @author Admin
@@ -115,6 +116,26 @@ public class vSphereCloud extends Cloud {
     private int hostWeightFreeCpuPercent;
     private int hostWeightFreeMemoryMB;
     private int hostWeightFreeMemoryPercent;
+
+    /**
+     * Minimal free resources a host needs right now to be a candidate at all, however it ranks: free
+     * CPU (MHz), free CPU (% of the host), free memory (MB) and free memory (% of the host). Zero (the
+     * default) switches a limit off.
+     */
+    private long hostMinFreeCpuMhz;
+
+    private int hostMinFreeCpuPercent;
+    private long hostMinFreeMemoryMB;
+    private int hostMinFreeMemoryPercent;
+
+    /**
+     * If the limits leave no candidate host, how long to wait for one to free up before failing: 0 (the
+     * default) does not wait, a negative number waits for as long as it takes.
+     */
+    private long hostSelectionWaitSeconds;
+
+    /** 0..1: pick randomly among hosts scoring this close to the best; negative: always the best. */
+    private Double hostSelectionScoreDeviation;
 
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private boolean hostSelectionRequireCores;
@@ -483,6 +504,44 @@ public class vSphereCloud extends Cloud {
     }
 
     /**
+     * As above, also with how long the call site is willing to wait for a host within the cloud's free
+     * resource limits: if {@code waitSecondsOverride} is not null it replaces the cloud's wait time.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride) {
+        return hostSelectionOptions(
+                cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, waitSecondsOverride, null);
+    }
+
+    /**
+     * As above, also with the free resource limits a call site set for itself: if {@code
+     * limitsOverride} is not null it replaces the cloud's limits as a whole, else the cloud's apply.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride,
+            @CheckForNull HostLimits limitsOverride) {
+        return hostSelectionOptions(
+                cloud,
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                weightsOverride,
+                waitSecondsOverride,
+                limitsOverride,
+                null);
+    }
+
+    /**
      * As above, also with whether the call site wants the clone's default folder to follow the host chosen
      * for it: if {@code folderFollowsHostOverride} is not null it replaces the cloud's setting.
      */
@@ -492,6 +551,8 @@ public class vSphereCloud extends Cloud {
             @CheckForNull Boolean requireMemory,
             @CheckForNull Boolean requireAvailableMemory,
             @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride,
+            @CheckForNull HostLimits limitsOverride,
             @CheckForNull Boolean folderFollowsHostOverride) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
@@ -501,6 +562,12 @@ public class vSphereCloud extends Cloud {
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
                 .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()))
+                .withLimits(limitsOverride != null ? limitsOverride : (cloud == null ? null : cloud.hostLimits()))
+                .withWaitSeconds(
+                        waitSecondsOverride != null
+                                ? waitSecondsOverride.longValue()
+                                : (cloud == null ? 0 : cloud.getHostSelectionWaitSeconds()))
+                .withScoreDeviation(cloud == null ? 0 : cloud.hostScoreDeviation())
                 .withFolderFollowsHost(HostSelectionOptions.resolve(
                         cloud != null && cloud.isHostSelectionFolderFollowsHost(), folderFollowsHostOverride));
     }
@@ -559,6 +626,84 @@ public class vSphereCloud extends Cloud {
     public HostWeights hostWeights() {
         return new HostWeights(
                 hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
+    }
+
+    public long getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    /** A host with less free CPU than this many MHz is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(long hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public int getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    /** A host with less free CPU than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(int hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public long getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    /** A host with less free memory than this many MB is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(long hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public int getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    /** A host with less free memory than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(int hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    public long getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    /**
+     * How long, in seconds, to wait for a host within the free resource limits to become available
+     * before failing the clone/deploy: 0 = do not wait, negative = wait for as long as it takes.
+     */
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(long hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
+    public Double getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** The deviation as a number: unset is 0. */
+    public double hostScoreDeviation() {
+        return hostSelectionScoreDeviation == null ? 0d : hostSelectionScoreDeviation.doubleValue();
+    }
+
+    /**
+     * Hosts scoring within this fraction (0..1) of the best one are equally good candidates, and one of
+     * them is picked at random, so that many requests in a short time do not all land on the same host;
+     * 0 (the default) only counts equally scored hosts, a negative value always takes the top host, a
+     * value above 1 picks any available host at random.
+     */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(Double hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
+    /** The four limits as one value; {@link HostLimits#NONE} if none is set. */
+    public HostLimits hostLimits() {
+        return new HostLimits(hostMinFreeCpuMhz, hostMinFreeCpuPercent, hostMinFreeMemoryMB, hostMinFreeMemoryPercent);
     }
 
     /**
@@ -1204,6 +1349,42 @@ public class vSphereCloud extends Cloud {
 
         public FormValidation doCheckHostWeightFreeMemoryPercent(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeCpuMhz(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeCpuPercent(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, 0, 100);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryMB(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryPercent(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, 0, 100);
+        }
+
+        /** 0 for not waiting, -1 for waiting as long as it takes. */
+        public FormValidation doCheckHostSelectionWaitSeconds(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, -1, Integer.MAX_VALUE);
+        }
+
+        /** A number; negative means always the top host, above 1 any host at random. */
+        @POST
+        public FormValidation doCheckHostSelectionScoreDeviation(@QueryParameter String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (value == null || value.trim().isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                HostSelectionOptions.parseScoreDeviation(value);
+                return FormValidation.ok();
+            } catch (VSphereException e) {
+                return FormValidation.error(e.getMessage());
+            }
         }
 
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {

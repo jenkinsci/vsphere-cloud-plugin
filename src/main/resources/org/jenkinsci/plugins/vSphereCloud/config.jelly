@@ -92,6 +92,30 @@
         <f:entry title="${%Host weight: free RAM as percent of the host}" field="hostWeightFreeMemoryPercent">
           <f:number clazz="number" min="0" step="1" default="0"/>
         </f:entry>
+
+        <f:entry title="${%Host limit: minimal free CPU in MHz}" field="hostMinFreeCpuMhz">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host limit: minimal free CPU as percent of the host}" field="hostMinFreeCpuPercent">
+          <f:number clazz="number" min="0" max="100" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host limit: minimal free RAM in MB}" field="hostMinFreeMemoryMB">
+          <f:number clazz="number" min="0" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Host limit: minimal free RAM as percent of the host}" field="hostMinFreeMemoryPercent">
+          <f:number clazz="number" min="0" max="100" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Seconds to wait for a host within the limits}" field="hostSelectionWaitSeconds">
+          <f:number clazz="number" step="1" default="0"/>
+        </f:entry>
+
+        <f:entry title="${%Score deviation for picking among the best hosts}" field="hostSelectionScoreDeviation">
+          <f:textbox clazz="number" checkMethod="post"/>
+        </f:entry>
     </f:advanced>
 
     <f:entry title="${%Templates}" description="${%List of Master VMs to be cloned as slaves}">

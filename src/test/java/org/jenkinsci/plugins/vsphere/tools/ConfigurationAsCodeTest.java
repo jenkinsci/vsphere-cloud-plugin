@@ -108,6 +108,12 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.getHostWeightFreeCpuPercent(), is(2));
         assertThat(cloud.getHostWeightFreeMemoryMB(), is(3));
         assertThat(cloud.getHostWeightFreeMemoryPercent(), is(4));
+        assertThat(cloud.getHostMinFreeCpuMhz(), is(500L));
+        assertThat(cloud.getHostMinFreeCpuPercent(), is(10));
+        assertThat(cloud.getHostMinFreeMemoryMB(), is(2048L));
+        assertThat(cloud.getHostMinFreeMemoryPercent(), is(15));
+        assertThat(cloud.getHostSelectionWaitSeconds(), is(-1L));
+        assertThat(cloud.getHostSelectionScoreDeviation(), is(0.25d));
     }
 
     @Test
@@ -118,6 +124,9 @@ class ConfigurationAsCodeTest {
         assertThat(cloud.isHostSelectionRequireMemory(), is(false));
         assertThat(cloud.isHostSelectionRequireAvailableMemory(), is(false));
         assertThat(cloud.hostWeights().isDefault(), is(true));
+        assertThat(cloud.hostLimits().isActive(), is(false));
+        assertThat(cloud.getHostSelectionWaitSeconds(), is(0L));
+        assertThat(cloud.hostScoreDeviation(), is(0d));
     }
 
     @Test

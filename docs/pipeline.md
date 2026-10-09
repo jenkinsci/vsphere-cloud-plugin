@@ -110,16 +110,63 @@ buildStep: [$class: 'Clone',
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
             hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionFolderFollowsHost: false,  // (optional) true/false overrides the cloud's default; omit to inherit it. With no folder given, put the clone in its source's folder with the source's host name replaced by the clone's host
             hostSelectionRequireCores: false,       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with fewer physical cores than the VM has vCPUs
             hostSelectionRequireMemory: false,      // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
             hostSelectionRequireAvailableMemory: false,  // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts without the VM's memory size free right now
+            hostSelectionScoreDeviation: '',  // (optional) pick randomly among hosts scoring within this fraction (0..1) of the best: blank = the cloud's setting (default 0: only equal scores), negative = always the top host, above 1 = any available host at random
+            hostSelectionWaitSeconds: '',    // (optional) if no host is available at the moment, wait this long for one: blank = the cloud's setting, '0' = not at all, '-1' or 'infinite' = as long as it takes
             hostWeightFreeCpuMhz: '',       // (optional) host ranking weights for this call: all blank = use the cloud's;
             hostWeightFreeCpuPercent: '',   //   if any is set they replace the cloud's as a whole (blank = 0)
             hostWeightFreeMemoryMB: '',
             hostWeightFreeMemoryPercent: '',
-            hostSelectionFolderFollowsHost: false  // (optional) true/false overrides the cloud's default; omit to inherit it. With no folder given, put the clone in its source's folder with the source's host name replaced by the clone's host
+            hostMinFreeCpuMhz: '',          // (optional) free resource limits for this call: all blank = use the cloud's;
+            hostMinFreeCpuPercent: '',      //   if any is set they replace the cloud's as a whole (blank = 0, i.e. no limit)
+            hostMinFreeMemoryMB: '',
+            hostMinFreeMemoryPercent: ''
            ]
 ```
+
+#### Being told that no host is available
+
+When automatic host selection finds no host to use at the moment (see
+["Keeping overloaded hosts off the list, and waiting for a free one"](jenkins-configuration.md#keeping-overloaded-hosts-off-the-list-and-waiting-for-a-free-one)),
+it says so in the build log, including whether the step will wait or give up right away. `Clone` and
+`Deploy` also accept two options for a pipeline to hook into that, e.g. to raise an alert:
+
+```groovy
+buildStep: [$class: 'Clone',
+            ...,
+            hostSelectionWaitSeconds: '600',
+            hostSelectionWaitNotification: myNotifier,           // (optional) closure, see below
+            hostSelectionWaitNotificationIgnoreErrors: false]    // (optional) default false
+```
+
+The closure is called right after the message is logged, with two arguments: the message (a `String`)
+and the reason, a `org.jenkinsci.plugins.vsphere.tools.HostSelectionWaitReason`, whose `isTransient()`
+(and `isPersistent()`) says whether the situation is assumed to pass by itself (hosts busy) or to need
+somebody's attention (hosts in maintenance, not reporting usage, too small for the VM). It is called once
+per clone/deploy, when the situation is first found, not on every check while waiting.
+
+**The closure has to be a plain Groovy closure, not one written in the pipeline script**, because script
+code is run by the pipeline's own interpreter and cannot be called from inside a step. Passing a script
+closure fails the step at once, saying so. A closure returned by a `@NonCPS` method works; it can use
+Java/Groovy APIs (send mail, post to a webhook, ...) but not pipeline steps like `echo` or `slackSend`:
+
+```groovy
+@NonCPS
+def notifier() {
+    return { String message, reason ->
+        if (reason.isPersistent()) {
+            // e.g. POST `message` to a chat webhook with plain Java/Groovy code
+        }
+    }
+}
+```
+
+If the closure throws, the step fails, unless `hostSelectionWaitNotificationIgnoreErrors: true`, when the
+error is only logged and the step carries on. Neither option is stored with a job or shown in the classic
+UI; they exist for pipelines only.
 
 The `datastore` option can be useful if your templates live on different storage (slower/cheaper) than production VMs, so run-time instances should not appear "near" their origin.
 

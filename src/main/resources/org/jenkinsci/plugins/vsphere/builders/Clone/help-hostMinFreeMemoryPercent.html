@@ -1,0 +1,11 @@
+<div>
+  (Optional, a whole number) Minimal free RAM as a percentage of the host's memory (0-100) a host must have right now to be a candidate
+  for automatic host selection, as on the vSphere Cloud, where the limits are described in detail.
+  <p>
+  Leave <b>all four</b> host limit fields of this call blank to use the limits of the vSphere
+  cloud. If you set <b>any</b> of them, the four values here <b>replace</b> the cloud's limits as a
+  whole for this call, and the ones left blank count as <tt>0</tt> (no limit). Setting all four to
+  <tt>0</tt> therefore removes the limits for this call, whatever the cloud has configured.
+  </p>
+  <p>Variables can be used where this is a build step.</p>
+</div>

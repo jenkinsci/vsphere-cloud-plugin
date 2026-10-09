@@ -1,0 +1,14 @@
+<div>
+  (Optional, a whole number of seconds) How long to wait, when automatic host selection finds no host that
+  the VM can be created on at the moment (hosts too busy for the free resource limits, in maintenance, too
+  small, not reporting usage, ...), before giving up. See the setting of the same name on the vSphere Cloud,
+  which also says what giving up means.
+  <ul>
+    <li><tt>0</tt>: do not wait; give up at once.</li>
+    <li>a positive number: look at the hosts again every 15 seconds for up to that long.</li>
+    <li><tt>-1</tt> or <tt>infinite</tt>: wait for as long as it takes (the build can still be aborted).</li>
+  </ul>
+  <p>
+  Leave blank to use the cloud's setting. Variables can be used where this is a build step.
+  </p>
+</div>
