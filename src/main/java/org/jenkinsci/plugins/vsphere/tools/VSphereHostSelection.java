@@ -339,6 +339,87 @@ public final class VSphereHostSelection {
         return null;
     }
 
+    /**
+     * Why {@link HostLimits} rule this host out, or null if it is within them (or there are none).
+     * For logging the reasoning behind a placement.
+     */
+    public static String limitShortfall(HostCandidate candidate, HostLimits limits) {
+        return limits == null ? null : limits.shortfall(candidate);
+    }
+
+    /** Keeps only the candidates that satisfy all of the (possibly null) limits. */
+    public static List<HostCandidate> filterByLimits(List<HostCandidate> candidates, HostLimits limits) {
+        if (limits == null || !limits.isActive()) {
+            return candidates;
+        }
+        List<HostCandidate> result = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            if (limits.shortfall(candidate) == null) {
+                result.add(candidate);
+            }
+        }
+        return result;
+    }
+
+    /** Waits for a while; {@link Thread#sleep} in real life. */
+    @FunctionalInterface
+    public interface Sleeper {
+        void sleep(long millis) throws InterruptedException;
+    }
+
+    /** {@code waitSeconds} value meaning: keep waiting for as long as it takes. */
+    public static final long WAIT_FOREVER = -1;
+
+    /**
+     * Polls {@code eligibleNow} - which should look at the hosts afresh each time - until it yields a
+     * non-empty list of hosts, and returns that. Gives up after {@code waitSeconds} (0: do not wait at
+     * all, so the first look decides; negative, see {@link #WAIT_FOREVER}: never give up) by throwing a
+     * {@link VSphereException}, as does the waiting thread being interrupted (e.g. the build aborted),
+     * in which case the interrupt flag is kept set.
+     *
+     * @param initial what the first look found, which the caller has already logged
+     */
+    public static List<HostCandidate> waitForEligible(
+            List<HostCandidate> initial,
+            java.util.function.Supplier<List<HostCandidate>> eligibleNow,
+            long waitSeconds,
+            long pollMillis,
+            java.util.function.LongSupplier clockMillis,
+            Sleeper sleeper,
+            java.util.function.Consumer<String> log)
+            throws VSphereException {
+        if (!initial.isEmpty()) {
+            return initial;
+        }
+        final boolean forever = waitSeconds < 0;
+        if (!forever && waitSeconds == 0) {
+            throw new VSphereException("No host currently has enough free resources, and waiting is not enabled.");
+        }
+        final long started = clockMillis.getAsLong();
+        final long deadline = forever ? Long.MAX_VALUE : started + waitSeconds * 1000L;
+        log.accept("No host currently has enough free resources; will check again every " + (pollMillis / 1000)
+                + " second(s) for " + (forever ? "as long as it takes" : "up to " + waitSeconds + " second(s)") + ".");
+        while (true) {
+            final long remaining = deadline - clockMillis.getAsLong();
+            if (remaining <= 0) {
+                throw new VSphereException("Gave up after waiting " + waitSeconds
+                        + " second(s) for a host with enough free resources to become available.");
+            }
+            try {
+                sleeper.sleep(Math.min(pollMillis, remaining));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new VSphereException("Interrupted while waiting for a host with enough free resources.");
+            }
+            final List<HostCandidate> now = eligibleNow.get();
+            if (!now.isEmpty()) {
+                log.accept("After " + ((clockMillis.getAsLong() - started) / 1000) + " second(s), " + now.size()
+                        + " host(s) have enough free resources.");
+                return now;
+            }
+        }
+    }
+
     /** A candidate host with its availability score (0 worst .. 1 best); see {@link #rank}. */
     public static final class ScoredHost {
         private final HostCandidate host;

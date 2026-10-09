@@ -1,0 +1,15 @@
+<div>
+  (Optional, a whole number) What to do when the free resource limits leave no host that a VM could be
+  created on: how many <b>seconds to wait</b> for one to free up before failing.
+  <ul>
+    <li><tt>0</tt> (the default): do not wait; fail at once.</li>
+    <li>a positive number: look at the hosts' load again every 15 seconds for up to that long.</li>
+    <li><tt>-1</tt>: wait for as long as it takes (the build can still be aborted).</li>
+  </ul>
+  <p>
+  Only the free resource limits are waited for. Hosts being unusable (disconnected, in maintenance)
+  or too small for the VM keep their existing handling when nothing else is configured. A clone or deploy
+  step, or a template, can set its own wait time. A waiting build holds its place in
+  the queue and its connection to vCenter, so a limited wait is advisable on busy farms.
+  </p>
+</div>

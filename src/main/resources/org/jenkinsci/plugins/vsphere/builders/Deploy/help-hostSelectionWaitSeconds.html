@@ -1,0 +1,13 @@
+<div>
+  (Optional, a whole number of seconds) How long to wait for a host within the vSphere cloud's free
+  resource limits (minimal free CPU and RAM) to become available, when none currently is, before
+  failing. See the setting of the same name on the vSphere Cloud.
+  <ul>
+    <li><tt>0</tt>: do not wait; fail at once.</li>
+    <li>a positive number: look at the hosts' load again every 15 seconds for up to that long.</li>
+    <li><tt>-1</tt> or <tt>infinite</tt>: wait for as long as it takes (the build can still be aborted).</li>
+  </ul>
+  <p>
+  Leave blank to use the cloud's setting. Variables can be used where this is a build step.
+  </p>
+</div>

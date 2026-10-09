@@ -430,6 +430,60 @@ Things this shows:
   and `0.63` for `virthost2`), and `1, 1, 1, 1` would pick it as well (`0.75`, `0.72`, `0.68`).
   Which of the hosts is "right" is the decision the weights express, not something the plugin can tell.
 
+##### Keeping overloaded hosts off the list, and waiting for a free one
+
+Weights only choose among the hosts that are acceptable; **limits** decide which hosts are
+acceptable at all. On the vSphere Cloud (under *Advanced*) an admin can set the minimal free
+resources a host must have *right now* to be considered:
+
+| Setting                    | Meaning                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `hostMinFreeCpuMhz`        | free CPU in MHz (absolute)                                            |
+| `hostMinFreeCpuPercent`    | free CPU as a percentage of the host's own capacity, 0-100 (relative) |
+| `hostMinFreeMemoryMB`      | free RAM in MB (absolute)                                             |
+| `hostMinFreeMemoryPercent` | free RAM as a percentage of the host's own memory, 0-100 (relative)   |
+
+A host with less free than a limit is ruled out (the log says which limit); a host must satisfy
+every limit that is set, and one whose usage is unknown cannot be shown to, so it is ruled out too.
+`0`, the default, switches a limit off, so nothing changes until you set one. Use the absolute
+limits for farms of similar hosts, and the relative ones for mixed farms - e.g.
+`hostMinFreeCpuPercent: 20` and `hostMinFreeMemoryPercent: 10` mean "never start a new VM on a
+host that is over 80% CPU-busy or has less than a tenth of its RAM free".
+
+A template or build step can set the same four limits for itself (given as text, so variables
+work), with the same rule as for weights: leave all four blank to use the cloud's; if **any** is
+set, the four values replace the cloud's limits as a whole and the blank ones count as `0`. Setting
+all four to `0` therefore lifts the cloud's limits for that call.
+
+Limits apply whenever automatic host selection runs (`LEAST_LOADED` or `DRS_RECOMMENDED`). They
+are not applied to a fixed `host`, which always wins, nor when no mode is set.
+
+Because the limits can leave **no** host, a clone or deploy then does not fall back to letting
+vCenter pick (which would defeat the limits): it fails - or waits, as set by
+`hostSelectionWaitSeconds`:
+
+* `0` (the default): fail at once;
+* a positive number: look at the hosts' load again every 15 seconds for up to that many seconds,
+  and carry on as soon as one qualifies; fail if none does in time;
+* `-1` (or, in the text fields of build steps and templates, `infinite`): wait for as long as it
+  takes. An aborted build stops waiting.
+
+Set it on the cloud for a default, and override it per template or per *Clone VM*/*Deploy VM*
+step (`hostSelectionWaitSeconds: '600'`; blank inherits). While waiting, the build occupies its
+executor and a connection to vCenter, so a finite wait is advisable on busy farms. Only the
+limits are waited for; hosts that are disconnected, in maintenance or too small for the VM are
+re-checked during the wait, but if there are none to begin with, the existing fallback applies.
+
+```yaml
+jenkins:
+  clouds:
+    - vSphere:
+        hostSelectionMode: "LEAST_LOADED"
+        hostMinFreeCpuPercent: 20
+        hostMinFreeMemoryMB: 4096
+        hostSelectionWaitSeconds: 900   # up to 15 minutes
+```
+
 ##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)

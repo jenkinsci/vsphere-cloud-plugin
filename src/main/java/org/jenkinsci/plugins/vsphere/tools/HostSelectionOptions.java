@@ -19,13 +19,15 @@ public final class HostSelectionOptions {
     private final @CheckForNull Integer vmCpus;
     private final @CheckForNull Long vmMemoryMB;
     private final HostWeights weights;
+    private final HostLimits limits;
+    private final long waitSeconds;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
         this(requireCores, requireMemory, false);
     }
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory, boolean requireAvailableMemory) {
-        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT);
+        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT, HostLimits.NONE, 0);
     }
 
     private HostSelectionOptions(
@@ -34,9 +36,13 @@ public final class HostSelectionOptions {
             boolean requireAvailableMemory,
             @CheckForNull Integer vmCpus,
             @CheckForNull Long vmMemoryMB,
-            HostWeights weights) {
+            HostWeights weights,
+            HostLimits limits,
+            long waitSeconds) {
         this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
+        this.limits = limits == null ? HostLimits.NONE : limits;
+        this.waitSeconds = waitSeconds < 0 ? VSphereHostSelection.WAIT_FOREVER : waitSeconds;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
         this.vmCpus = vmCpus;
@@ -50,13 +56,63 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
     public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+    }
+
+    /** Same options, keeping hosts with less free resources than these limits off the candidate list. */
+    public HostSelectionOptions withLimits(@CheckForNull HostLimits limits) {
+        return new HostSelectionOptions(
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+    }
+
+    /**
+     * Same options, but if the limits (or nothing else) leave no host, wait up to this many seconds for
+     * one to free up: 0 does not wait, a negative number ({@link VSphereHostSelection#WAIT_FOREVER}) waits
+     * for as long as it takes.
+     */
+    public HostSelectionOptions withWaitSeconds(long waitSeconds) {
+        return new HostSelectionOptions(
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+    }
+
+    /** Minimal free resources of a candidate host; {@link HostLimits#NONE} for no limits. */
+    public HostLimits getLimits() {
+        return limits;
+    }
+
+    /** How long to wait for a host within the limits: 0 not at all, negative forever. */
+    public long getWaitSeconds() {
+        return waitSeconds;
+    }
+
+    /**
+     * Parses a call site's own wait time, already variable-expanded: blank means not set (null, inherit
+     * the cloud's); a whole number of seconds, where a negative one or {@code infinite}/{@code forever}
+     * means to wait for as long as it takes.
+     *
+     * @throws VSphereException if it is none of these
+     */
+    public static @CheckForNull Long parseWaitSeconds(@CheckForNull String value) throws VSphereException {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        final String trimmed = value.trim();
+        if ("infinite".equalsIgnoreCase(trimmed) || "forever".equalsIgnoreCase(trimmed)) {
+            return Long.valueOf(VSphereHostSelection.WAIT_FOREVER);
+        }
+        try {
+            final long parsed = Long.parseLong(trimmed);
+            return Long.valueOf(parsed < 0 ? VSphereHostSelection.WAIT_FOREVER : parsed);
+        } catch (NumberFormatException e) {
+            throw new VSphereException("hostSelectionWaitSeconds must be a whole number of seconds (0 for none, -1 or"
+                    + " \"infinite\" for no limit), but is \"" + value + "\"");
+        }
     }
 
     /** What "most available host" means; {@link HostWeights#DEFAULT} for the original ranking. */

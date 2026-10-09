@@ -116,6 +116,23 @@ public class vSphereCloud extends Cloud {
     private int hostWeightFreeMemoryMB;
     private int hostWeightFreeMemoryPercent;
 
+    /**
+     * Minimal free resources a host needs right now to be a candidate at all, however it ranks: free
+     * CPU (MHz), free CPU (% of the host), free memory (MB) and free memory (% of the host). Zero (the
+     * default) switches a limit off.
+     */
+    private long hostMinFreeCpuMhz;
+
+    private int hostMinFreeCpuPercent;
+    private long hostMinFreeMemoryMB;
+    private int hostMinFreeMemoryPercent;
+
+    /**
+     * If the limits leave no candidate host, how long to wait for one to free up before failing: 0 (the
+     * default) does not wait, a negative number waits for as long as it takes.
+     */
+    private long hostSelectionWaitSeconds;
+
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
@@ -477,6 +494,36 @@ public class vSphereCloud extends Cloud {
             @CheckForNull Boolean requireMemory,
             @CheckForNull Boolean requireAvailableMemory,
             @CheckForNull HostWeights weightsOverride) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, null);
+    }
+
+    /**
+     * As above, also with how long the call site is willing to wait for a host within the cloud's free
+     * resource limits: if {@code waitSecondsOverride} is not null it replaces the cloud's wait time.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride) {
+        return hostSelectionOptions(
+                cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, waitSecondsOverride, null);
+    }
+
+    /**
+     * As above, also with the free resource limits a call site set for itself: if {@code
+     * limitsOverride} is not null it replaces the cloud's limits as a whole, else the cloud's apply.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride,
+            @CheckForNull HostLimits limitsOverride) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
@@ -484,7 +531,12 @@ public class vSphereCloud extends Cloud {
                                 cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
-                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()));
+                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()))
+                .withLimits(limitsOverride != null ? limitsOverride : (cloud == null ? null : cloud.hostLimits()))
+                .withWaitSeconds(
+                        waitSecondsOverride != null
+                                ? waitSecondsOverride.longValue()
+                                : (cloud == null ? 0 : cloud.getHostSelectionWaitSeconds()));
     }
 
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
@@ -541,6 +593,64 @@ public class vSphereCloud extends Cloud {
     public HostWeights hostWeights() {
         return new HostWeights(
                 hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
+    }
+
+    public long getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    /** A host with less free CPU than this many MHz is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(long hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public int getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    /** A host with less free CPU than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(int hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public long getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    /** A host with less free memory than this many MB is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(long hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public int getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    /** A host with less free memory than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(int hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    public long getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    /**
+     * How long, in seconds, to wait for a host within the free resource limits to become available
+     * before failing the clone/deploy: 0 = do not wait, negative = wait for as long as it takes.
+     */
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(long hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
+    /** The four limits as one value; {@link HostLimits#NONE} if none is set. */
+    public HostLimits hostLimits() {
+        return new HostLimits(hostMinFreeCpuMhz, hostMinFreeCpuPercent, hostMinFreeMemoryMB, hostMinFreeMemoryPercent);
     }
 
     /**
@@ -1173,6 +1283,42 @@ public class vSphereCloud extends Cloud {
 
         public FormValidation doCheckHostWeightFreeMemoryPercent(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeCpuMhz(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeCpuPercent(@QueryParameter String value) {
+            return validatePercent(value);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryMB(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryPercent(@QueryParameter String value) {
+            return validatePercent(value);
+        }
+
+        public FormValidation doCheckHostSelectionWaitSeconds(@QueryParameter String value) {
+            try {
+                Long.parseLong(value == null ? "0" : value.trim());
+                return FormValidation.ok();
+            } catch (NumberFormatException e) {
+                return FormValidation.error(
+                        "A whole number of seconds: 0 for not waiting, -1 for waiting as long as it takes");
+            }
+        }
+
+        private static FormValidation validatePercent(String value) {
+            final FormValidation nonNegative = FormValidation.validateNonNegativeInteger(value);
+            if (nonNegative.kind != FormValidation.Kind.OK) {
+                return nonNegative;
+            }
+            return value != null && !value.trim().isEmpty() && Integer.parseInt(value.trim()) > 100
+                    ? FormValidation.error("A percentage cannot be more than 100")
+                    : FormValidation.ok();
         }
 
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {

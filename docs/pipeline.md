@@ -116,7 +116,12 @@ buildStep: [$class: 'Clone',
             hostWeightFreeCpuMhz: '',       // (optional) host ranking weights for this call: all blank = use the cloud's;
             hostWeightFreeCpuPercent: '',   //   if any is set they replace the cloud's as a whole (blank = 0)
             hostWeightFreeMemoryMB: '',
-            hostWeightFreeMemoryPercent: ''
+            hostWeightFreeMemoryPercent: '',
+            hostMinFreeCpuMhz: '',          // (optional) free resource limits for this call: all blank = use the cloud's;
+            hostMinFreeCpuPercent: '',      //   if any is set they replace the cloud's as a whole (blank = 0, i.e. no limit)
+            hostMinFreeMemoryMB: '',
+            hostMinFreeMemoryPercent: '',
+            hostSelectionWaitSeconds: ''    // (optional) if the cloud's free resource limits leave no host, wait this long for one: blank = the cloud's setting, '0' = fail at once, '-1' or 'infinite' = as long as it takes
            ]
 ```
 

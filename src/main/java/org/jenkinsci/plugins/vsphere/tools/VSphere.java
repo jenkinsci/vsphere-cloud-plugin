@@ -1142,21 +1142,7 @@ public class VSphere {
                     jLogger,
                     "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
         }
-        final List<HostCandidate> filtered = new ArrayList<>();
-        for (HostCandidate candidate : usable) {
-            final String shortfall = VSphereHostSelection.sizeShortfall(
-                    candidate,
-                    opts.isRequireCores(),
-                    vmCpus,
-                    opts.isRequireMemory(),
-                    opts.isRequireAvailableMemory(),
-                    vmMemoryMB);
-            if (shortfall == null) {
-                filtered.add(candidate);
-            } else {
-                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
-            }
-        }
+        List<HostCandidate> filtered = filterBySize(jLogger, usable, opts, vmCpus, vmMemoryMB);
         if (filtered.isEmpty()) {
             logMessage(
                     jLogger,
@@ -1170,6 +1156,41 @@ public class VSphere {
                             + (opts.isRequireAvailableMemory() ? " free RAM (>= " + vmMemoryMB + " MB)" : "")
                             + " of the VM; letting vSphere decide placement.");
             return null;
+        }
+
+        final HostLimits limits = opts.getLimits();
+        if (limits.isActive()) {
+            logMessage(jLogger, "Keeping hosts off the list that do not satisfy the " + limits + ":");
+            filtered = filterByLimits(jLogger, filtered, limits, true);
+            if (filtered.isEmpty()) {
+                final ClusterComputeResource watchedCluster = clusterResource;
+                // A host may have meanwhile gone into maintenance, dropped out of the cluster, ... so each
+                // look starts again from the cluster's current members.
+                filtered = VSphereHostSelection.waitForEligible(
+                        filtered,
+                        () -> {
+                            final List<HostCandidate> fresh = new ArrayList<>();
+                            final HostSystem[] current = watchedCluster.getHost();
+                            for (HostSystem hostSystem : current == null ? new HostSystem[0] : current) {
+                                fresh.add(toHostCandidate(hostSystem));
+                            }
+                            return filterByLimits(
+                                    jLogger,
+                                    filterBySize(
+                                            null,
+                                            VSphereHostSelection.filterCandidates(fresh, hostSelectionCandidates),
+                                            opts,
+                                            vmCpus,
+                                            vmMemoryMB),
+                                    limits,
+                                    false);
+                        },
+                        opts.getWaitSeconds(),
+                        HOST_SELECTION_POLL_MILLIS,
+                        System::currentTimeMillis,
+                        Thread::sleep,
+                        message -> logMessage(jLogger, message));
+            }
         }
 
         if ("DRS_RECOMMENDED".equals(hostSelectionMode)) {
@@ -1224,6 +1245,49 @@ public class VSphere {
             return null;
         }
         return findHostSystemByName(hostSystems, winner.getName());
+    }
+
+    /** How often to look at the hosts' load again while waiting for one with enough free resources. */
+    private static final long HOST_SELECTION_POLL_MILLIS = 15_000L;
+
+    /** Drops hosts that are too small for the VM (see {@link HostSelectionOptions}); logs why unless {@code jLogger} is null. */
+    private List<HostCandidate> filterBySize(
+            PrintStream jLogger,
+            List<HostCandidate> candidates,
+            HostSelectionOptions opts,
+            Integer vmCpus,
+            Integer vmMemoryMB) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate,
+                    opts.isRequireCores(),
+                    vmCpus,
+                    opts.isRequireMemory(),
+                    opts.isRequireAvailableMemory(),
+                    vmMemoryMB);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (jLogger != null) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
+    }
+
+    /** Drops hosts with less free resources than the limits; logs why if {@code verbose}. */
+    private List<HostCandidate> filterByLimits(
+            PrintStream jLogger, List<HostCandidate> candidates, HostLimits limits, boolean verbose) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.limitShortfall(candidate, limits);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (verbose) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
     }
 
     /**
