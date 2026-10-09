@@ -69,6 +69,7 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
+import org.jenkinsci.plugins.vsphere.tools.HostLimits;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -143,6 +144,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private String hostWeightFreeCpuPercent;
     private String hostWeightFreeMemoryMB;
     private String hostWeightFreeMemoryPercent;
+    /**
+     * Optional: how many seconds to wait for a host within the cloud's free resource limits to become
+     * available before failing; 0 for not at all, -1 or "infinite" for as long as it takes. Blank
+     * inherits the cloud's setting.
+     */
+    private String hostSelectionWaitSeconds;
+
+    private String hostSelectionScoreDeviation;
+    /**
+     * Optional free resource limits for this call, same meaning as on the vSphere Cloud but as text. If
+     * any of the four is set, they replace the cloud's limits as a whole (blank ones count as 0); if none
+     * is, the cloud's apply.
+     */
+    private String hostMinFreeCpuMhz;
+
+    private String hostMinFreeCpuPercent;
+    private String hostMinFreeMemoryMB;
+    private String hostMinFreeMemoryPercent;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -470,6 +489,61 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    public String getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(String hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public String getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(String hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public String getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(String hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public String getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(String hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    public String getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** Overrides the cloud's score deviation (0..1, negative: top host only, above 1: any host); blank inherits it. */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(String hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
+    public String getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(String hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
     public String getHostWeightFreeCpuMhz() {
         return hostWeightFreeCpuMhz;
     }
@@ -699,7 +773,14 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                         hostSelectionRequireCores,
                         hostSelectionRequireMemory,
                         hostSelectionRequireAvailableMemory,
-                        weightsOverride)
+                        weightsOverride,
+                        HostSelectionOptions.parseWaitSeconds(hostSelectionWaitSeconds),
+                        HostLimits.parseOverride(
+                                hostMinFreeCpuMhz,
+                                hostMinFreeCpuPercent,
+                                hostMinFreeMemoryMB,
+                                hostMinFreeMemoryPercent))
+                .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(hostSelectionScoreDeviation))
                 .withVmSize(reconfiguredCpuCores(), reconfiguredMemoryMB());
     }
 

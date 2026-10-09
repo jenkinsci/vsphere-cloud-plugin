@@ -65,6 +65,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -1090,40 +1091,8 @@ public class VSphere {
             return null;
         }
 
-        final HostSystem[] members = clusterResource.getHost();
-        final List<HostSystem> hostSystems = new ArrayList<>();
-        final List<HostCandidate> candidates = new ArrayList<>();
-        if (members != null) {
-            for (HostSystem hostSystem : members) {
-                hostSystems.add(hostSystem);
-                candidates.add(toHostCandidate(hostSystem));
-            }
-        }
-
         final HostSelectionOptions opts =
                 hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
-        logMessage(
-                jLogger,
-                "Host selection (" + hostSelectionMode + ") in cluster \"" + clusterResource.getName() + "\": "
-                        + candidates.size() + " host(s) found.");
-        final List<HostCandidate> usable = new ArrayList<>();
-        for (HostCandidate candidate : candidates) {
-            final String excluded = VSphereHostSelection.excludedBecause(candidate, hostSelectionCandidates);
-            if (excluded == null) {
-                usable.add(candidate);
-            } else {
-                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + excluded + ".");
-            }
-        }
-        if (usable.isEmpty()) {
-            logMessage(
-                    jLogger,
-                    "No usable candidate hosts found in cluster \"" + clusterResource.getName()
-                            + "\" for host selection mode \"" + hostSelectionMode
-                            + "\"; letting vSphere decide placement.");
-            return null;
-        }
-
         final VirtualMachineConfigInfo sourceConfig = sourceVm.getConfig();
         final VirtualHardware sourceHardware = sourceConfig == null ? null : sourceConfig.getHardware();
         // A size announced by the caller (e.g. a template whose reconfigure steps resize the
@@ -1142,34 +1111,47 @@ public class VSphere {
                     jLogger,
                     "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
         }
-        final List<HostCandidate> filtered = new ArrayList<>();
-        for (HostCandidate candidate : usable) {
-            final String shortfall = VSphereHostSelection.sizeShortfall(
-                    candidate,
-                    opts.isRequireCores(),
-                    vmCpus,
-                    opts.isRequireMemory(),
-                    opts.isRequireAvailableMemory(),
-                    vmMemoryMB);
-            if (shortfall == null) {
-                filtered.add(candidate);
-            } else {
-                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+
+        final ClusterComputeResource cluster = clusterResource;
+        VSphereHostSelection.Evaluation evaluation =
+                evaluateHosts(jLogger, cluster, hostSelectionMode, hostSelectionCandidates, opts, vmCpus, vmMemoryMB);
+        if (!evaluation.isEligible()) {
+            // Whether to wait for the situation to pass, or to give up now, and why: for the log, and for
+            // whoever wants to be told (a pipeline's hostSelectionWaitNotification).
+            final long waitSeconds = opts.getWaitSeconds();
+            final String announcement =
+                    VSphereHostSelection.waitAnnouncement(evaluation, waitSeconds, HOST_SELECTION_POLL_MILLIS);
+            logMessage(jLogger, announcement);
+            notifyWaitListener(jLogger, opts, announcement, evaluation.getReason());
+            // A host may have meanwhile come out of maintenance, joined the cluster, ... so each look starts
+            // again from the cluster's current members.
+            evaluation = VSphereHostSelection.waitForEligible(
+                    evaluation,
+                    () -> evaluateHosts(
+                            null, cluster, hostSelectionMode, hostSelectionCandidates, opts, vmCpus, vmMemoryMB),
+                    waitSeconds,
+                    HOST_SELECTION_POLL_MILLIS,
+                    System::currentTimeMillis,
+                    Thread::sleep,
+                    message -> logMessage(jLogger, message));
+            if (!evaluation.isEligible()) {
+                if (evaluation.getReason().failsWhenGivingUp()) {
+                    throw new VSphereException("No host in cluster \"" + cluster.getName()
+                            + "\" is available for the new VM (" + evaluation.getReason() + "): "
+                            + evaluation.getDetail()
+                            + (waitSeconds == 0
+                                    ? " Not waiting, as hostSelectionWaitSeconds is 0."
+                                    : " Gave up after waiting " + waitSeconds + " second(s)."));
+                }
+                logMessage(jLogger, "Letting vSphere decide placement.");
+                return null;
             }
         }
-        if (filtered.isEmpty()) {
-            logMessage(
-                    jLogger,
-                    "No candidate host in cluster \"" + clusterResource.getName() + "\" satisfies the requested"
-                            + (opts.isRequireCores() ? " core count (>= " + vmCpus + ")" : "")
-                            + (opts.isRequireCores() && (opts.isRequireMemory() || opts.isRequireAvailableMemory())
-                                    ? " and"
-                                    : "")
-                            + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
-                            + (opts.isRequireMemory() && opts.isRequireAvailableMemory() ? " and" : "")
-                            + (opts.isRequireAvailableMemory() ? " free RAM (>= " + vmMemoryMB + " MB)" : "")
-                            + " of the VM; letting vSphere decide placement.");
-            return null;
+        final List<HostCandidate> filtered = evaluation.getEligible();
+        final List<HostSystem> hostSystems = new ArrayList<>();
+        final HostSystem[] members = cluster.getHost();
+        if (members != null) {
+            hostSystems.addAll(Arrays.asList(members));
         }
 
         if ("DRS_RECOMMENDED".equals(hostSelectionMode)) {
@@ -1185,6 +1167,16 @@ public class VSphere {
             logMessage(
                     jLogger,
                     "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
+        }
+
+        if (opts.isPickAnyHostAtRandom()) {
+            final HostCandidate any = filtered.get(
+                    java.util.concurrent.ThreadLocalRandom.current().nextInt(filtered.size()));
+            logMessage(
+                    jLogger,
+                    "hostSelectionScoreDeviation is above 1: chose host \"" + any.getName() + "\" at random among the "
+                            + filtered.size() + " available host(s), whatever their load.");
+            return findHostSystemByName(hostSystems, any.getName());
         }
 
         final HostWeights weights = opts.getWeights();
@@ -1216,14 +1208,194 @@ public class VSphere {
                             c.freeMemMB(),
                             c.freeMemFraction() * 100));
         }
-        final HostCandidate winner = ranking.isEmpty() ? null : ranking.get(0).getHost();
-        if (winner == null) {
+        if (ranking.isEmpty()) {
             logMessage(
                     jLogger,
                     "Unable to determine current load for any candidate host; letting vSphere decide placement.");
             return null;
         }
+        final double deviation = opts.getScoreDeviation();
+        final List<VSphereHostSelection.ScoredHost> contenders = VSphereHostSelection.topContenders(ranking, deviation);
+        HostCandidate winner = ranking.get(0).getHost();
+        if (contenders.size() > 1) {
+            winner = contenders
+                    .get(java.util.concurrent.ThreadLocalRandom.current().nextInt(contenders.size()))
+                    .getHost();
+            logMessage(
+                    jLogger,
+                    String.format(
+                            "  %d host(s) score within %.3g of the best one (hostSelectionScoreDeviation): chose \"%s\" among them at random.",
+                            contenders.size(), deviation, winner.getName()));
+        }
         return findHostSystemByName(hostSystems, winner.getName());
+    }
+
+    /** How often to look at the hosts' load again while waiting for one with enough free resources. */
+    private static final long HOST_SELECTION_POLL_MILLIS = 15_000L;
+
+    /**
+     * Looks at the cluster's hosts now: which of them may be given the new VM (usable, big enough, with
+     * enough free resources, ...), or why none may. Logs what it rules out unless {@code jLogger} is null,
+     * which is for repeated looks while waiting.
+     */
+    private VSphereHostSelection.Evaluation evaluateHosts(
+            PrintStream jLogger,
+            ClusterComputeResource cluster,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions opts,
+            Integer vmCpus,
+            Integer vmMemoryMB) {
+        final HostSystem[] members = cluster.getHost();
+        final List<HostCandidate> candidates = new ArrayList<>();
+        if (members != null) {
+            for (HostSystem hostSystem : members) {
+                candidates.add(toHostCandidate(hostSystem));
+            }
+        }
+        if (jLogger != null) {
+            logMessage(
+                    jLogger,
+                    "Host selection (" + hostSelectionMode + ") in cluster \"" + cluster.getName() + "\": "
+                            + candidates.size() + " host(s) found.");
+        }
+
+        final List<HostCandidate> usable = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String excluded = VSphereHostSelection.excludedBecause(candidate, hostSelectionCandidates);
+            if (excluded == null) {
+                usable.add(candidate);
+            } else if (jLogger != null) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + excluded + ".");
+            }
+        }
+        if (usable.isEmpty()) {
+            return VSphereHostSelection.Evaluation.none(
+                    HostSelectionWaitReason.NO_USABLE_HOSTS,
+                    "no usable candidate host (connected, not in maintenance mode, and among the candidate hosts"
+                            + " if any are listed) found in cluster \"" + cluster.getName() + "\".");
+        }
+
+        List<HostCandidate> filtered = filterBySize(jLogger, usable, opts, vmCpus, vmMemoryMB, false);
+        if (filtered.isEmpty()) {
+            return VSphereHostSelection.Evaluation.none(
+                    HostSelectionWaitReason.NO_HOST_FITS_VM_SIZE,
+                    "no candidate host in cluster \"" + cluster.getName() + "\" satisfies the requested"
+                            + (opts.isRequireCores() ? " core count (>= " + vmCpus + ")" : "")
+                            + (opts.isRequireCores() && opts.isRequireMemory() ? " and" : "")
+                            + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
+                            + " of the VM.");
+        }
+        if (opts.isRequireAvailableMemory()
+                && !(opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode))) {
+            filtered = filterBySize(jLogger, filtered, opts, vmCpus, vmMemoryMB, true);
+            if (filtered.isEmpty()) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.NO_HOST_WITH_FREE_RAM_FOR_VM,
+                        "no candidate host in cluster \"" + cluster.getName() + "\" has the VM's memory size ("
+                                + vmMemoryMB + " MB) free right now.");
+            }
+        }
+
+        // Asked to pick any host at random: only the checks above (reachable, in service, big enough
+        // where known) count, not the load, so hosts that report no usage are as good as any.
+        if (opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            return VSphereHostSelection.Evaluation.eligible(filtered);
+        }
+
+        // Ranking by load needs the statistics; DRS does its own.
+        if (!"DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            boolean anyStatistics = false;
+            for (HostCandidate candidate : filtered) {
+                anyStatistics |= candidate.loadFraction() != null;
+            }
+            if (!anyStatistics) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.NO_USAGE_STATISTICS,
+                        "none of the " + filtered.size() + " candidate host(s) in cluster \"" + cluster.getName()
+                                + "\" reports CPU/memory usage statistics.");
+            }
+        }
+
+        final HostLimits limits = opts.getLimits();
+        if (limits.isActive()) {
+            if (jLogger != null) {
+                logMessage(jLogger, "Keeping hosts off the list that do not satisfy the " + limits + ":");
+            }
+            filtered = filterByLimits(jLogger, filtered, limits, jLogger != null);
+            if (filtered.isEmpty()) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.BELOW_FREE_RESOURCE_LIMITS,
+                        "every candidate host in cluster \"" + cluster.getName()
+                                + "\" has less free resources than the " + limits + ".");
+            }
+        }
+        return VSphereHostSelection.Evaluation.eligible(filtered);
+    }
+
+    /**
+     * Tells the pipeline's {@code hostSelectionWaitNotification}, if any, that no host is available. If
+     * it throws, so does this (failing the clone/deploy), unless it was asked to ignore its errors, when
+     * they are only logged.
+     */
+    private void notifyWaitListener(
+            PrintStream jLogger, HostSelectionOptions opts, String message, HostSelectionWaitReason reason)
+            throws VSphereException {
+        final HostSelectionOptions.Listener listener = opts.getWaitListener();
+        if (listener == null) {
+            return;
+        }
+        try {
+            listener.hostSelectionWaiting(message, reason);
+        } catch (VirtualMachineError e) {
+            throw e;
+        } catch (Throwable t) {
+            if (!opts.isIgnoreWaitListenerErrors()) {
+                throw new VSphereException("The hostSelectionWaitNotification failed: " + t, t);
+            }
+            logMessage(jLogger, "Warning: the hostSelectionWaitNotification failed, ignoring it as requested: " + t);
+            LOGGER.log(Level.WARNING, "hostSelectionWaitNotification failed, ignored", t);
+        }
+    }
+
+    /**
+     * Drops hosts that are too small for the VM (see {@link HostSelectionOptions}), and with {@code
+     * checkFreeMemory} also those without the VM's memory size free right now; logs why unless {@code
+     * jLogger} is null.
+     */
+    private List<HostCandidate> filterBySize(
+            PrintStream jLogger,
+            List<HostCandidate> candidates,
+            HostSelectionOptions opts,
+            Integer vmCpus,
+            Integer vmMemoryMB,
+            boolean checkFreeMemory) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), checkFreeMemory, vmMemoryMB);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (jLogger != null) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
+    }
+
+    /** Drops hosts with less free resources than the limits; logs why if {@code verbose}. */
+    private List<HostCandidate> filterByLimits(
+            PrintStream jLogger, List<HostCandidate> candidates, HostLimits limits, boolean verbose) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.limitShortfall(candidate, limits);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (verbose) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
     }
 
     /**

@@ -339,6 +339,159 @@ public final class VSphereHostSelection {
         return null;
     }
 
+    /**
+     * Why {@link HostLimits} rule this host out, or null if it is within them (or there are none).
+     * For logging the reasoning behind a placement.
+     */
+    public static String limitShortfall(HostCandidate candidate, HostLimits limits) {
+        return limits == null ? null : limits.shortfall(candidate);
+    }
+
+    /** Keeps only the candidates that satisfy all of the (possibly null) limits. */
+    public static List<HostCandidate> filterByLimits(List<HostCandidate> candidates, HostLimits limits) {
+        if (limits == null || !limits.isActive()) {
+            return candidates;
+        }
+        List<HostCandidate> result = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            if (limits.shortfall(candidate) == null) {
+                result.add(candidate);
+            }
+        }
+        return result;
+    }
+
+    /** Waits for a while; {@link Thread#sleep} in real life. */
+    @FunctionalInterface
+    public interface Sleeper {
+        void sleep(long millis) throws InterruptedException;
+    }
+
+    /** {@code waitSeconds} value meaning: keep waiting for as long as it takes. */
+    public static final long WAIT_FOREVER = -1;
+
+    /**
+     * What one look at the cluster's hosts found: either the hosts that may be given the new VM, or, if
+     * there are none, the {@link HostSelectionWaitReason reason} why not and a description for the log.
+     */
+    public static final class Evaluation {
+        private final List<HostCandidate> eligible;
+        private final HostSelectionWaitReason reason;
+        private final String detail;
+
+        private Evaluation(List<HostCandidate> eligible, HostSelectionWaitReason reason, String detail) {
+            this.eligible = eligible;
+            this.reason = reason;
+            this.detail = detail;
+        }
+
+        public static Evaluation eligible(List<HostCandidate> hosts) {
+            return new Evaluation(hosts, null, "");
+        }
+
+        public static Evaluation none(HostSelectionWaitReason reason, String detail) {
+            return new Evaluation(new ArrayList<>(), reason, detail);
+        }
+
+        /** True if at least one host may be given the VM. */
+        public boolean isEligible() {
+            return reason == null;
+        }
+
+        public List<HostCandidate> getEligible() {
+            return eligible;
+        }
+
+        /** Why no host is eligible; null if some are. */
+        public HostSelectionWaitReason getReason() {
+            return reason;
+        }
+
+        public String getDetail() {
+            return detail;
+        }
+    }
+
+    /**
+     * The line for the build log when no host is eligible at the moment, which says what will be done
+     * about it: whether (and for how long) to wait, or to carry on right away, and how.
+     */
+    public static String waitAnnouncement(Evaluation none, long waitSeconds, long pollMillis) {
+        final HostSelectionWaitReason reason = none.getReason();
+        final String givingUp = reason.failsWhenGivingUp() ? "fail the operation" : "let vSphere decide the placement";
+        final StringBuilder sb = new StringBuilder("No host is available for the new VM at the moment (")
+                .append(reason)
+                .append(", ")
+                .append(reason.isTransient() ? "transient" : "persistent")
+                .append("): ")
+                .append(none.getDetail())
+                .append(' ');
+        if (waitSeconds == 0) {
+            sb.append("hostSelectionWaitSeconds is 0, so not waiting: will ")
+                    .append(givingUp)
+                    .append(" now.");
+        } else if (waitSeconds < 0) {
+            sb.append("hostSelectionWaitSeconds is unlimited: will check again every ")
+                    .append(pollMillis / 1000)
+                    .append(" second(s) for as long as it takes.");
+        } else {
+            sb.append("hostSelectionWaitSeconds is ")
+                    .append(waitSeconds)
+                    .append(": will check again every ")
+                    .append(pollMillis / 1000)
+                    .append(" second(s) for up to that long, then ")
+                    .append(givingUp)
+                    .append('.');
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Looks at the hosts again via {@code evaluateNow} until one is eligible, as long as {@code
+     * waitSeconds} allows (0: not at all; negative, see {@link #WAIT_FOREVER}: until one is), and returns
+     * the latest {@link Evaluation}, which is not eligible if the time ran out. It is for the caller to
+     * decide what that means, as it depends on the reason.
+     *
+     * @throws VSphereException if the waiting thread is interrupted (e.g. the build aborted), in which case
+     *     the interrupt flag is kept set
+     */
+    public static Evaluation waitForEligible(
+            Evaluation initial,
+            java.util.function.Supplier<Evaluation> evaluateNow,
+            long waitSeconds,
+            long pollMillis,
+            java.util.function.LongSupplier clockMillis,
+            Sleeper sleeper,
+            java.util.function.Consumer<String> log)
+            throws VSphereException {
+        if (initial.isEligible() || waitSeconds == 0) {
+            return initial;
+        }
+        final boolean forever = waitSeconds < 0;
+        final long started = clockMillis.getAsLong();
+        final long deadline = forever ? Long.MAX_VALUE : started + waitSeconds * 1000L;
+        Evaluation latest = initial;
+        while (true) {
+            final long remaining = deadline - clockMillis.getAsLong();
+            if (remaining <= 0) {
+                log.accept("Gave up after waiting " + waitSeconds + " second(s); still: " + latest.getDetail());
+                return latest;
+            }
+            try {
+                sleeper.sleep(Math.min(pollMillis, remaining));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new VSphereException("Interrupted while waiting for a host to become available.");
+            }
+            latest = evaluateNow.get();
+            if (latest.isEligible()) {
+                log.accept("After " + ((clockMillis.getAsLong() - started) / 1000) + " second(s), "
+                        + latest.getEligible().size() + " host(s) are available.");
+                return latest;
+            }
+        }
+    }
+
     /** A candidate host with its availability score (0 worst .. 1 best); see {@link #rank}. */
     public static final class ScoredHost {
         private final HostCandidate host;
@@ -398,6 +551,29 @@ public final class VSphereHostSelection {
         // List.sort is stable, so ties keep their incoming order.
         ranked.sort((x, y) -> Double.compare(y.getScore(), x.getScore()));
         return ranked;
+    }
+
+    /**
+     * The hosts at the top of a {@link #rank ranking} that are close enough to the winner to be as good
+     * as it: those scoring at least {@code (1 - deviation)} times the best score, so with 0 only the
+     * equally scored ones. A negative deviation means "exactly the top host", the first one. The
+     * result keeps the ranking's order, so its first element is always the winner.
+     */
+    public static List<ScoredHost> topContenders(List<ScoredHost> ranked, double deviation) {
+        if (ranked.isEmpty()) {
+            return new ArrayList<>();
+        }
+        if (deviation < 0 || Double.isNaN(deviation)) {
+            return new ArrayList<>(ranked.subList(0, 1));
+        }
+        final double threshold = ranked.get(0).getScore() * (1d - Math.min(deviation, 1d));
+        List<ScoredHost> top = new ArrayList<>();
+        for (ScoredHost scored : ranked) {
+            if (scored.getScore() >= threshold) {
+                top.add(scored);
+            }
+        }
+        return top;
     }
 
     /** The most available candidate according to {@link #rank}, or null if none has statistics. */
