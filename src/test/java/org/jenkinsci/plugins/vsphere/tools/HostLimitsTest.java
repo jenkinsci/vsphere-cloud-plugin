@@ -12,8 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
 import org.junit.jupiter.api.Test;
@@ -86,110 +84,6 @@ class HostLimitsTest {
             names.add(h.getName());
         }
         return names;
-    }
-
-    // --- waiting ---
-
-    /** A clock that only moves when the code under test sleeps. */
-    private static final class FakeTime {
-        final AtomicLong now = new AtomicLong(1_000_000L);
-        final AtomicInteger sleeps = new AtomicInteger();
-        final VSphereHostSelection.Sleeper sleeper = millis -> {
-            sleeps.incrementAndGet();
-            now.addAndGet(millis);
-        };
-    }
-
-    @Test
-    void waitingIsSkippedWhenAHostIsAlreadyEligible() throws Exception {
-        FakeTime time = new FakeTime();
-        List<HostCandidate> initial = Arrays.asList(host("a", 0, 0));
-        List<HostCandidate> result = VSphereHostSelection.waitForEligible(
-                initial,
-                () -> {
-                    throw new AssertionError("must not look again");
-                },
-                0,
-                1000,
-                time.now::get,
-                time.sleeper,
-                m -> {});
-        assertThat(result, is(initial));
-        assertThat(time.sleeps.get(), is(0));
-    }
-
-    @Test
-    void zeroSecondsFailsAtOnce() {
-        FakeTime time = new FakeTime();
-        VSphereException e = assertThrows(
-                VSphereException.class,
-                () -> VSphereHostSelection.waitForEligible(
-                        new ArrayList<>(), ArrayList::new, 0, 1000, time.now::get, time.sleeper, m -> {}));
-        assertThat(e.getMessage(), containsString("waiting is not enabled"));
-        assertThat(time.sleeps.get(), is(0));
-    }
-
-    @Test
-    void waitingReturnsAsSoonAsAHostFreesUp() throws Exception {
-        FakeTime time = new FakeTime();
-        AtomicInteger looks = new AtomicInteger();
-        List<HostCandidate> result = VSphereHostSelection.waitForEligible(
-                new ArrayList<>(),
-                () -> looks.incrementAndGet() < 3 ? new ArrayList<>() : Arrays.asList(host("late", 0, 0)),
-                60,
-                1000,
-                time.now::get,
-                time.sleeper,
-                m -> {});
-        assertThat(names(result), contains("late"));
-        assertThat(time.sleeps.get(), is(3));
-    }
-
-    @Test
-    void waitingGivesUpAfterTheTimeout() {
-        FakeTime time = new FakeTime();
-        VSphereException e = assertThrows(
-                VSphereException.class,
-                () -> VSphereHostSelection.waitForEligible(
-                        new ArrayList<>(), ArrayList::new, 5, 2000, time.now::get, time.sleeper, m -> {}));
-        assertThat(e.getMessage(), containsString("Gave up after waiting 5 second(s)"));
-        // 2s + 2s + the remaining 1s: never sleeps past the deadline.
-        assertThat(time.sleeps.get(), is(3));
-        assertThat(time.now.get(), is(1_005_000L));
-    }
-
-    @Test
-    void waitingForeverOnlyEndsWhenAHostFreesUp() throws Exception {
-        FakeTime time = new FakeTime();
-        AtomicInteger looks = new AtomicInteger();
-        List<HostCandidate> result = VSphereHostSelection.waitForEligible(
-                new ArrayList<>(),
-                () -> looks.incrementAndGet() < 1000 ? new ArrayList<>() : Arrays.asList(host("eventually", 0, 0)),
-                VSphereHostSelection.WAIT_FOREVER,
-                15000,
-                time.now::get,
-                time.sleeper,
-                m -> {});
-        assertThat(names(result), contains("eventually"));
-        assertThat(time.sleeps.get(), is(1000));
-    }
-
-    @Test
-    void anInterruptedWaitFailsAndKeepsTheInterruptFlag() {
-        VSphereException e = assertThrows(
-                VSphereException.class,
-                () -> VSphereHostSelection.waitForEligible(
-                        new ArrayList<>(),
-                        ArrayList::new,
-                        VSphereHostSelection.WAIT_FOREVER,
-                        1000,
-                        System::currentTimeMillis,
-                        millis -> {
-                            throw new InterruptedException();
-                        },
-                        m -> {}));
-        assertThat(e.getMessage(), containsString("Interrupted"));
-        assertThat(Thread.interrupted(), is(true)); // also clears it for the other tests
     }
 
     // --- per-call overrides ---

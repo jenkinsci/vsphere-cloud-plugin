@@ -458,21 +458,39 @@ all four to `0` therefore lifts the cloud's limits for that call.
 Limits apply whenever automatic host selection runs (`LEAST_LOADED` or `DRS_RECOMMENDED`). They
 are not applied to a fixed `host`, which always wins, nor when no mode is set.
 
-Because the limits can leave **no** host, a clone or deploy then does not fall back to letting
-vCenter pick (which would defeat the limits): it fails - or waits, as set by
-`hostSelectionWaitSeconds`:
+Because the limits can leave **no** host - and so can other situations - automatic host selection
+can **wait** for a suitable host to become available. `hostSelectionWaitSeconds` says for how long:
 
-* `0` (the default): fail at once;
+* `0` (the default): do not wait;
 * a positive number: look at the hosts' load again every 15 seconds for up to that many seconds,
-  and carry on as soon as one qualifies; fail if none does in time;
+  and carry on as soon as one qualifies;
 * `-1` (or, in the text fields of build steps and templates, `infinite`): wait for as long as it
   takes. An aborted build stops waiting.
 
+It applies whenever no host can be used at the moment, whatever the reason, and the build log says
+which one, whether the build will wait (and for how long) or give up right away, and what giving up
+means, at the moment the situation is found:
+
+| Reason (`HostSelectionWaitReason`) | Situation | Assumed to be |
+| ---------------------------------- | --- | --- |
+| `BELOW_FREE_RESOURCE_LIMITS`       | every usable host has less free CPU/RAM than the limits | transient |
+| `NO_HOST_WITH_FREE_RAM_FOR_VM`     | with *Require enough free RAM*, no host has the VM's memory size free right now | transient |
+| `NO_USABLE_HOSTS`                  | all hosts disconnected, in maintenance mode, or not among the candidates | persistent |
+| `NO_HOST_FITS_VM_SIZE`             | no host has enough cores/RAM for the VM, as the *Require enough ...* settings ask | persistent |
+| `NO_USAGE_STATISTICS`              | no candidate host reports CPU/memory usage (`LEAST_LOADED` needs it; `DRS_RECOMMENDED` does not) | persistent |
+
+*Giving up* (not waiting, or the time ran out) means **failing** the clone/deploy when it was the
+free resource limits that ruled out every host - vCenter must not then place the VM regardless of
+them - and, in all other situations, leaving the placement to vCenter, as it always was. So with the
+default of `0` nothing changes for setups without limits. After a wait, the situation may have
+changed; what counts is the last one seen.
+
 Set it on the cloud for a default, and override it per template or per *Clone VM*/*Deploy VM*
 step (`hostSelectionWaitSeconds: '600'`; blank inherits). While waiting, the build occupies its
-executor and a connection to vCenter, so a finite wait is advisable on busy farms. Only the
-limits are waited for; hosts that are disconnected, in maintenance or too small for the VM are
-re-checked during the wait, but if there are none to begin with, the existing fallback applies.
+executor and a connection to vCenter, so a finite wait is advisable on busy farms.
+
+A pipeline can also be told, at the moment the situation is found and logged - see
+[the pipeline documentation](pipeline.md#being-told-that-no-host-is-available).
 
 ```yaml
 jenkins:

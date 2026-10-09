@@ -1,15 +1,26 @@
 <div>
-  (Optional, a whole number) What to do when the free resource limits leave no host that a VM could be
-  created on: how many <b>seconds to wait</b> for one to free up before failing.
+  (Optional, a whole number) What to do when automatic host selection finds <b>no host that the VM can be
+  created on at the moment</b>: how many <b>seconds to wait</b> for one before giving up. This covers
+  every such situation, which the build log names when it happens:
   <ul>
-    <li><tt>0</tt> (the default): do not wait; fail at once.</li>
-    <li>a positive number: look at the hosts' load again every 15 seconds for up to that long.</li>
+    <li>the <i>free resource limits</i> rule out every host (busy hosts: expected to pass);</li>
+    <li>no host has the VM's memory size free right now, if <i>Require enough free RAM</i> is on (busy hosts);</li>
+    <li>all hosts are disconnected, in maintenance mode or not among the candidate hosts;</li>
+    <li>no host has enough cores or RAM for the VM, if those requirements are on;</li>
+    <li>no candidate host reports CPU/memory usage statistics.</li>
+  </ul>
+  The value means:
+  <ul>
+    <li><tt>0</tt> (the default): do not wait; give up at once.</li>
+    <li>a positive number: look at the hosts again every 15 seconds for up to that long.</li>
     <li><tt>-1</tt>: wait for as long as it takes (the build can still be aborted).</li>
   </ul>
   <p>
-  Only the free resource limits are waited for. Hosts being unusable (disconnected, in maintenance)
-  or too small for the VM keep their existing handling when nothing else is configured. A clone or deploy
-  step, or a template, can set its own wait time. A waiting build holds its place in
-  the queue and its connection to vCenter, so a limited wait is advisable on busy farms.
+  Giving up means: <b>failing</b> the clone/deploy if it was the free resource limits that ruled out
+  every host (vCenter must not place the VM regardless of them); in all other situations, leaving the
+  placement to vCenter, as was always done. The build log says which of these applies, and whether it
+  will wait, right when the situation is found. A clone or deploy step, or a template, can set its own
+  wait time. A waiting build holds its place in the queue and its connection to vCenter, so a limited
+  wait is advisable on busy farms.
   </p>
 </div>

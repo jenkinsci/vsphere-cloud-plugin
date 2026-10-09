@@ -21,13 +21,25 @@ public final class HostSelectionOptions {
     private final HostWeights weights;
     private final HostLimits limits;
     private final long waitSeconds;
+    private final @CheckForNull Listener waitListener;
+    private final boolean ignoreWaitListenerErrors;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
         this(requireCores, requireMemory, false);
     }
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory, boolean requireAvailableMemory) {
-        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT, HostLimits.NONE, 0);
+        this(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                null,
+                null,
+                HostWeights.DEFAULT,
+                HostLimits.NONE,
+                0,
+                null,
+                false);
     }
 
     private HostSelectionOptions(
@@ -38,10 +50,14 @@ public final class HostSelectionOptions {
             @CheckForNull Long vmMemoryMB,
             HostWeights weights,
             HostLimits limits,
-            long waitSeconds) {
+            long waitSeconds,
+            @CheckForNull Listener waitListener,
+            boolean ignoreWaitListenerErrors) {
         this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.limits = limits == null ? HostLimits.NONE : limits;
+        this.waitListener = waitListener;
+        this.ignoreWaitListenerErrors = ignoreWaitListenerErrors;
         this.waitSeconds = waitSeconds < 0 ? VSphereHostSelection.WAIT_FOREVER : waitSeconds;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
@@ -56,19 +72,46 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
     public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors);
     }
 
     /** Same options, keeping hosts with less free resources than these limits off the candidate list. */
     public HostSelectionOptions withLimits(@CheckForNull HostLimits limits) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors);
     }
 
     /**
@@ -78,7 +121,55 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withWaitSeconds(long waitSeconds) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, limits, waitSeconds);
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors);
+    }
+
+    /**
+     * Same options, telling this listener whenever no host is available at the moment, right after that is
+     * logged. For a pipeline's {@code hostSelectionWaitNotification}; it only lives as long as the call. If
+     * the listener throws, the clone/deploy fails, unless {@code ignoreErrors}, when that is only logged.
+     */
+    public HostSelectionOptions withWaitListener(@CheckForNull Listener waitListener, boolean ignoreErrors) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreErrors);
+    }
+
+    /** Told that host selection found no host to use at the moment; see {@link #withWaitListener}. */
+    @FunctionalInterface
+    public interface Listener {
+        /**
+         * @param message what was written to the build log about it, including what happens next
+         * @param reason which situation this is
+         */
+        void hostSelectionWaiting(String message, HostSelectionWaitReason reason);
+    }
+
+    /** True if a failing {@link #getWaitListener() listener} is only logged, rather than failing the call. */
+    public boolean isIgnoreWaitListenerErrors() {
+        return ignoreWaitListenerErrors;
+    }
+
+    /** Who to tell when no host is available at the moment, or null. */
+    public @CheckForNull Listener getWaitListener() {
+        return waitListener;
     }
 
     /** Minimal free resources of a candidate host; {@link HostLimits#NONE} for no limits. */

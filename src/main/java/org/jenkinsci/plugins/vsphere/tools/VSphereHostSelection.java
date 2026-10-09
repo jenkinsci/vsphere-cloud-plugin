@@ -371,51 +371,123 @@ public final class VSphereHostSelection {
     public static final long WAIT_FOREVER = -1;
 
     /**
-     * Polls {@code eligibleNow} - which should look at the hosts afresh each time - until it yields a
-     * non-empty list of hosts, and returns that. Gives up after {@code waitSeconds} (0: do not wait at
-     * all, so the first look decides; negative, see {@link #WAIT_FOREVER}: never give up) by throwing a
-     * {@link VSphereException}, as does the waiting thread being interrupted (e.g. the build aborted),
-     * in which case the interrupt flag is kept set.
-     *
-     * @param initial what the first look found, which the caller has already logged
+     * What one look at the cluster's hosts found: either the hosts that may be given the new VM, or, if
+     * there are none, the {@link HostSelectionWaitReason reason} why not and a description for the log.
      */
-    public static List<HostCandidate> waitForEligible(
-            List<HostCandidate> initial,
-            java.util.function.Supplier<List<HostCandidate>> eligibleNow,
+    public static final class Evaluation {
+        private final List<HostCandidate> eligible;
+        private final HostSelectionWaitReason reason;
+        private final String detail;
+
+        private Evaluation(List<HostCandidate> eligible, HostSelectionWaitReason reason, String detail) {
+            this.eligible = eligible;
+            this.reason = reason;
+            this.detail = detail;
+        }
+
+        public static Evaluation eligible(List<HostCandidate> hosts) {
+            return new Evaluation(hosts, null, "");
+        }
+
+        public static Evaluation none(HostSelectionWaitReason reason, String detail) {
+            return new Evaluation(new ArrayList<>(), reason, detail);
+        }
+
+        /** True if at least one host may be given the VM. */
+        public boolean isEligible() {
+            return reason == null;
+        }
+
+        public List<HostCandidate> getEligible() {
+            return eligible;
+        }
+
+        /** Why no host is eligible; null if some are. */
+        public HostSelectionWaitReason getReason() {
+            return reason;
+        }
+
+        public String getDetail() {
+            return detail;
+        }
+    }
+
+    /**
+     * The line for the build log when no host is eligible at the moment, which says what will be done
+     * about it: whether (and for how long) to wait, or to carry on right away, and how.
+     */
+    public static String waitAnnouncement(Evaluation none, long waitSeconds, long pollMillis) {
+        final HostSelectionWaitReason reason = none.getReason();
+        final String givingUp = reason.failsWhenGivingUp() ? "fail the operation" : "let vSphere decide the placement";
+        final StringBuilder sb = new StringBuilder("No host is available for the new VM at the moment (")
+                .append(reason)
+                .append(", ")
+                .append(reason.isTransient() ? "transient" : "persistent")
+                .append("): ")
+                .append(none.getDetail())
+                .append(' ');
+        if (waitSeconds == 0) {
+            sb.append("hostSelectionWaitSeconds is 0, so not waiting: will ")
+                    .append(givingUp)
+                    .append(" now.");
+        } else if (waitSeconds < 0) {
+            sb.append("hostSelectionWaitSeconds is unlimited: will check again every ")
+                    .append(pollMillis / 1000)
+                    .append(" second(s) for as long as it takes.");
+        } else {
+            sb.append("hostSelectionWaitSeconds is ")
+                    .append(waitSeconds)
+                    .append(": will check again every ")
+                    .append(pollMillis / 1000)
+                    .append(" second(s) for up to that long, then ")
+                    .append(givingUp)
+                    .append('.');
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Looks at the hosts again via {@code evaluateNow} until one is eligible, as long as {@code
+     * waitSeconds} allows (0: not at all; negative, see {@link #WAIT_FOREVER}: until one is), and returns
+     * the latest {@link Evaluation}, which is not eligible if the time ran out. It is for the caller to
+     * decide what that means, as it depends on the reason.
+     *
+     * @throws VSphereException if the waiting thread is interrupted (e.g. the build aborted), in which case
+     *     the interrupt flag is kept set
+     */
+    public static Evaluation waitForEligible(
+            Evaluation initial,
+            java.util.function.Supplier<Evaluation> evaluateNow,
             long waitSeconds,
             long pollMillis,
             java.util.function.LongSupplier clockMillis,
             Sleeper sleeper,
             java.util.function.Consumer<String> log)
             throws VSphereException {
-        if (!initial.isEmpty()) {
+        if (initial.isEligible() || waitSeconds == 0) {
             return initial;
         }
         final boolean forever = waitSeconds < 0;
-        if (!forever && waitSeconds == 0) {
-            throw new VSphereException("No host currently has enough free resources, and waiting is not enabled.");
-        }
         final long started = clockMillis.getAsLong();
         final long deadline = forever ? Long.MAX_VALUE : started + waitSeconds * 1000L;
-        log.accept("No host currently has enough free resources; will check again every " + (pollMillis / 1000)
-                + " second(s) for " + (forever ? "as long as it takes" : "up to " + waitSeconds + " second(s)") + ".");
+        Evaluation latest = initial;
         while (true) {
             final long remaining = deadline - clockMillis.getAsLong();
             if (remaining <= 0) {
-                throw new VSphereException("Gave up after waiting " + waitSeconds
-                        + " second(s) for a host with enough free resources to become available.");
+                log.accept("Gave up after waiting " + waitSeconds + " second(s); still: " + latest.getDetail());
+                return latest;
             }
             try {
                 sleeper.sleep(Math.min(pollMillis, remaining));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                throw new VSphereException("Interrupted while waiting for a host with enough free resources.");
+                throw new VSphereException("Interrupted while waiting for a host to become available.");
             }
-            final List<HostCandidate> now = eligibleNow.get();
-            if (!now.isEmpty()) {
-                log.accept("After " + ((clockMillis.getAsLong() - started) / 1000) + " second(s), " + now.size()
-                        + " host(s) have enough free resources.");
-                return now;
+            latest = evaluateNow.get();
+            if (latest.isEligible()) {
+                log.accept("After " + ((clockMillis.getAsLong() - started) / 1000) + " second(s), "
+                        + latest.getEligible().size() + " host(s) are available.");
+                return latest;
             }
         }
     }

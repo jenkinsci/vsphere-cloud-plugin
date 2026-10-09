@@ -41,6 +41,8 @@ import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
 import org.jenkinsci.plugins.vsphere.tools.HostLimits;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionWaitNotification;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionWaitReason;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -118,6 +120,15 @@ public class Clone extends VSphereBuildStep {
      * takes. Blank inherits the cloud's setting.
      */
     private String hostSelectionWaitSeconds;
+    /**
+     * Pipeline only: a closure called with ({@code String} message, {@link HostSelectionWaitReason} reason)
+     * whenever host selection finds no host to use at the moment, right after that is logged. Deliberately
+     * transient and without a readable property: it can only be passed in a pipeline's argument map, and is
+     * never saved with a job, shown in a form, or written into the pipeline's recorded step arguments.
+     */
+    private transient Object hostSelectionWaitNotification;
+    /** Pipeline only: if the closure fails, only log that (by default, the failure fails the step). */
+    private transient boolean hostSelectionWaitNotificationIgnoreErrors;
     /**
      * Optional free resource limits for this call, same meaning as on the vSphere Cloud but as text. If
      * any of the four is set, they replace the cloud's limits as a whole (blank ones count as 0); if none
@@ -464,6 +475,25 @@ public class Clone extends VSphereBuildStep {
         this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
     }
 
+    /** Intentionally always null, see the field: the closure is for the call to use, not to be read back. */
+    public Object getHostSelectionWaitNotification() {
+        return null;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitNotification(Object hostSelectionWaitNotification) {
+        this.hostSelectionWaitNotification = hostSelectionWaitNotification;
+    }
+
+    public boolean isHostSelectionWaitNotificationIgnoreErrors() {
+        return hostSelectionWaitNotificationIgnoreErrors;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitNotificationIgnoreErrors(boolean hostSelectionWaitNotificationIgnoreErrors) {
+        this.hostSelectionWaitNotificationIgnoreErrors = hostSelectionWaitNotificationIgnoreErrors;
+    }
+
     public String getHostSelectionWaitSeconds() {
         return hostSelectionWaitSeconds;
     }
@@ -621,19 +651,23 @@ public class Clone extends VSphereBuildStep {
                 hostWeightFreeCpuPercent == null ? null : env.expand(hostWeightFreeCpuPercent),
                 hostWeightFreeMemoryMB == null ? null : env.expand(hostWeightFreeMemoryMB),
                 hostWeightFreeMemoryPercent == null ? null : env.expand(hostWeightFreeMemoryPercent));
-        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
-                sourceCloud,
-                hostSelectionRequireCores,
-                hostSelectionRequireMemory,
-                hostSelectionRequireAvailableMemory,
-                weightsOverride,
-                HostSelectionOptions.parseWaitSeconds(
-                        hostSelectionWaitSeconds == null ? null : env.expand(hostSelectionWaitSeconds)),
-                HostLimits.parseOverride(
-                        hostMinFreeCpuMhz == null ? null : env.expand(hostMinFreeCpuMhz),
-                        hostMinFreeCpuPercent == null ? null : env.expand(hostMinFreeCpuPercent),
-                        hostMinFreeMemoryMB == null ? null : env.expand(hostMinFreeMemoryMB),
-                        hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)));
+        final HostSelectionOptions hostSelectionOptions = vSphereCloud
+                .hostSelectionOptions(
+                        sourceCloud,
+                        hostSelectionRequireCores,
+                        hostSelectionRequireMemory,
+                        hostSelectionRequireAvailableMemory,
+                        weightsOverride,
+                        HostSelectionOptions.parseWaitSeconds(
+                                hostSelectionWaitSeconds == null ? null : env.expand(hostSelectionWaitSeconds)),
+                        HostLimits.parseOverride(
+                                hostMinFreeCpuMhz == null ? null : env.expand(hostMinFreeCpuMhz),
+                                hostMinFreeCpuPercent == null ? null : env.expand(hostMinFreeCpuPercent),
+                                hostMinFreeMemoryMB == null ? null : env.expand(hostMinFreeMemoryMB),
+                                hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)))
+                .withWaitListener(
+                        HostSelectionWaitNotification.of(hostSelectionWaitNotification),
+                        hostSelectionWaitNotificationIgnoreErrors);
         final VmSize vmSize = VmSize.of(
                 cpuCores == null ? null : env.expand(cpuCores),
                 coresPerSocket == null ? null : env.expand(coresPerSocket),
