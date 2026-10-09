@@ -123,6 +123,8 @@ public class vSphereCloud extends Cloud {
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private boolean hostSelectionRequireAvailableMemory;
 
+    private boolean hostSelectionFolderFollowsHost;
+
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
     private transient CloudProvisioningState templateState;
@@ -477,6 +479,20 @@ public class vSphereCloud extends Cloud {
             @CheckForNull Boolean requireMemory,
             @CheckForNull Boolean requireAvailableMemory,
             @CheckForNull HostWeights weightsOverride) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, null);
+    }
+
+    /**
+     * As above, also with whether the call site wants the clone's default folder to follow the host chosen
+     * for it: if {@code folderFollowsHostOverride} is not null it replaces the cloud's setting.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Boolean folderFollowsHostOverride) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
@@ -484,7 +500,9 @@ public class vSphereCloud extends Cloud {
                                 cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
-                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()));
+                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()))
+                .withFolderFollowsHost(HostSelectionOptions.resolve(
+                        cloud != null && cloud.isHostSelectionFolderFollowsHost(), folderFollowsHostOverride));
     }
 
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
@@ -574,6 +592,19 @@ public class vSphereCloud extends Cloud {
      * configured with, so the new VM does not get swapped by the hypervisor. Default for every
      * template/build-step using this cloud; each can override it either way.
      */
+    public boolean isHostSelectionFolderFollowsHost() {
+        return hostSelectionFolderFollowsHost;
+    }
+
+    /**
+     * If the clone step gives no folder, put the clone in its source's folder with the source's host name
+     * replaced by the name of the host the clone is placed on, if such a folder exists.
+     */
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHost(boolean hostSelectionFolderFollowsHost) {
+        this.hostSelectionFolderFollowsHost = hostSelectionFolderFollowsHost;
+    }
+
     public boolean isHostSelectionRequireAvailableMemory() {
         return hostSelectionRequireAvailableMemory;
     }

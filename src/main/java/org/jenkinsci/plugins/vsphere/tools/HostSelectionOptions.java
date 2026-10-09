@@ -19,13 +19,14 @@ public final class HostSelectionOptions {
     private final @CheckForNull Integer vmCpus;
     private final @CheckForNull Long vmMemoryMB;
     private final HostWeights weights;
+    private final boolean folderFollowsHost;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
         this(requireCores, requireMemory, false);
     }
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory, boolean requireAvailableMemory) {
-        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT);
+        this(requireCores, requireMemory, requireAvailableMemory, null, null, HostWeights.DEFAULT, false);
     }
 
     private HostSelectionOptions(
@@ -34,8 +35,10 @@ public final class HostSelectionOptions {
             boolean requireAvailableMemory,
             @CheckForNull Integer vmCpus,
             @CheckForNull Long vmMemoryMB,
-            HostWeights weights) {
+            HostWeights weights,
+            boolean folderFollowsHost) {
         this.requireAvailableMemory = requireAvailableMemory;
+        this.folderFollowsHost = folderFollowsHost;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.requireCores = requireCores;
         this.requireMemory = requireMemory;
@@ -50,13 +53,28 @@ public final class HostSelectionOptions {
      */
     public HostSelectionOptions withVmSize(@CheckForNull Integer vmCpus, @CheckForNull Long vmMemoryMB) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
     public HostSelectionOptions withWeights(@CheckForNull HostWeights weights) {
         return new HostSelectionOptions(
-                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights);
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
+    }
+
+    /**
+     * Same options, but if no folder is given for the clone, put it in the folder of its source with the
+     * source's host name replaced by the name of the host chosen for the clone (see {@link HostFolderPath}),
+     * if there is such a folder.
+     */
+    public HostSelectionOptions withFolderFollowsHost(boolean folderFollowsHost) {
+        return new HostSelectionOptions(
+                requireCores, requireMemory, requireAvailableMemory, vmCpus, vmMemoryMB, weights, folderFollowsHost);
+    }
+
+    /** Whether the clone's default folder follows the host chosen for it. */
+    public boolean isFolderFollowsHost() {
+        return folderFollowsHost;
     }
 
     /** What "most available host" means; {@link HostWeights#DEFAULT} for the original ranking. */

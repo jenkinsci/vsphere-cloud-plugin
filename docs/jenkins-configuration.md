@@ -430,6 +430,25 @@ Things this shows:
   and `0.63` for `virthost2`), and `1, 1, 1, 1` would pick it as well (`0.75`, `0.72`, `0.68`).
   Which of the hosts is "right" is the decision the weights express, not something the plugin can tell.
 
+##### Per-host VM folders
+
+Some inventories group VMs in *logical* folders defined per host: the folder of a template has
+the name of the host it lives on as one element of its path (e.g. `.../virt5x/kubevms` holding
+a `kube_template` VM definition).
+
+A clone requested without an explicit *Folder* parameter lands in the folder of its source by
+default, so every clone *seems* (in vCenter Web-UI object tree) to belong to the template's
+host, despite actively running on a possibly different host (due to an explicit `host` argument,
+or due to load-balancing done by this plugin).
+
+With `hostSelectionFolderFollowsHost` (cloud default `false`; templates and *Clone VM*/*Deploy VM*
+steps can set `true`/`false`, blank inherits) the clone instead goes to the same folder under the
+host the plugin chose, e.g. `.../virt4x/kubevms`. Short and fully qualified host names are matched
+alike. If the source's folder path does not name its host, or there is no such folder for the chosen
+host, the source's own folder is used and the log says so. An explicit folder always wins, and it
+applies to any host the plugin sets - a fixed `host` too - and is only about where the VM is
+listed, not where it runs.
+
 ##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)

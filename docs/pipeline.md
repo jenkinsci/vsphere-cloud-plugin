@@ -116,7 +116,8 @@ buildStep: [$class: 'Clone',
             hostWeightFreeCpuMhz: '',       // (optional) host ranking weights for this call: all blank = use the cloud's;
             hostWeightFreeCpuPercent: '',   //   if any is set they replace the cloud's as a whole (blank = 0)
             hostWeightFreeMemoryMB: '',
-            hostWeightFreeMemoryPercent: ''
+            hostWeightFreeMemoryPercent: '',
+            hostSelectionFolderFollowsHost: false  // (optional) true/false overrides the cloud's default; omit to inherit it. With no folder given, put the clone in its source's folder with the source's host name replaced by the clone's host
            ]
 ```
 

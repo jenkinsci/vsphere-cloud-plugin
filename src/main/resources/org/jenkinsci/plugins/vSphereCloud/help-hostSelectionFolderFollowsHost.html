@@ -1,0 +1,18 @@
+<div>
+  (Optional, off by default) When no folder is given and the clone's host is set by the plugin (an explicit host,
+  or automatic host selection), put the clone in a folder named after that host instead of in the folder of
+  its source.
+  <p>
+  For inventories that group VMs in per-host folders: the folder of the source VM or template has the name of
+  the host it is on as one element of its path. That element is replaced by the name of the host chosen for the
+  clone, so a clone from a template on <code>virt5x</code> that is placed on <code>virt4x</code> goes to the
+  same folder under <code>virt4x</code>. Short and fully qualified host names are matched alike, and the
+  replacement uses the form the folder has.
+  </p>
+  <p>
+  If the source's folder path does not mention its host, or the folder for the chosen host does not exist, the
+  source's own folder is used, as without this option, and a message about it is logged. A folder that is given
+  explicitly always wins.
+  </p>
+  <p>This is the default for every template and build step using this cloud; each of them can override it either way ("Yes"/"No"), or leave it on "inherit".</p>
+</div>

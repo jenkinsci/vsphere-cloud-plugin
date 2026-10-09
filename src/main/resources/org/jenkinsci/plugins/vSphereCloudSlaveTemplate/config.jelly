@@ -66,6 +66,10 @@
               <f:select/>
             </f:entry>
 
+            <f:entry title="${%Folder follows the chosen host}" field="hostSelectionFolderFollowsHostAsString">
+              <f:select/>
+            </f:entry>
+
             <f:entry title="${%Host weight: free CPU in MHz}" field="hostWeightFreeCpuMhz">
               <f:textbox/>
             </f:entry>
