@@ -73,6 +73,10 @@
           <f:checkbox/>
         </f:entry>
 
+        <f:entry title="${%Folder follows the chosen host}" field="hostSelectionFolderFollowsHost">
+          <f:checkbox/>
+        </f:entry>
+
         <f:entry title="${%Host weight: free CPU in MHz}" field="hostWeightFreeCpuMhz">
           <f:number clazz="number" min="0" step="1" default="0"/>
         </f:entry>

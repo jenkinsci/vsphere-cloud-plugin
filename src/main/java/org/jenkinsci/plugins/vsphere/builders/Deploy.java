@@ -91,6 +91,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private Boolean hostSelectionRequireAvailableMemory;
+    /** Opt-in: with no folder given, put the clone in its source's folder rewritten for the clone's host. */
+    private Boolean hostSelectionFolderFollowsHost;
     /**
      * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
      * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
@@ -386,6 +388,33 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    /**
+     * Opt-in override of the cloud's default: if no folder is given, put the clone in the folder of its source
+     * with the source's host name replaced by the name of the host the clone is placed on, if such a folder
+     * exists. {@code null} (the default) inherits the cloud's setting.
+     */
+    public Boolean getHostSelectionFolderFollowsHost() {
+        return hostSelectionFolderFollowsHost;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHost(Boolean hostSelectionFolderFollowsHost) {
+        this.hostSelectionFolderFollowsHost = hostSelectionFolderFollowsHost;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionFolderFollowsHost}.
+     */
+    public String getHostSelectionFolderFollowsHostAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionFolderFollowsHost);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHostAsString(String value) {
+        this.hostSelectionFolderFollowsHost = HostSelectionOptions.triStateFromString(value);
+    }
+
     public String getHostMinFreeCpuMhz() {
         return hostMinFreeCpuMhz;
     }
@@ -607,7 +636,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                                 hostMinFreeCpuMhz == null ? null : env.expand(hostMinFreeCpuMhz),
                                 hostMinFreeCpuPercent == null ? null : env.expand(hostMinFreeCpuPercent),
                                 hostMinFreeMemoryMB == null ? null : env.expand(hostMinFreeMemoryMB),
-                                hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)))
+                                hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)),
+                        hostSelectionFolderFollowsHost)
                 .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(
                         hostSelectionScoreDeviation == null ? null : env.expand(hostSelectionScoreDeviation)))
                 .withWaitListener(
@@ -704,6 +734,12 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         public FormValidation doCheckCluster(@QueryParameter String value) {
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionFolderFollowsHostAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return HostSelectionOptions.triStateItems();
         }
 
         public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {

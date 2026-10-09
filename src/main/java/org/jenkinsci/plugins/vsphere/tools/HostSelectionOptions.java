@@ -24,6 +24,7 @@ public final class HostSelectionOptions {
     private final @CheckForNull Listener waitListener;
     private final boolean ignoreWaitListenerErrors;
     private final double scoreDeviation;
+    private final boolean folderFollowsHost;
 
     public HostSelectionOptions(boolean requireCores, boolean requireMemory) {
         this(requireCores, requireMemory, false);
@@ -41,7 +42,8 @@ public final class HostSelectionOptions {
                 0,
                 null,
                 false,
-                0);
+                0,
+                false);
     }
 
     private HostSelectionOptions(
@@ -55,8 +57,10 @@ public final class HostSelectionOptions {
             long waitSeconds,
             @CheckForNull Listener waitListener,
             boolean ignoreWaitListenerErrors,
-            double scoreDeviation) {
+            double scoreDeviation,
+            boolean folderFollowsHost) {
         this.scoreDeviation = scoreDeviation;
+        this.folderFollowsHost = folderFollowsHost;
         this.requireAvailableMemory = requireAvailableMemory;
         this.weights = weights == null ? HostWeights.DEFAULT : weights;
         this.limits = limits == null ? HostLimits.NONE : limits;
@@ -86,7 +90,8 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreWaitListenerErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /** Same options, ranking the candidate hosts with these weights. */
@@ -102,7 +107,8 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreWaitListenerErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /** Same options, keeping hosts with less free resources than these limits off the candidate list. */
@@ -118,7 +124,8 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreWaitListenerErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /**
@@ -138,7 +145,8 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreWaitListenerErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /**
@@ -158,7 +166,8 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
     }
 
     /**
@@ -177,7 +186,34 @@ public final class HostSelectionOptions {
                 waitSeconds,
                 waitListener,
                 ignoreWaitListenerErrors,
-                scoreDeviation);
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /**
+     * Same options, but if no folder is given for the clone, put it in the folder of its source with the
+     * source's host name replaced by the name of the host chosen for the clone (see {@link HostFolderPath}),
+     * if there is such a folder.
+     */
+    public HostSelectionOptions withFolderFollowsHost(boolean folderFollowsHost) {
+        return new HostSelectionOptions(
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                vmCpus,
+                vmMemoryMB,
+                weights,
+                limits,
+                waitSeconds,
+                waitListener,
+                ignoreWaitListenerErrors,
+                scoreDeviation,
+                folderFollowsHost);
+    }
+
+    /** Whether the clone's default folder follows the host chosen for it. */
+    public boolean isFolderFollowsHost() {
+        return folderFollowsHost;
     }
 
     /** As {@link #withScoreDeviation}, but a null (not set at the call site) keeps the current value. */

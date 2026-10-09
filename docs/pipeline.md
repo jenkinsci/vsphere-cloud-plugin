@@ -110,9 +110,12 @@ buildStep: [$class: 'Clone',
             host: '',                      // (optional) pin the clone to this specific ESXi host; wins over hostSelectionMode
             hostSelectionMode: '',         // (optional) '', 'NONE', 'LEAST_LOADED', or 'DRS_RECOMMENDED' - see below
             hostSelectionCandidates: [],            // (optional) allow-list restricting hostSelectionMode's candidates
+            hostSelectionFolderFollowsHost: false,  // (optional) true/false overrides the cloud's default; omit to inherit it. With no folder given, put the clone in its source's folder with the source's host name replaced by the clone's host
             hostSelectionRequireCores: false,       // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with fewer physical cores than the VM has vCPUs
             hostSelectionRequireMemory: false,      // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts with less physical RAM than the VM is configured with
             hostSelectionRequireAvailableMemory: false,  // (optional) true/false overrides the cloud's default; omit to inherit it. Skips hosts without the VM's memory size free right now
+            hostSelectionScoreDeviation: '',  // (optional) pick randomly among hosts scoring within this fraction (0..1) of the best: blank = the cloud's setting (default 0: only equal scores), negative = always the top host, above 1 = any available host at random
+            hostSelectionWaitSeconds: '',    // (optional) if no host is available at the moment, wait this long for one: blank = the cloud's setting, '0' = not at all, '-1' or 'infinite' = as long as it takes
             hostWeightFreeCpuMhz: '',       // (optional) host ranking weights for this call: all blank = use the cloud's;
             hostWeightFreeCpuPercent: '',   //   if any is set they replace the cloud's as a whole (blank = 0)
             hostWeightFreeMemoryMB: '',
@@ -120,9 +123,7 @@ buildStep: [$class: 'Clone',
             hostMinFreeCpuMhz: '',          // (optional) free resource limits for this call: all blank = use the cloud's;
             hostMinFreeCpuPercent: '',      //   if any is set they replace the cloud's as a whole (blank = 0, i.e. no limit)
             hostMinFreeMemoryMB: '',
-            hostMinFreeMemoryPercent: '',
-            hostSelectionWaitSeconds: ''    // (optional) if no host is available at the moment, wait this long for one: blank = the cloud's setting, '0' = not at all, '-1' or 'infinite' = as long as it takes
-            hostSelectionScoreDeviation: ''  // (optional) pick randomly among hosts scoring within this fraction (0..1) of the best: blank = the cloud's setting (default 0: only equal scores), negative = always the top host, above 1 = any available host at random
+            hostMinFreeMemoryPercent: ''
            ]
 ```
 

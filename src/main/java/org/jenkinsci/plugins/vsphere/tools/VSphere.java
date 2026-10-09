@@ -66,6 +66,7 @@ import java.net.URL;
 import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -884,9 +885,11 @@ public class VSphere {
             }
 
             Folder folder;
+            boolean folderIsSourcesDefault = false;
             if (folderName == null || folderName.isEmpty() || folderName.equals(" ")) {
                 // same folder as source
                 folder = (Folder) sourceVm.getParent();
+                folderIsSourcesDefault = true;
             } else if (!folderExists(folderName)) {
                 folder = (Folder) sourceVm.getParent();
                 logMessage(
@@ -920,6 +923,9 @@ public class VSphere {
                         jLogger,
                         "Clone of " + sourceType + " \"" + sourceName + "\" will be placed on host \""
                                 + selectedHost.getName() + "\".");
+                if (selectionOptions.isFolderFollowsHost() && folderIsSourcesDefault) {
+                    folder = folderForHost(jLogger, sourceVm, folder, selectedHost);
+                }
             }
 
             final Task task = sourceVm.cloneVM_Task(folder, cloneName, cloneSpec);
@@ -937,6 +943,79 @@ public class VSphere {
         } catch (Exception e) {
             throw new VSphereException(e);
         }
+    }
+
+    /**
+     * For inventories with per-host VM folders: the folder of the clone is that of its source with the name of
+     * the source's host replaced by the name of the clone's host (see {@link HostFolderPath}). Returns {@code
+     * sourceFolder} if the source's folder path does not mention its host, there is no folder for the clone's
+     * host, or anything fails on the way, saying so in the log.
+     */
+    private Folder folderForHost(
+            PrintStream jLogger, VirtualMachine sourceVm, Folder sourceFolder, HostSystem selectedHost) {
+        try {
+            final ManagedObjectReference sourceHostMor =
+                    sourceVm.getRuntime() == null ? null : sourceVm.getRuntime().getHost();
+            if (sourceHostMor == null) {
+                logMessage(jLogger, "Source has no known host, so its folder is not changed to follow the new host.");
+                return sourceFolder;
+            }
+            final String sourceHostName = new HostSystem(sourceVm.getServerConnection(), sourceHostMor).getName();
+            if (sourceHostName.equalsIgnoreCase(selectedHost.getName())) {
+                return sourceFolder;
+            }
+
+            final LinkedList<String> path = new LinkedList<>();
+            ManagedEntity entity = sourceFolder;
+            while (entity != null && entity.getParent() != null) {
+                path.addFirst(entity.getName());
+                entity = entity.getParent();
+            }
+            final List<String> hostPath = HostFolderPath.rewrite(path, sourceHostName, selectedHost.getName());
+            if (hostPath == null) {
+                logMessage(
+                        jLogger,
+                        "Folder \"" + String.join("/", path) + "\" of the source does not name its host \""
+                                + sourceHostName + "\", so it is used as it is.");
+                return sourceFolder;
+            }
+
+            ManagedEntity found = getServiceInstance().getRootFolder();
+            for (String name : hostPath) {
+                found = childByName(found, name);
+                if (found == null) {
+                    break;
+                }
+            }
+            if (!(found instanceof Folder)) {
+                logMessage(
+                        jLogger,
+                        "No folder \"" + String.join("/", hostPath) + "\" for host \"" + selectedHost.getName()
+                                + "\", so the folder of the source is used.");
+                return sourceFolder;
+            }
+            logMessage(jLogger, "Clone will be created in folder \"" + String.join("/", hostPath) + "\".");
+            return (Folder) found;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Could not find the folder for the new host, using the source's", e);
+            logMessage(jLogger, "Could not find a folder for the new host (" + e + "), using the source's.");
+            return sourceFolder;
+        }
+    }
+
+    private static @CheckForNull ManagedEntity childByName(ManagedEntity parent, String name) throws RemoteException {
+        if (!(parent instanceof Folder)) {
+            return null;
+        }
+        final ManagedEntity[] children = ((Folder) parent).getChildEntity();
+        if (children != null) {
+            for (ManagedEntity child : children) {
+                if (name.equals(child.getName())) {
+                    return child;
+                }
+            }
+        }
+        return null;
     }
 
     private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
