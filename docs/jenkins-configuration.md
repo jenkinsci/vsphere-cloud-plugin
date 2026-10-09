@@ -107,7 +107,7 @@ allowing a lower "Delay between launch and boot complete" value without sacrific
 * Delay between launch and boot complete:
 Number of seconds to delay after starting the virtual machine (or after waiting for VMTools) before assuming the node is operational.
 * Disconnect after Limited Builds: Will force the node agent to disconnect after the specified number of builds have been performed, triggering the disconnect action.
-**Note:** Currently, the "Disconnect After Limited Builds" configuration parameter is not used.
+A Pipeline run counts as one build, however many `node {}` blocks it runs; the agent is disconnected when the run that reaches the limit is over.
 * GuestInfo Properties:
 you can use "guestinfos" to provide properties (e.g. the URL to the Jenkins Master and the JNLP "secret") to the clone.
 This is especially useful if you chose "Java Web Start" (JNLP) as launch method, e.g. for a Windows VM.

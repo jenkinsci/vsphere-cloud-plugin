@@ -55,6 +55,9 @@ public final class vSphereCloudRunListener extends RunListener<Run> {
                     s.EndLimitedTestRun(r);
                 }
             }
+        } else {
+            // Not one we started counting in onStarted(): a Pipeline run is counted by vSphereCloudExecutorListener.
+            vSphereCloudSlave.EndLimitedPipelineRun(r);
         }
     }
 }

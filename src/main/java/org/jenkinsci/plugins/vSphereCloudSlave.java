@@ -298,7 +298,29 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
     private static final ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
 
+    /** Makes "is this Pipeline run already counted?" and counting it atomic, across all the agents. */
+    private static final Object PipelineRunClaimLock = new Object();
+
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
+        return startLimitedTest(r, r.getExecutor(), listener, true);
+    }
+
+    /**
+     * Counts a Pipeline {@link Run} the first time one of its {@code node {}} blocks starts on an agent: the
+     * {@link Run} itself is owned by a flyweight executor on the controller, so {@link #StartLimitedTestRun} never
+     * sees it. Further blocks of the same {@link Run}, on this or another agent, are not counted again.
+     */
+    void StartLimitedPipelineRun(Executor executor, Run run) {
+        synchronized (PipelineRunClaimLock) {
+            // A block can still be started once the run is over; nothing would ever end that count.
+            if (!run.isBuilding() || RunToSlaveMapper.containsKey(run)) {
+                return;
+            }
+            startLimitedTest(run, executor, null, false);
+        }
+    }
+
+    private boolean startLimitedTest(Run key, Executor executor, TaskListener listener, boolean abortIfOverLimit) {
         boolean ret = false;
         boolean DoUpdates = false;
 
@@ -311,7 +333,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             ret = true;
         }
 
-        Executor executor = r.getExecutor();
         if (executor != null && DoUpdates) {
             if (ret) {
                 NumberOfLimitedTestRuns++;
@@ -322,15 +343,19 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         NumberOfLimitedTestRuns,
                         LimitedTestRunCount);
                 Computer slave = executor.getOwner();
-                RunToSlaveMapper.put(r, slave);
+                RunToSlaveMapper.put(key, slave);
             } else {
                 vSphereCloud.Log(
                         this,
                         listener,
-                        "Terminating build due to limited build count: %d of %d",
+                        abortIfOverLimit
+                                ? "Terminating build due to limited build count: %d of %d"
+                                : "Not counting work started beyond the limited build count: %d of %d",
                         NumberOfLimitedTestRuns,
                         LimitedTestRunCount);
-                executor.interrupt(Result.ABORTED);
+                if (abortIfOverLimit) {
+                    executor.interrupt(Result.ABORTED);
+                }
             }
         }
 
@@ -338,13 +363,43 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     public boolean EndLimitedTestRun(Run r) {
+        return endLimitedTest(r);
+    }
+
+    /**
+     * Counterpart of {@link #StartLimitedNodeBlock(Executor, Run)}, for when the Pipeline {@link Run} is over (so none
+     * of its {@code node {}} blocks is still using the agent). Does nothing for a {@link Run} that was not counted.
+     */
+    static void EndLimitedPipelineRun(Run run) {
+        final Computer computer;
+        synchronized (PipelineRunClaimLock) {
+            computer = RunToSlaveMapper.get(run);
+            if (computer == null) {
+                return;
+            }
+        }
+        final Node node = computer.getNode();
+        if (node instanceof vSphereCloudSlave && node.toComputer() == computer) {
+            ((vSphereCloudSlave) node).endLimitedTest(run);
+        } else {
+            // The agent is gone (e.g. removed by a run-once retention strategy), or its name now belongs to another.
+            RunToSlaveMapper.remove(run);
+        }
+    }
+
+    static boolean hasLimitedTestRun(Run run) {
+        return RunToSlaveMapper.containsKey(run);
+    }
+
+    int getNumberOfLimitedTestRuns() {
+        return NumberOfLimitedTestRuns;
+    }
+
+    private boolean endLimitedTest(Run key) {
         boolean ret = true;
 
         // See if the run maps to an existing computer; remove if found.
-        Computer slave = RunToSlaveMapper.get(r);
-        if (slave != null) {
-            RunToSlaveMapper.remove(r);
-        }
+        Computer slave = RunToSlaveMapper.remove(key);
 
         if (LimitedTestRunCount > 0) {
             if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
