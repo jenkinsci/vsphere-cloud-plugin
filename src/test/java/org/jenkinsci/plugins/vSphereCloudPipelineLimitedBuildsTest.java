@@ -166,9 +166,15 @@ class vSphereCloudPipelineLimitedBuildsTest {
         final WorkflowRun run1 = pipeline(r, "one", script).scheduleBuild2(0).waitForStart();
         final WorkflowRun run2 = pipeline(r, "two", script).scheduleBuild2(0).waitForStart();
 
-        // Both runs are inside their node blocks at the same time, until the gate is opened.
-        waitFor("both runs to be using the agent", () -> agent.toComputer().countBusy() == 2);
+        // Both runs are inside their node blocks at the same time, until the gate is opened. An executor is busy
+        // slightly before the block it was given is counted, so wait for both.
+        waitFor(
+                "both runs to be using the agent, and to be counted",
+                () -> agent.toComputer().countBusy() == 2 && agent.getNumberOfLimitedTestRuns() == 2);
+        assertThat(agent.toComputer().countBusy(), is(2));
         assertThat(agent.getNumberOfLimitedTestRuns(), is(2));
+        assertThat(vSphereCloudSlave.hasLimitedTestRun(run1), is(true));
+        assertThat(vSphereCloudSlave.hasLimitedTestRun(run2), is(true));
         Files.createFile(gate.toPath());
         r.assertBuildStatusSuccess(r.waitForCompletion(run1));
         r.assertBuildStatusSuccess(r.waitForCompletion(run2));
