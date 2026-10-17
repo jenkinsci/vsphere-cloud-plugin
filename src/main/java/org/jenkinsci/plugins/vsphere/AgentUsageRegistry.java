@@ -89,7 +89,7 @@ public final class AgentUsageRegistry {
         Map<String, Integer> counts = new TreeMap<>();
     }
 
-    /** Reads and writes {@link Usage} under a name of its own, so that moving or renaming the class keeps the file readable. */
+    /** Reads and writes {@link Usage} under a name of its own: moving or renaming the class keeps the file readable. */
     private static final XStream2 XSTREAM = new XStream2();
 
     static {

@@ -105,6 +105,9 @@ class ResetUsagesTest {
                 false,
                 Collections.emptyList());
         folder.getProperties().add(new FolderVSphereCloudProperty(Collections.singletonList(inFolder)));
+        // Cloud IDs are only kept apart among the clouds of Jenkins, so a cloud of Jenkins can get the ID of this one.
+        final vSphereCloud sameId = cloud(r, "folder cloud");
+        assertThat(sameId.name, is(inFolder.name));
         final JenkinsRule.WebClient webClient = r.createWebClient();
 
         final String globalPage = webClient

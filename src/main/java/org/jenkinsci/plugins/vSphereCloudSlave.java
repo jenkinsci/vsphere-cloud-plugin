@@ -349,22 +349,20 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
      * still using the agent). Does nothing for a {@link Run} that was not counted.
      */
     static void EndLimitedRun(Run run) {
-        final AgentUsageRegistry registry = AgentUsageRegistry.get();
-        if (registry.nodeOf(run) == null) {
-            return;
-        }
         final vSphereCloudSlave agent = findCountedAgent(run, Jenkins.get()::getNode);
         if (agent != null) {
             agent.endLimitedTest(run);
         } else {
-            // The agent is gone (e.g. removed by a run-once retention strategy).
-            registry.release(run, 0);
+            // The run was not counted, or its agent is gone (e.g. removed by a run-once retention strategy).
+            AgentUsageRegistry.get().release(run, 0);
         }
     }
 
     /**
      * The agent the run is counted on, or null if there is none. The agent may be renamed between asking where the run
-     * was counted and looking the agent up, in which case it is asked again.
+     * was counted and looking the agent up, in which case it is asked again. (Jenkins renames the agent in its own list
+     * a moment before the listener that renames it here is called; a run that ends in that moment is not found, and
+     * the agent starts again from nothing when that listener runs.)
      */
     static vSphereCloudSlave findCountedAgent(Run run, Function<String, Node> lookup) {
         final AgentUsageRegistry registry = AgentUsageRegistry.get();

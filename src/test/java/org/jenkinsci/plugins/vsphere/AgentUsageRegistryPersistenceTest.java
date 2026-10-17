@@ -173,8 +173,9 @@ class AgentUsageRegistryPersistenceTest {
 
         registry.save();
 
-        final String saved = new String(Files.readAllBytes(store.toPath()), StandardCharsets.UTF_8);
-        assertThat(saved, containsString("agent"));
+        final AgentUsageRegistry loaded = registry(store, new ArrayList<>());
+        loaded.load(node -> true, node -> 5);
+        assertThat(loaded.count("agent"), is(1));
     }
 
     @Test
