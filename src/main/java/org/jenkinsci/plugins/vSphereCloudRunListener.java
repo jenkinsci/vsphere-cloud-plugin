@@ -11,8 +11,6 @@ import hudson.model.Node;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.listeners.RunListener;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  *
@@ -20,8 +18,6 @@ import java.util.List;
  */
 @Extension
 public final class vSphereCloudRunListener extends RunListener<Run> {
-
-    private final List<Run> LimitedRuns = new ArrayList<Run>();
 
     public vSphereCloudRunListener() {}
 
@@ -34,7 +30,6 @@ public final class vSphereCloudRunListener extends RunListener<Run> {
                 Computer owner = exec.getOwner();
                 Node node = owner.getNode();
                 if ((node != null) && (node instanceof vSphereCloudSlave)) {
-                    LimitedRuns.add(r);
                     vSphereCloudSlave s = (vSphereCloudSlave) node;
                     s.StartLimitedTestRun(r, listener);
                 }
@@ -45,19 +40,7 @@ public final class vSphereCloudRunListener extends RunListener<Run> {
     @Override
     public void onFinalized(Run r) {
         super.onFinalized(r);
-        if (LimitedRuns.contains(r)) {
-            LimitedRuns.remove(r);
-            Executor executor = r.getExecutor();
-            if (executor != null) {
-                Node node = executor.getOwner().getNode();
-                if (node instanceof vSphereCloudSlave) {
-                    vSphereCloudSlave s = (vSphereCloudSlave) node;
-                    s.EndLimitedTestRun(r);
-                }
-            }
-        } else {
-            // Not one we started counting in onStarted(): a Pipeline run is counted by vSphereCloudExecutorListener.
-            vSphereCloudSlave.EndLimitedPipelineRun(r);
-        }
+        // A freestyle build is counted in onStarted(), a Pipeline run by vSphereCloudExecutorListener.
+        vSphereCloudSlave.EndLimitedRun(r);
     }
 }

@@ -30,6 +30,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.accmod.Restricted;
@@ -55,8 +56,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private final String idleOption;
     /** If more than zero then this is the number of build-jobs we limit the agent to. */
     private Integer LimitedTestRunCount = 0;
-    /** A count of the number of build-jobs this agent has done. */
-    private transient Integer NumberOfLimitedTestRuns = 0;
 
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
@@ -114,16 +113,12 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         this.idleOption = idleOption;
         final Number parsedLimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0);
         this.LimitedTestRunCount = parsedLimitedTestRunCount != null ? parsedLimitedTestRunCount.intValue() : 0;
-        this.NumberOfLimitedTestRuns = 0;
         readResolve();
     }
 
     @Override
     protected Object readResolve() {
         super.readResolve();
-        if (NumberOfLimitedTestRuns == null) {
-            NumberOfLimitedTestRuns = 0;
-        }
         if (LimitedTestRunCount == null) {
             LimitedTestRunCount = 0;
         }
@@ -296,11 +291,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         return super.canTake(buildItem);
     }
 
-    private static final ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
-
-    /** Makes "is this Pipeline run already counted?" and counting it atomic, across all the agents. */
-    private static final Object PipelineRunClaimLock = new Object();
-
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
         return startLimitedTest(r, r.getExecutor(), listener, true);
     }
@@ -311,55 +301,41 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
      * sees it. Further blocks of the same {@link Run}, on this or another agent, are not counted again.
      */
     void StartLimitedPipelineRun(Executor executor, Run run) {
-        synchronized (PipelineRunClaimLock) {
-            // A block can still be started once the run is over; nothing would ever end that count.
-            if (!run.isBuilding() || RunToSlaveMapper.containsKey(run)) {
-                return;
-            }
-            startLimitedTest(run, executor, null, false);
-        }
+        startLimitedTest(run, executor, null, false);
     }
 
-    private boolean startLimitedTest(Run key, Executor executor, TaskListener listener, boolean abortIfOverLimit) {
-        boolean ret = false;
-        boolean DoUpdates = false;
-
-        if (LimitedTestRunCount > 0) {
-            DoUpdates = true;
-            if (NumberOfLimitedTestRuns < LimitedTestRunCount) {
-                ret = true;
-            }
-        } else {
-            ret = true;
+    private boolean startLimitedTest(Run run, Executor executor, TaskListener listener, boolean abortIfOverLimit) {
+        if (executor == null) {
+            return true;
         }
-
-        if (executor != null && DoUpdates) {
-            if (ret) {
-                NumberOfLimitedTestRuns++;
+        final AgentUsageRegistry.Acquired acquired =
+                AgentUsageRegistry.get().acquire(getNodeName(), LimitedTestRunCount, run);
+        switch (acquired.outcome()) {
+            case COUNTED:
                 vSphereCloud.Log(
                         this,
                         listener,
                         "Starting limited count build: %d of %d",
-                        NumberOfLimitedTestRuns,
+                        acquired.count(),
                         LimitedTestRunCount);
-                Computer slave = executor.getOwner();
-                RunToSlaveMapper.put(key, slave);
-            } else {
+                return true;
+            case OVER_LIMIT:
                 vSphereCloud.Log(
                         this,
                         listener,
                         abortIfOverLimit
                                 ? "Terminating build due to limited build count: %d of %d"
                                 : "Not counting work started beyond the limited build count: %d of %d",
-                        NumberOfLimitedTestRuns,
+                        acquired.count(),
                         LimitedTestRunCount);
                 if (abortIfOverLimit) {
                     executor.interrupt(Result.ABORTED);
                 }
-            }
+                return false;
+            default:
+                // No limit, or the run is counted already, or it is over.
+                return true;
         }
-
-        return ret;
     }
 
     public boolean EndLimitedTestRun(Run r) {
@@ -367,77 +343,63 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     }
 
     /**
-     * Counterpart of {@link #StartLimitedNodeBlock(Executor, Run)}, for when the Pipeline {@link Run} is over (so none
-     * of its {@code node {}} blocks is still using the agent). Does nothing for a {@link Run} that was not counted.
+     * The {@link Run} is over, whether it is a freestyle build or a Pipeline (so none of its {@code node {}} blocks is
+     * still using the agent). Does nothing for a {@link Run} that was not counted.
      */
-    static void EndLimitedPipelineRun(Run run) {
-        final Computer computer;
-        synchronized (PipelineRunClaimLock) {
-            computer = RunToSlaveMapper.get(run);
-            if (computer == null) {
-                return;
-            }
+    static void EndLimitedRun(Run run) {
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        final String name = registry.nodeOf(run);
+        if (name == null) {
+            return;
         }
-        final Node node = computer.getNode();
-        if (node instanceof vSphereCloudSlave && node.toComputer() == computer) {
+        final Node node = Jenkins.get().getNode(name);
+        if (node instanceof vSphereCloudSlave) {
             ((vSphereCloudSlave) node).endLimitedTest(run);
         } else {
-            // The agent is gone (e.g. removed by a run-once retention strategy), or its name now belongs to another.
-            RunToSlaveMapper.remove(run);
+            // The agent is gone (e.g. removed by a run-once retention strategy).
+            registry.release(run, 0);
         }
     }
 
     static boolean hasLimitedTestRun(Run run) {
-        return RunToSlaveMapper.containsKey(run);
+        return AgentUsageRegistry.get().isCounted(run);
     }
 
     int getNumberOfLimitedTestRuns() {
-        return NumberOfLimitedTestRuns;
+        return AgentUsageRegistry.get().count(getNodeName());
     }
 
-    private boolean endLimitedTest(Run key) {
-        boolean ret = true;
-
-        // See if the run maps to an existing computer; remove if found.
-        Computer slave = RunToSlaveMapper.remove(key);
-
-        if (LimitedTestRunCount > 0) {
-            if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                ret = false;
-                NumberOfLimitedTestRuns = 0;
-                try {
-                    if (slave != null) {
-                        vSphereCloud.Log(
-                                this,
-                                "Disconnecting the slave agent on %s due to limited build threshold",
-                                slave.getName());
-
-                        final VSphereOfflineCause tempOffline =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
-                        slave.setTemporarilyOffline(true, tempOffline);
-                        slave.waitUntilOffline();
-                        final VSphereOfflineCause disconnect =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
-                        slave.disconnect(disconnect);
-                        final VSphereOfflineCause tempOnline =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
-                        slave.setTemporarilyOffline(false, tempOnline);
-                    } else {
-                        vSphereCloud.Log(
-                                this,
-                                "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
-                    }
-                } catch (NullPointerException ex) {
-                    vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
-                } catch (InterruptedException ex) {
-                    vSphereCloud.Log(
-                            this, ex, "InterruptedException thrown while marking the slave as online or offline");
-                }
-            }
-        } else {
-            ret = true;
+    private boolean endLimitedTest(Run run) {
+        if (AgentUsageRegistry.get().release(run, LimitedTestRunCount) != AgentUsageRegistry.Released.RECYCLE) {
+            return true;
         }
-        return ret;
+        final Computer slave = toComputer();
+        try {
+            if (slave != null) {
+                vSphereCloud.Log(
+                        this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
+
+                final VSphereOfflineCause tempOffline =
+                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                slave.setTemporarilyOffline(true, tempOffline);
+                slave.waitUntilOffline();
+                final VSphereOfflineCause disconnect =
+                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
+                slave.disconnect(disconnect);
+                final VSphereOfflineCause tempOnline =
+                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                slave.setTemporarilyOffline(false, tempOnline);
+            } else {
+                vSphereCloud.Log(
+                        this,
+                        "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
+            }
+        } catch (NullPointerException ex) {
+            vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
+        } catch (InterruptedException ex) {
+            vSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
+        }
+        return false;
     }
 
     /**
@@ -477,10 +439,31 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public static class vSphereCloudNodeListener extends NodeListener {
 
         @Override
+        protected void onCreated(@NonNull Node node) {
+            // A new agent that takes the name of one that is gone starts from nothing.
+            if (node instanceof vSphereCloudSlave) {
+                AgentUsageRegistry.get().forget(node.getNodeName());
+            }
+        }
+
+        @Override
+        protected void onDeleted(@NonNull Node node) {
+            if (node instanceof vSphereCloudSlave) {
+                AgentUsageRegistry.get().forget(node.getNodeName());
+            }
+        }
+
+        @Override
         protected void onUpdated(@NonNull Node oldOne, @NonNull Node newOne) {
             if (!(oldOne instanceof vSphereCloudSlave) || !(newOne instanceof vSphereCloudSlave)) {
                 return;
             }
+            // Saving an agent replaces its node, but not its usage: keep it under the name it has now.
+            final AgentUsageRegistry registry = AgentUsageRegistry.get();
+            if (!oldOne.getNodeName().equals(newOne.getNodeName())) {
+                registry.rename(oldOne.getNodeName(), newOne.getNodeName());
+            }
+            registry.reconcile(newOne.getNodeName(), ((vSphereCloudSlave) newOne).getLimitedTestRunCount());
             final Computer computer = newOne.toComputer();
             final boolean connected = computer instanceof SlaveComputer && ((SlaveComputer) computer).isOnline();
             carryOverConnectedLauncher((vSphereCloudSlave) oldOne, (vSphereCloudSlave) newOne, connected);
