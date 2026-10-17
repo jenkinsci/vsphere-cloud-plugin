@@ -1,0 +1,227 @@
+package org.jenkinsci.plugins.vsphere;
+
+import hudson.Extension;
+import hudson.ExtensionList;
+import hudson.model.Run;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.BooleanSupplier;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
+
+/**
+ * Owns how many "limited builds" each vSphere agent has done, so that the agent can be recycled once it reaches its
+ * limit. All the agents of all the clouds share this one registry, which is keyed by the name of the agent (Jenkins
+ * keeps those unique).
+ * <p>
+ * An agent that is replaced when its configuration is saved keeps its usage; one that is deleted, or created anew with
+ * a name that was used before, starts from nothing. What a run is counted against is remembered per <em>entry</em>, not
+ * per name, so a run that was counted on an agent that has since been replaced by a different one of the same name does
+ * not recycle the new one.
+ * <p>
+ * Everything here happens in memory under one lock and calls nothing back into Jenkins, so it is safe to use from
+ * the threads of any build. Recycling an agent is up to the caller, outside of that lock.
+ */
+@Restricted(NoExternalUse.class)
+@Extension
+public final class AgentUsageRegistry {
+
+    /** What happened when a run asked to be counted. */
+    public enum Outcome {
+        /** The agent has no limit, so nothing is tracked. */
+        UNTRACKED,
+        /** The run is over already; counting it would never be undone. */
+        NOT_BUILDING,
+        /** The run is counted already, on this or on another agent. */
+        ALREADY_COUNTED,
+        /** The run is counted now. */
+        COUNTED,
+        /** The agent is at its limit, the run is not counted. */
+        OVER_LIMIT
+    }
+
+    /** What to do when a run that may have been counted is over. */
+    public enum Released {
+        /** The run was not counted: nothing changes. */
+        NOT_COUNTED,
+        /** The run was counted on an agent that is not the one with that name any more: nothing to recycle. */
+        STALE,
+        /** The agent has more uses left. */
+        KEEP,
+        /** The agent has reached its limit: its usage was reset and it is to be recycled. */
+        RECYCLE
+    }
+
+    /** The outcome and the usage of the agent right after. */
+    public record Acquired(Outcome outcome, int count) {}
+
+    /** The usage of one incarnation of an agent. Runs refer to it, so it tells a replaced agent from its successor. */
+    private static final class Entry {
+        String name;
+        int count;
+
+        Entry(String name) {
+            this.name = name;
+        }
+    }
+
+    private final Object lock = new Object();
+    private final Map<String, Entry> usages = new HashMap<>();
+    private final Map<Run<?, ?>, Entry> countedRuns = new HashMap<>();
+
+    public AgentUsageRegistry() {}
+
+    public static AgentUsageRegistry get() {
+        return ExtensionList.lookupSingleton(AgentUsageRegistry.class);
+    }
+
+    /**
+     * Counts the run against the agent, unless the agent has no limit, the run is over, it is counted already or the
+     * agent is at its limit.
+     */
+    public Acquired acquire(String node, int limit, Run<?, ?> run) {
+        return acquire(node, limit, run, run::isBuilding);
+    }
+
+    /** As {@link #acquire(String, int, Run)}, with the "is the run still building" question made by the caller. */
+    Acquired acquire(String node, int limit, Run<?, ?> run, BooleanSupplier stillBuilding) {
+        if (limit <= 0) {
+            return new Acquired(Outcome.UNTRACKED, 0);
+        }
+        synchronized (lock) {
+            // Asked while holding the lock: a run that ends in between would otherwise be counted for good.
+            if (!stillBuilding.getAsBoolean()) {
+                return new Acquired(Outcome.NOT_BUILDING, countOf(node));
+            }
+            if (countedRuns.containsKey(run)) {
+                return new Acquired(Outcome.ALREADY_COUNTED, countOf(node));
+            }
+            final Entry entry = usages.computeIfAbsent(node, Entry::new);
+            if (entry.count >= limit) {
+                return new Acquired(Outcome.OVER_LIMIT, entry.count);
+            }
+            entry.count++;
+            countedRuns.put(run, entry);
+            return new Acquired(Outcome.COUNTED, entry.count);
+        }
+    }
+
+    /**
+     * The run is over. Only a run that was counted can make its agent be recycled, and only if that agent is still the
+     * one it was counted on and has reached its {@code limit} (the one it has now; none means never).
+     */
+    public Released release(Run<?, ?> run, int limit) {
+        synchronized (lock) {
+            final Entry entry = countedRuns.remove(run);
+            if (entry == null) {
+                return Released.NOT_COUNTED;
+            }
+            if (usages.get(entry.name) != entry) {
+                return Released.STALE;
+            }
+            if (limit <= 0) {
+                return Released.KEEP;
+            }
+            if (entry.count >= limit) {
+                entry.count = 0;
+                return Released.RECYCLE;
+            }
+            return Released.KEEP;
+        }
+    }
+
+    /** The name of the agent the run is counted on, or null if it is not counted. */
+    public String nodeOf(Run<?, ?> run) {
+        synchronized (lock) {
+            final Entry entry = countedRuns.get(run);
+            return entry == null ? null : entry.name;
+        }
+    }
+
+    public boolean isCounted(Run<?, ?> run) {
+        synchronized (lock) {
+            return countedRuns.containsKey(run);
+        }
+    }
+
+    public int count(String node) {
+        synchronized (lock) {
+            return countOf(node);
+        }
+    }
+
+    /** Starts the agent from nothing again, as if it were new. The runs counted on it keep counting on it. */
+    public void reset(String node) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            if (entry != null) {
+                entry.count = 0;
+            }
+        }
+    }
+
+    public void resetAll() {
+        synchronized (lock) {
+            usages.values().forEach(entry -> entry.count = 0);
+        }
+    }
+
+    /** The agent is gone, or a new one takes its name: forget it. The runs counted on it become stale. */
+    public void forget(String node) {
+        synchronized (lock) {
+            usages.remove(node);
+        }
+    }
+
+    /** The agent was renamed: its usage and the runs counted on it go with it. */
+    public void rename(String from, String to) {
+        synchronized (lock) {
+            final Entry entry = usages.remove(from);
+            if (entry != null) {
+                entry.name = to;
+                usages.put(to, entry);
+            }
+        }
+    }
+
+    /**
+     * The limit of the agent may have changed. With no limit there is nothing to remember. An agent at or over its limit
+     * with no run using it would never be recycled, so it starts again (one that has runs using it is recycled when the
+     * last of them ends).
+     */
+    public void reconcile(String node, int limit) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            if (entry == null) {
+                return;
+            }
+            if (limit <= 0) {
+                usages.remove(node);
+            } else if (entry.count >= limit && !hasCountedRuns(entry)) {
+                entry.count = 0;
+            }
+        }
+    }
+
+    /** A copy of the usage of the agents that have any. */
+    public Map<String, Integer> snapshot() {
+        synchronized (lock) {
+            final Map<String, Integer> copy = new HashMap<>();
+            usages.forEach((name, entry) -> {
+                if (entry.count > 0) {
+                    copy.put(name, entry.count);
+                }
+            });
+            return copy;
+        }
+    }
+
+    private int countOf(String node) {
+        final Entry entry = usages.get(node);
+        return entry == null ? 0 : entry.count;
+    }
+
+    private boolean hasCountedRuns(Entry entry) {
+        return countedRuns.containsValue(entry);
+    }
+}
