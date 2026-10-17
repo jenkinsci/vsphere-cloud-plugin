@@ -8,6 +8,7 @@
                  description="${%Internal identifier of this cloud, used in URLs and config.xml. Generated automatically; not editable here.}">
             <f:textbox readonly="true"/>
         </f:entry>
+        <f:validateButton title="${%Reset usage counts}" progress="${%Resetting...}" method="resetUsages" with="name"/>
     </j:if>
     <f:entry>
         <f:property field="vsConnectionConfig"/>

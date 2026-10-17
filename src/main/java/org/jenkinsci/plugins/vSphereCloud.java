@@ -11,6 +11,7 @@ import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.Extension;
 import hudson.model.*;
 import hudson.model.Descriptor.FormException;
+import hudson.model.Node;
 import hudson.slaves.Cloud;
 import hudson.slaves.NodeProvisioner.PlannedNode;
 import hudson.slaves.SlaveComputer;
@@ -35,6 +36,7 @@ import jenkins.model.Jenkins;
 import jenkins.slaves.iterators.api.NodeIterator;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.vsphere.tools.*;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
@@ -45,6 +47,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.interceptor.RequirePOST;
 import org.kohsuke.stapler.verb.POST;
 
 /**
@@ -1417,6 +1420,30 @@ public class vSphereCloud extends Cloud {
                         "This cloud's VM operations will block (and log a message to consumers) until maintenance mode is turned off.");
             }
             return FormValidation.ok();
+        }
+
+        /**
+         * Starts the agents of the cloud again as far as "Disconnect after Limited Builds" goes, as if they had not done
+         * any build. For when everything was restarted after an outage and the agents are known to be clean.
+         */
+        @RequirePOST
+        public FormValidation doResetUsages(@QueryParameter String name) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            final Cloud cloud = Jenkins.get().clouds.getByName(name);
+            if (!(cloud instanceof vSphereCloud)) {
+                return FormValidation.error("There is no vSphere cloud with the ID \"%s\".", name);
+            }
+            final String description = ((vSphereCloud) cloud).getVsDescription();
+            int reset = 0;
+            for (Node node : Jenkins.get().getNodes()) {
+                if (node instanceof vSphereCloudSlave
+                        && description != null
+                        && description.equals(((vSphereCloudSlave) node).getVsDescription())) {
+                    AgentUsageRegistry.get().reset(node.getNodeName());
+                    reset++;
+                }
+            }
+            return FormValidation.ok("Reset the usage of %d agent(s).", reset);
         }
 
         public ListBoxModel doFillHostSelectionModeItems() {
