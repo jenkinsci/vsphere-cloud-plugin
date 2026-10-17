@@ -445,6 +445,25 @@ class vSphereCloudPipelineLimitedBuildsTest {
     }
 
     @Test
+    void anAgentRenamedWhileARunEndsIsStillFound(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        final vSphereCloudSlave renamed = newAgent(r, "new", "lbl", 1, 5);
+        final FreeStyleBuild run = runningBuild(r);
+        registry.acquire("old", 5, run);
+
+        // The agent is renamed after asking where the run was counted and before looking that agent up.
+        final vSphereCloudSlave found = vSphereCloudSlave.findCountedAgent(run, name -> {
+            if (name.equals("old")) {
+                registry.rename("old", "new");
+                return null;
+            }
+            return name.equals("new") ? renamed : null;
+        });
+
+        assertThat(found, is(renamed));
+    }
+
+    @Test
     void loweringTheLimitToTheUsageOfAnIdleAgentStartsItAgain(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = newAgent(r, "agent", "lbl", 1, 5);
         r.jenkins.addNode(agent);

@@ -164,6 +164,34 @@ class AgentUsageRegistryPersistenceTest {
     }
 
     @Test
+    void anAgentWithoutANameDoesNotStopTheOthersFromBeingSaved(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final AgentUsageRegistry registry = registry(store, new ArrayList<>());
+        final List<FreeStyleBuild> run = runs(r, 2);
+        use(registry, null, 5, run.subList(0, 1), 1);
+        use(registry, "agent", 5, run.subList(1, 2), 1);
+
+        registry.save();
+
+        final String saved = new String(Files.readAllBytes(store.toPath()), StandardCharsets.UTF_8);
+        assertThat(saved, containsString("agent"));
+    }
+
+    @Test
+    void theSavedFileDoesNotNameTheJavaClass(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final AgentUsageRegistry registry = registry(store, new ArrayList<>());
+        use(registry, "agent", 5, runs(r, 1), 1);
+
+        registry.save();
+
+        // Moving or renaming the class later must not make what was saved unreadable.
+        final String saved = new String(Files.readAllBytes(store.toPath()), StandardCharsets.UTF_8);
+        assertThat(saved, containsString("<usage>"));
+        assertThat(saved, not(containsString("AgentUsageRegistry")));
+    }
+
+    @Test
     void onlyTheCountsAreSaved(JenkinsRule r, @TempDir Path dir) throws Exception {
         final File store = dir.resolve("usage.xml").toFile();
         final AgentUsageRegistry registry = registry(store, new ArrayList<>());

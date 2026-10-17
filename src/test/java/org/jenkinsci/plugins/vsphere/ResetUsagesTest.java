@@ -3,7 +3,9 @@ package org.jenkinsci.plugins.vsphere;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
+import com.cloudbees.hudson.plugins.folder.Folder;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Node.Mode;
@@ -15,6 +17,7 @@ import java.util.Collections;
 import jenkins.model.Jenkins;
 import org.htmlunit.HttpMethod;
 import org.htmlunit.WebRequest;
+import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
 import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.junit.jupiter.api.Test;
@@ -88,6 +91,33 @@ class ResetUsagesTest {
         assertThat(AgentUsageRegistry.get().count("a"), is(0));
         assertThat(AgentUsageRegistry.get().count("b"), is(0));
         assertThat(AgentUsageRegistry.get().count("c"), is(3));
+    }
+
+    @Test
+    void theButtonIsOnlyOnTheConfigurationOfCloudsOfJenkins(JenkinsRule r) throws Exception {
+        final vSphereCloud global = cloud(r, "global cloud");
+        final Folder folder = r.jenkins.createProject(Folder.class, "folder");
+        final vSphereCloud inFolder = new vSphereCloud(
+                new VSphereConnectionConfig("vsHost", false, "credentialsId"),
+                "folder cloud",
+                100,
+                0,
+                false,
+                Collections.emptyList());
+        folder.getProperties().add(new FolderVSphereCloudProperty(Collections.singletonList(inFolder)));
+        final JenkinsRule.WebClient webClient = r.createWebClient();
+
+        final String globalPage = webClient
+                .goTo("manage/cloud/" + global.name + "/configure")
+                .getWebResponse()
+                .getContentAsString();
+        final String folderPage =
+                webClient.goTo("job/folder/configure").getWebResponse().getContentAsString();
+
+        assertThat(globalPage, containsString("Reset usage counts"));
+        // The action looks for the cloud among those of Jenkins, so on a cloud of a folder it could only fail.
+        assertThat(folderPage, containsString("folder cloud"));
+        assertThat(folderPage, not(containsString("Reset usage counts")));
     }
 
     @Test

@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
@@ -349,17 +350,37 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
      */
     static void EndLimitedRun(Run run) {
         final AgentUsageRegistry registry = AgentUsageRegistry.get();
-        final String name = registry.nodeOf(run);
-        if (name == null) {
+        if (registry.nodeOf(run) == null) {
             return;
         }
-        final Node node = Jenkins.get().getNode(name);
-        if (node instanceof vSphereCloudSlave) {
-            ((vSphereCloudSlave) node).endLimitedTest(run);
+        final vSphereCloudSlave agent = findCountedAgent(run, Jenkins.get()::getNode);
+        if (agent != null) {
+            agent.endLimitedTest(run);
         } else {
             // The agent is gone (e.g. removed by a run-once retention strategy).
             registry.release(run, 0);
         }
+    }
+
+    /**
+     * The agent the run is counted on, or null if there is none. The agent may be renamed between asking where the run
+     * was counted and looking the agent up, in which case it is asked again.
+     */
+    static vSphereCloudSlave findCountedAgent(Run run, Function<String, Node> lookup) {
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        String name = registry.nodeOf(run);
+        for (int attempt = 0; name != null && attempt < 2; attempt++) {
+            final Node node = lookup.apply(name);
+            if (node instanceof vSphereCloudSlave) {
+                return (vSphereCloudSlave) node;
+            }
+            final String current = registry.nodeOf(run);
+            if (name.equals(current)) {
+                break;
+            }
+            name = current;
+        }
+        return null;
     }
 
     static boolean hasLimitedTestRun(Run run) {

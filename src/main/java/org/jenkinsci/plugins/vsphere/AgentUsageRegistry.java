@@ -8,6 +8,7 @@ import hudson.init.Initializer;
 import hudson.init.Terminator;
 import hudson.model.Node;
 import hudson.model.Run;
+import hudson.util.XStream2;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
@@ -86,6 +87,13 @@ public final class AgentUsageRegistry {
     /** What is saved: the usage of the agents, and nothing about the runs. */
     private static final class Usage {
         Map<String, Integer> counts = new TreeMap<>();
+    }
+
+    /** Reads and writes {@link Usage} under a name of its own, so that moving or renaming the class keeps the file readable. */
+    private static final XStream2 XSTREAM = new XStream2();
+
+    static {
+        XSTREAM.alias("usage", Usage.class);
     }
 
     private static final Logger LOGGER = Logger.getLogger(AgentUsageRegistry.class.getName());
@@ -301,10 +309,15 @@ public final class AgentUsageRegistry {
             return;
         }
         synchronized (saveLock) {
-            final Usage usage = new Usage();
-            usage.counts.putAll(snapshot());
             try {
-                new XmlFile(Jenkins.XSTREAM2, store).write(usage);
+                final Usage usage = new Usage();
+                snapshot().forEach((name, count) -> {
+                    // An entry without a name cannot be put back to an agent; it must not stop the others.
+                    if (name != null) {
+                        usage.counts.put(name, count);
+                    }
+                });
+                new XmlFile(XSTREAM, store).write(usage);
             } catch (IOException | RuntimeException e) {
                 LOGGER.log(Level.WARNING, "Failed to save the usage of the vSphere agents to " + store, e);
             }
@@ -322,7 +335,7 @@ public final class AgentUsageRegistry {
         }
         final Usage saved;
         try {
-            final Object read = new XmlFile(Jenkins.XSTREAM2, store).read();
+            final Object read = new XmlFile(XSTREAM, store).read();
             if (!(read instanceof Usage)) {
                 return;
             }
