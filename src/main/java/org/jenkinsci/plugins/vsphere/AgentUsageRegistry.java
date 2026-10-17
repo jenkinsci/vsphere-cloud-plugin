@@ -106,6 +106,9 @@ public final class AgentUsageRegistry {
 
     private final Object saveLock = new Object();
 
+    /** Jenkins is stopping. */
+    private volatile boolean terminated;
+
     /** The registry of Jenkins, which saves the usage in the home of Jenkins. */
     public AgentUsageRegistry() {
         this(
@@ -215,13 +218,6 @@ public final class AgentUsageRegistry {
         }
     }
 
-    public void resetAll() {
-        synchronized (lock) {
-            usages.values().forEach(entry -> entry.count = 0);
-            changed();
-        }
-    }
-
     /** The agent is gone, or a new one takes its name: forget it. The runs counted on it become stale. */
     public void forget(String node) {
         synchronized (lock) {
@@ -246,7 +242,7 @@ public final class AgentUsageRegistry {
     /**
      * The limit of the agent may have changed. With no limit there is nothing to remember. An agent at or over its limit
      * with no run using it would never be recycled, so it starts again (one that has runs using it is recycled when the
-     * last of them ends).
+     * first of them to end finds it at its limit).
      */
     public void reconcile(String node, int limit) {
         synchronized (lock) {
@@ -279,12 +275,24 @@ public final class AgentUsageRegistry {
 
     /** The usage of the agents changed: have it saved soon. A burst of changes makes one save. */
     private void changed() {
-        if (store != null && savePending.compareAndSet(false, true)) {
-            scheduler.accept(() -> {
+        // Once Jenkins is stopping, the timer that would do the save is about to be shut down.
+        if (store != null && !terminated && savePending.compareAndSet(false, true)) {
+            try {
+                scheduler.accept(() -> {
+                    savePending.set(false);
+                    save();
+                });
+            } catch (RuntimeException e) {
                 savePending.set(false);
-                save();
-            });
+                LOGGER.log(Level.WARNING, "Failed to schedule saving the usage of the vSphere agents", e);
+            }
         }
+    }
+
+    /** Jenkins is stopping: saves what there is and no more saves are asked for. */
+    void terminate() {
+        terminated = true;
+        save();
     }
 
     /** Writes the usage of the agents. Writes are one after the other, each one with the usage as of its start. */
@@ -353,7 +361,7 @@ public final class AgentUsageRegistry {
     @Terminator
     public static void saveAtShutdown() {
         if (Jenkins.getInstanceOrNull() != null) {
-            get().save();
+            get().terminate();
         }
     }
 

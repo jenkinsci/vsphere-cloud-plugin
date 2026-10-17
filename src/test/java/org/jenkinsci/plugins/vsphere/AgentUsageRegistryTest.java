@@ -216,19 +216,17 @@ class AgentUsageRegistryTest {
     }
 
     @Test
-    void resetAndResetAll(JenkinsRule r) throws Exception {
+    void resetStartsOnlyThatAgentAgain(JenkinsRule r) throws Exception {
         final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "a", 5, run.get(0));
         acquire(registry, "b", 5, run.get(1));
 
         registry.reset("a");
+
         assertThat(registry.count("a"), is(0));
         assertThat(registry.count("b"), is(1));
-
-        registry.resetAll();
-        assertThat(registry.count("b"), is(0));
-        assertThat(registry.snapshot().isEmpty(), is(true));
+        assertThat(registry.snapshot().size(), is(1));
     }
 
     @Test

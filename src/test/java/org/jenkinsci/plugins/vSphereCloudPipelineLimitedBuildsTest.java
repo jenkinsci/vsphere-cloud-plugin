@@ -403,7 +403,8 @@ class vSphereCloudPipelineLimitedBuildsTest {
         Files.createFile(gate.toPath());
         r.assertBuildStatusSuccess(r.waitForCompletion(run));
 
-        // A recycle would already have been asked for by the time the run is over.
+        // The run was counted and has been released, and the agent was not asked to recycle.
+        assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
         Thread.sleep(2000);
         assertThat(isDisconnected(saved), is(false));
         assertThat(saved.getNumberOfLimitedTestRuns(), is(0));

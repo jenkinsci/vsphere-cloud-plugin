@@ -306,7 +306,8 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
 
     private boolean startLimitedTest(Run run, Executor executor, TaskListener listener, boolean abortIfOverLimit) {
         if (executor == null) {
-            return true;
+            // Nothing to count it on. As always, say whether there would have been room.
+            return LimitedTestRunCount <= 0 || getNumberOfLimitedTestRuns() < LimitedTestRunCount;
         }
         final AgentUsageRegistry.Acquired acquired =
                 AgentUsageRegistry.get().acquire(getNodeName(), LimitedTestRunCount, run);

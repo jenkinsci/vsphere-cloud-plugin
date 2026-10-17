@@ -128,6 +128,42 @@ class AgentUsageRegistryPersistenceTest {
     }
 
     @Test
+    void nothingIsScheduledOnceJenkinsIsStopping(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final List<Runnable> scheduled = new ArrayList<>();
+        final AgentUsageRegistry registry = registry(store, scheduled);
+        final List<FreeStyleBuild> run = runs(r, 2);
+        use(registry, "agent", 100, run.subList(0, 1), 1);
+
+        registry.terminate();
+        use(registry, "other", 100, run.subList(1, 2), 1);
+
+        // The pending save is for the timer to do, or nobody: it is shut down after this.
+        assertThat(store.exists(), is(true));
+        assertThat(scheduled.size(), is(1));
+    }
+
+    @Test
+    void aSchedulerThatFailsDoesNotStopLaterSaves(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final List<Runnable> scheduled = new ArrayList<>();
+        final boolean[] failNext = {true};
+        final AgentUsageRegistry registry = new AgentUsageRegistry(store, save -> {
+            if (failNext[0]) {
+                failNext[0] = false;
+                throw new IllegalStateException("the timer is gone");
+            }
+            scheduled.add(save);
+        });
+        final List<FreeStyleBuild> run = runs(r, 2);
+
+        use(registry, "agent", 100, run.subList(0, 1), 1);
+        use(registry, "other", 100, run.subList(1, 2), 1);
+
+        assertThat(scheduled.size(), is(1));
+    }
+
+    @Test
     void onlyTheCountsAreSaved(JenkinsRule r, @TempDir Path dir) throws Exception {
         final File store = dir.resolve("usage.xml").toFile();
         final AgentUsageRegistry registry = registry(store, new ArrayList<>());

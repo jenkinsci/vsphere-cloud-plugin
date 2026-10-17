@@ -99,7 +99,8 @@ class ResetUsagesTest {
     void aGetRequestIsRejected(JenkinsRule r) throws Exception {
         final vSphereCloud cloud = cloud(r, "first cloud");
 
-        r.createWebClient().assertFails(resetUrl(cloud.name), 405);
+        // A POST-only action is simply not there for a GET.
+        r.createWebClient().assertFails(resetUrl(cloud.name), 404);
     }
 
     @Test
