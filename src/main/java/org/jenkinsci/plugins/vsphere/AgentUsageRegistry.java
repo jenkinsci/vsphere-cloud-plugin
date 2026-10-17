@@ -2,10 +2,28 @@ package org.jenkinsci.plugins.vsphere;
 
 import hudson.Extension;
 import hudson.ExtensionList;
+import hudson.XmlFile;
+import hudson.init.InitMilestone;
+import hudson.init.Initializer;
+import hudson.init.Terminator;
+import hudson.model.Node;
 import hudson.model.Run;
+import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
+import java.util.function.ToIntFunction;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import jenkins.model.Jenkins;
+import jenkins.util.Timer;
+import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
@@ -65,11 +83,45 @@ public final class AgentUsageRegistry {
         }
     }
 
+    /** What is saved: the usage of the agents, and nothing about the runs. */
+    private static final class Usage {
+        Map<String, Integer> counts = new TreeMap<>();
+    }
+
+    private static final Logger LOGGER = Logger.getLogger(AgentUsageRegistry.class.getName());
+    private static final String STORE_NAME = "vsphere-cloud-usage.xml";
+
     private final Object lock = new Object();
     private final Map<String, Entry> usages = new HashMap<>();
     private final Map<Run<?, ?>, Entry> countedRuns = new HashMap<>();
 
-    public AgentUsageRegistry() {}
+    /** Where the usage is saved, or null if it is not. */
+    private final File store;
+
+    /** Asks for a save to be made soon. */
+    private final Consumer<Runnable> scheduler;
+
+    /** A save has been asked for and has not started yet. */
+    private final AtomicBoolean savePending = new AtomicBoolean();
+
+    private final Object saveLock = new Object();
+
+    /** The registry of Jenkins, which saves the usage in the home of Jenkins. */
+    public AgentUsageRegistry() {
+        this(
+                new File(Jenkins.get().getRootDir(), STORE_NAME),
+                save -> Timer.get().schedule(save, 1, TimeUnit.SECONDS));
+    }
+
+    AgentUsageRegistry(File store, Consumer<Runnable> scheduler) {
+        this.store = store;
+        this.scheduler = scheduler;
+    }
+
+    /** A registry that is not saved anywhere. */
+    static AgentUsageRegistry inMemory() {
+        return new AgentUsageRegistry(null, save -> {});
+    }
 
     public static AgentUsageRegistry get() {
         return ExtensionList.lookupSingleton(AgentUsageRegistry.class);
@@ -102,6 +154,7 @@ public final class AgentUsageRegistry {
             }
             entry.count++;
             countedRuns.put(run, entry);
+            changed();
             return new Acquired(Outcome.COUNTED, entry.count);
         }
     }
@@ -124,6 +177,7 @@ public final class AgentUsageRegistry {
             }
             if (entry.count >= limit) {
                 entry.count = 0;
+                changed();
                 return Released.RECYCLE;
             }
             return Released.KEEP;
@@ -156,6 +210,7 @@ public final class AgentUsageRegistry {
             final Entry entry = usages.get(node);
             if (entry != null) {
                 entry.count = 0;
+                changed();
             }
         }
     }
@@ -163,13 +218,16 @@ public final class AgentUsageRegistry {
     public void resetAll() {
         synchronized (lock) {
             usages.values().forEach(entry -> entry.count = 0);
+            changed();
         }
     }
 
     /** The agent is gone, or a new one takes its name: forget it. The runs counted on it become stale. */
     public void forget(String node) {
         synchronized (lock) {
-            usages.remove(node);
+            if (usages.remove(node) != null) {
+                changed();
+            }
         }
     }
 
@@ -180,6 +238,7 @@ public final class AgentUsageRegistry {
             if (entry != null) {
                 entry.name = to;
                 usages.put(to, entry);
+                changed();
             }
         }
     }
@@ -197,8 +256,10 @@ public final class AgentUsageRegistry {
             }
             if (limit <= 0) {
                 usages.remove(node);
+                changed();
             } else if (entry.count >= limit && !hasCountedRuns(entry)) {
                 entry.count = 0;
+                changed();
             }
         }
     }
@@ -213,6 +274,86 @@ public final class AgentUsageRegistry {
                 }
             });
             return copy;
+        }
+    }
+
+    /** The usage of the agents changed: have it saved soon. A burst of changes makes one save. */
+    private void changed() {
+        if (store != null && savePending.compareAndSet(false, true)) {
+            scheduler.accept(() -> {
+                savePending.set(false);
+                save();
+            });
+        }
+    }
+
+    /** Writes the usage of the agents. Writes are one after the other, each one with the usage as of its start. */
+    void save() {
+        if (store == null) {
+            return;
+        }
+        synchronized (saveLock) {
+            final Usage usage = new Usage();
+            usage.counts.putAll(snapshot());
+            try {
+                new XmlFile(Jenkins.XSTREAM2, store).write(usage);
+            } catch (IOException | RuntimeException e) {
+                LOGGER.log(Level.WARNING, "Failed to save the usage of the vSphere agents to " + store, e);
+            }
+        }
+    }
+
+    /**
+     * Takes the usage saved by an earlier run of Jenkins. An agent that does not exist any more is not taken. Nothing is
+     * using the agents now, so one that is at its limit would never be recycled: it starts again, as does one that has
+     * no limit any more.
+     */
+    void load(Predicate<String> nodeExists, ToIntFunction<String> limitOf) {
+        if (store == null || !store.exists()) {
+            return;
+        }
+        final Usage saved;
+        try {
+            final Object read = new XmlFile(Jenkins.XSTREAM2, store).read();
+            if (!(read instanceof Usage)) {
+                return;
+            }
+            saved = (Usage) read;
+        } catch (IOException | RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Failed to read the usage of the vSphere agents from " + store, e);
+            return;
+        }
+        if (saved.counts == null) {
+            return;
+        }
+        synchronized (lock) {
+            saved.counts.forEach((name, count) -> {
+                if (count == null || count <= 0 || !nodeExists.test(name)) {
+                    return;
+                }
+                final int limit = limitOf.applyAsInt(name);
+                if (limit <= 0 || count >= limit) {
+                    return;
+                }
+                usages.computeIfAbsent(name, Entry::new).count = count;
+            });
+        }
+    }
+
+    /** Takes the saved usage once the agents are known. */
+    @Initializer(after = InitMilestone.SYSTEM_CONFIG_LOADED)
+    public static void loadAtStartup() {
+        get().load(name -> Jenkins.get().getNode(name) instanceof vSphereCloudSlave, name -> {
+            final Node node = Jenkins.get().getNode(name);
+            return node instanceof vSphereCloudSlave ? ((vSphereCloudSlave) node).getLimitedTestRunCount() : 0;
+        });
+    }
+
+    /** Saves what is pending before Jenkins stops. */
+    @Terminator
+    public static void saveAtShutdown() {
+        if (Jenkins.getInstanceOrNull() != null) {
+            get().save();
         }
     }
 

@@ -45,7 +45,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void acquireCountsUpToTheLimitThenReportsOverLimit(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 3);
 
         assertThat(acquire(registry, "agent", 2, run.get(0)), is(new Acquired(Outcome.COUNTED, 1)));
@@ -57,7 +57,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void aRunIsCountedOnce(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);
         acquire(registry, "first", 5, run);
 
@@ -71,7 +71,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void noLimitIsNotTracked(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
 
         assertThat(acquire(registry, "agent", 0, run.get(0)).outcome(), is(Outcome.UNTRACKED));
@@ -83,7 +83,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void aRunThatIsOverIsNotCounted(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild finished = runs(r, 1).get(0);
 
         // The public method asks the run itself, and a finished build is not building.
@@ -95,7 +95,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void aBuildingRunIsCountedThroughThePublicMethod(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleProject project = r.createFreeStyleProject();
         project.getBuildersList().add(new SleepBuilder(600_000));
         final FreeStyleBuild building = project.scheduleBuild2(0).waitForStart();
@@ -109,7 +109,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void releasingAnUncountedRunChangesNothing(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "agent", 1, run.get(0));
         acquire(registry, "agent", 1, run.get(1));
@@ -123,7 +123,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void releaseRecyclesOnlyWhenTheLimitIsReached(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 3);
         acquire(registry, "agent", 2, run.get(0));
 
@@ -138,7 +138,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void releaseWithNoLimitDoesNotRecycle(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);
         acquire(registry, "agent", 3, run);
 
@@ -148,7 +148,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void aReleaseAfterTheNodeWasReplacedIsStale(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "agent", 1, run.get(0));
         // The agent was deleted and a new one got the same name.
@@ -163,7 +163,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void renameMovesTheCountAndTheCountedRuns(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);
         acquire(registry, "old", 1, run);
 
@@ -177,7 +177,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void reconcileResetsAnIdleEntryAtOrOverTheNewLimit(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "agent", 5, run.get(0));
         acquire(registry, "agent", 5, run.get(1));
@@ -192,7 +192,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void reconcileKeepsTheCountOfARunThatIsStillUsingTheAgent(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);
         acquire(registry, "agent", 1, run);
 
@@ -205,7 +205,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void reconcileForgetsWhenTheLimitIsRemoved(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);
         acquire(registry, "agent", 3, run);
 
@@ -217,7 +217,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void resetAndResetAll(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "a", 5, run.get(0));
         acquire(registry, "b", 5, run.get(1));
@@ -233,7 +233,7 @@ class AgentUsageRegistryTest {
 
     @Test
     void anUnknownRunHasNoNode(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = new AgentUsageRegistry();
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
 
         assertThat(registry.nodeOf(runs(r, 1).get(0)), is(nullValue()));
     }
@@ -246,7 +246,7 @@ class AgentUsageRegistryTest {
         final ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {
             for (int round = 0; round < 50; round++) {
-                final AgentUsageRegistry registry = new AgentUsageRegistry();
+                final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
                 final CyclicBarrier together = new CyclicBarrier(threads);
                 final List<Future<Outcome>> outcomes = new ArrayList<>();
                 for (final FreeStyleBuild one : run) {
