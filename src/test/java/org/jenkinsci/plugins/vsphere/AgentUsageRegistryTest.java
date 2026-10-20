@@ -56,6 +56,19 @@ class AgentUsageRegistryTest {
     }
 
     @Test
+    void aRunIsKnownByItsId(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final String id = runs(r, 1).get(0).getExternalizableId();
+
+        assertThat(registry.acquire("agent", 5, id, () -> BUILDING), is(new Acquired(Outcome.COUNTED, 1)));
+        assertThat(registry.acquire("agent", 5, id, () -> BUILDING), is(new Acquired(Outcome.ALREADY_COUNTED, 1)));
+        assertThat(registry.isCounted(id), is(true));
+        assertThat(registry.nodeOf(id), is("agent"));
+        assertThat(registry.release(id, 5), is(Released.KEEP));
+        assertThat(registry.isCounted(id), is(false));
+    }
+
+    @Test
     void aRunIsCountedOnce(JenkinsRule r) throws Exception {
         final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final FreeStyleBuild run = runs(r, 1).get(0);

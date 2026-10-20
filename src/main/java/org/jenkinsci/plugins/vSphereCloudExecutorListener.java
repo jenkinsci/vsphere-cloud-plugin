@@ -7,6 +7,7 @@ import hudson.model.Job;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Run;
+import org.jenkinsci.plugins.vsphere.ContinuedTasks;
 
 /**
  * Counts the Pipeline runs that use a {@link vSphereCloudSlave}, which {@link vSphereCloudRunListener} cannot see:
@@ -20,6 +21,10 @@ public final class vSphereCloudExecutorListener implements ExecutorListener {
     public void taskStarted(Executor executor, Queue.Task task) {
         // A Job has a Run that vSphereCloudRunListener already counts.
         if (task instanceof Job) {
+            return;
+        }
+        // A block that Pipeline queued again after a restart belongs to a run that was counted before it.
+        if (ContinuedTasks.isContinued(task)) {
             return;
         }
         final Node node = executor.getOwner().getNode();

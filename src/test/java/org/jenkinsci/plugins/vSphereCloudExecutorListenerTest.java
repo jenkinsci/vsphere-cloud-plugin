@@ -20,6 +20,7 @@ import hudson.slaves.RetentionStrategy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.jenkinsci.plugins.durabletask.executors.ContinuedTask;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -35,7 +36,7 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 class vSphereCloudExecutorListenerTest {
 
     /** Stands in for the {@code PlaceholderTask} that Pipeline's {@code node {}} step queues. */
-    private static final class NodeBlockTask extends AbstractQueueTask {
+    private static class NodeBlockTask extends AbstractQueueTask {
         private final FreeStyleBuild pipelineRun;
 
         NodeBlockTask(FreeStyleBuild pipelineRun) {
@@ -93,6 +94,21 @@ class vSphereCloudExecutorListenerTest {
         @Override
         public Queue.Executable createExecutable() {
             throw new UnsupportedOperationException();
+        }
+    }
+
+    /** Stands in for a block that Pipeline queued again after a restart. */
+    private static final class ResumedNodeBlockTask extends NodeBlockTask implements ContinuedTask {
+        private final boolean continued;
+
+        ResumedNodeBlockTask(FreeStyleBuild pipelineRun, boolean continued) {
+            super(pipelineRun);
+            this.continued = continued;
+        }
+
+        @Override
+        public boolean isContinued() {
+            return continued;
         }
     }
 
@@ -176,6 +192,19 @@ class vSphereCloudExecutorListenerTest {
 
         assertThat(first.getNumberOfLimitedTestRuns(), is(1));
         assertThat(other.getNumberOfLimitedTestRuns(), is(0));
+        runListener.onFinalized(run);
+    }
+
+    @Test
+    void aContinuedNodeBlockIsNotCountedAgain(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = agent(r, "agent", 5);
+        final FreeStyleBuild run = pipelineRun(r);
+
+        executorListener.taskStarted(executorOf(agent), new ResumedNodeBlockTask(run, true));
+
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+        executorListener.taskStarted(executorOf(agent), new ResumedNodeBlockTask(run, false));
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
         runListener.onFinalized(run);
     }
 

@@ -64,6 +64,21 @@ class AgentUsageRegistryRestartTest {
         });
     }
 
+    @Test
+    void aSavedRunThatNoLongerExistsIsPrunedAtStartup() throws Throwable {
+        sessions.then(r -> {
+            r.jenkins.addNode(agent("held", 1));
+            AgentUsageRegistry.get().acquire("held", 1, "gone#1", () -> true);
+            assertThat(AgentUsageRegistry.get().count("held"), is(1));
+        });
+
+        sessions.then(r -> {
+            // Nothing is going to end that run, so it would hold the agent at its limit for ever.
+            assertThat(AgentUsageRegistry.get().isCounted("gone#1"), is(false));
+            assertThat(AgentUsageRegistry.get().count("held"), is(0));
+        });
+    }
+
     private static void use(JenkinsRule r, String node, int limit, int times) throws Exception {
         for (int i = 0; i < times; i++) {
             // Any build will do to tell the uses apart.
