@@ -111,6 +111,7 @@ A Pipeline run counts as one build, however many `node {}` blocks it runs; the a
 The number of builds an agent has done is kept when the agent is saved and when Jenkins is restarted (in `vsphere-cloud-usage.xml` in the Jenkins home); an agent that had reached its limit when Jenkins stopped starts counting again.
 A Pipeline that was running when Jenkins was restarted is counted again when it resumes, so the agent may be recycled one build early.
 The "Reset usage counts" button of a cloud (visible once the cloud is saved, for administrators) makes all the agents of that cloud start counting again, e.g. after an outage that restarted everything; it does not recycle them. Use it while the agents are idle: a build that is running on an agent when it is pressed is not counted any more, and the agent may be recycled while a later one is still using it.
+The button is not implemented for clouds that are defined in a folder: the action looks the cloud up among the clouds of Jenkins, so the button is not shown on a folder's cloud. It can be added, maybe with a lesser permission than the administrator's, when someone needs it.
 * GuestInfo Properties:
 you can use "guestinfos" to provide properties (e.g. the URL to the Jenkins Master and the JNLP "secret") to the clone.
 This is especially useful if you chose "Java Web Start" (JNLP) as launch method, e.g. for a Windows VM.
