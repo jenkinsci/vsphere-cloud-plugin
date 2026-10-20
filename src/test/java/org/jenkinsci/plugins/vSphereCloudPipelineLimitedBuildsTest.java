@@ -1,11 +1,13 @@
 package org.jenkinsci.plugins;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Computer;
 import hudson.model.Executor;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
@@ -13,6 +15,8 @@ import hudson.model.Node.Mode;
 import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.slaves.ComputerLauncher;
+import hudson.slaves.ComputerListener;
+import hudson.slaves.OfflineCause;
 import hudson.slaves.RetentionStrategy;
 import hudson.slaves.SlaveComputer;
 import hudson.util.OneShotEvent;
@@ -22,6 +26,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
@@ -34,6 +39,7 @@ import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.SleepBuilder;
 import org.jvnet.hudson.test.TestBuilder;
+import org.jvnet.hudson.test.TestExtension;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 /**
@@ -220,6 +226,32 @@ class vSphereCloudPipelineLimitedBuildsTest {
         waitFor("the agent to be recycled", () -> isDisconnected(agent));
         assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
         assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
+    }
+
+    /** What the agents are set temporarily offline with, as text. */
+    private static final List<String> OFFLINE_REASONS = new CopyOnWriteArrayList<>();
+
+    @TestExtension("theAgentIsSetOfflineForTheRightReasonWhileItIsRecycled")
+    public static class RecordOfflineReasons extends ComputerListener {
+        @Override
+        public void onTemporarilyOffline(Computer computer, OfflineCause cause) {
+            OFFLINE_REASONS.add(String.valueOf(cause));
+        }
+    }
+
+    @Test
+    void theAgentIsSetOfflineForTheRightReasonWhileItIsRecycled(JenkinsRule r) throws Exception {
+        OFFLINE_REASONS.clear();
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final FreeStyleProject project = r.createFreeStyleProject();
+        project.setAssignedLabel(r.jenkins.getLabel("lbl"));
+
+        r.buildAndAssertSuccess(project);
+
+        waitFor("the agent to be recycled", () -> isDisconnected(agent));
+        // It is set offline once, and the reason says so (not that it is back online).
+        assertThat(OFFLINE_REASONS.size(), is(1));
+        assertThat(OFFLINE_REASONS.get(0), containsString("Marking the agent as offline"));
     }
 
     @Test

@@ -400,7 +400,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                         this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
 
                 final VSphereOfflineCause tempOffline =
-                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
+                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporaryOffline());
                 slave.setTemporarilyOffline(true, tempOffline);
                 slave.waitUntilOffline();
                 final VSphereOfflineCause disconnect =
