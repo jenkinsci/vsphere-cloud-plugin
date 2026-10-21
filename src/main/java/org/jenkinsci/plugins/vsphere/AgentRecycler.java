@@ -7,6 +7,8 @@ import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.PeriodicWork;
 import hudson.model.Queue;
+import hudson.model.TaskListener;
+import hudson.slaves.ComputerListener;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -297,6 +299,20 @@ public final class AgentRecycler {
         } catch (RuntimeException e) {
             // Nothing is waiting for it if there is no Jenkins to wait.
             LOGGER.log(Level.FINE, "Could not say that the vSphere agent " + node + " was disconnected", e);
+        }
+    }
+
+    /** An agent that has used all its builds and comes online, as one does after a restart, is looked at at once. */
+    @Extension
+    public static final class OnlineListener extends ComputerListener {
+        @Override
+        public void onOnline(Computer computer, TaskListener listener) {
+            final Node node = computer.getNode();
+            if (node instanceof vSphereCloudSlave
+                    && AgentUsageRegistry.get()
+                            .isRetiring(node.getNodeName(), ((vSphereCloudSlave) node).getLimitedTestRunCount())) {
+                get().scheduleCheck(node.getNodeName());
+            }
         }
     }
 

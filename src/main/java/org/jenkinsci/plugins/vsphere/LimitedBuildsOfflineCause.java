@@ -6,7 +6,7 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 /**
  * Offline because the agent has used all the builds it is allowed and is being recycled. It is saved with the agent
- * while that lasts, so the name of the class is not to be changed.
+ * while that lasts, so the name of the class, and the keys of its messages, are not to be changed.
  */
 @Restricted(NoExternalUse.class)
 public class LimitedBuildsOfflineCause extends VSphereOfflineCause {

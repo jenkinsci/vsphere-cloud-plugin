@@ -381,6 +381,9 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
         VSphere v = null;
         boolean reconnect = false;
+        // How the disconnect went, said when it is over for the agent: not before, as the recycle that waits for it
+        // connects the agent again, which the launcher does not allow while it is still disconnecting.
+        RecycleOutcome outcome = null;
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             super.afterDisconnect(slaveComputer, taskListener);
@@ -440,7 +443,11 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             break;
                     }
                 } else {
-                    // VM is already powered down.
+                    vSphereCloud.Log(
+                            slaveComputer,
+                            taskListener,
+                            "The virtual machine is powered off already: idle action %s has nothing to do to it.",
+                            localIdle);
                 }
 
                 // Reconnect and Revert is independent of VM power state
@@ -457,21 +464,22 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                                 + " Fix the name of the virtual machine of the agent, or reset the usage counts of the cloud.",
                         vmName,
                         localIdle);
-                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
+                outcome = RecycleOutcome.FAILED;
             } else {
-                if (!isRevert(localIdle)) {
+                if (!isRevert(localIdle) && (snapName == null || snapName.isEmpty())) {
                     vSphereCloud.Log(
                             slaveComputer,
                             taskListener,
-                            "Idle action %s does not revert the virtual machine: it keeps what the builds left on it.",
+                            "Idle action %s does not revert the virtual machine, and it has no snapshot to be launched from:"
+                                    + " it keeps what the builds left on it.",
                             localIdle);
                 }
                 vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
-                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.COMPLETED);
+                outcome = RecycleOutcome.COMPLETED;
             }
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, t, "Got an exception");
-            AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
+            outcome = RecycleOutcome.FAILED;
             taskListener.fatalError(t.getMessage(), t);
         } finally {
             if (v != null) {
@@ -481,6 +489,9 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
             if (vsSlave != null) {
                 vsSlave.slaveIsDisconnecting = Boolean.FALSE;
                 vsSlave.slaveIsStarting = Boolean.FALSE;
+            }
+            if (outcome != null) {
+                AgentRecycler.idleActionDone(slaveComputer.getName(), outcome);
             }
 
             if (reconnect) {

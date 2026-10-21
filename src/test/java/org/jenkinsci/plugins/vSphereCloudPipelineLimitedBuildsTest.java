@@ -51,7 +51,9 @@ import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -70,10 +72,17 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 @WithJenkins
 class vSphereCloudPipelineLimitedBuildsTest {
 
-    static {
-        // The sweep that Jenkins runs by itself, at a time of its own, is not what these tests are about: they ask for
-        // it.
-        System.setProperty(AgentRecycler.class.getName() + ".sweepPeriodMs", Long.toString(TimeUnit.DAYS.toMillis(1)));
+    private static final String SWEEP_PERIOD = AgentRecycler.class.getName() + ".sweepPeriodMs";
+
+    @BeforeAll
+    static void noSweepOfItsOwn() {
+        // The sweep that Jenkins runs by itself, at a time of its own, is not what these tests are about.
+        System.setProperty(SWEEP_PERIOD, Long.toString(TimeUnit.DAYS.toMillis(1)));
+    }
+
+    @AfterAll
+    static void sweepOfItsOwnAgain() {
+        System.clearProperty(SWEEP_PERIOD);
     }
 
     private static final String CLOUD = "some-cloud";

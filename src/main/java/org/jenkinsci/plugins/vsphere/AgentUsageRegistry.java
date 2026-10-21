@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -46,8 +48,9 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
  * per name, so a run that was counted on an agent that has since been replaced by a different one of the same name does
  * not recycle the new one.
  * <p>
- * Everything here happens in memory under one lock and calls nothing back into Jenkins, so it is safe to use from
- * the threads of any build. Recycling an agent is up to the caller, outside of that lock.
+ * The state is kept in memory under one lock, which is never held while Jenkins is called (to find out whether a run
+ * is still building, for instance), so it is safe to use from the threads of any build. Recycling an agent is up to the
+ * caller, outside of that lock.
  */
 @Restricted(NoExternalUse.class)
 @Extension
@@ -107,6 +110,9 @@ public final class AgentUsageRegistry {
     private static final class Entry {
         String name;
         int count;
+        /** How many of the counted runs are counted on this entry, not to look for them in all of them. */
+        int runs;
+
         RecycleToken recycle;
 
         Entry(String name) {
@@ -132,6 +138,11 @@ public final class AgentUsageRegistry {
 
     private static final Logger LOGGER = Logger.getLogger(AgentUsageRegistry.class.getName());
     private static final String STORE_NAME = "vsphere-cloud-usage.xml";
+
+    /** How many times in a row a run can fail to be looked up before it is taken for gone. */
+    private static final int MAX_LOOKUP_FAILURES = 5;
+
+    private static final ConcurrentMap<String, Integer> LOOKUP_FAILURES = new ConcurrentHashMap<>();
 
     private final Object lock = new Object();
     private final Map<String, Entry> usages = new HashMap<>();
@@ -204,6 +215,7 @@ public final class AgentUsageRegistry {
             }
             entry.count++;
             countedRuns.put(runId, entry);
+            entry.runs++;
             changed();
             return new Acquired(Outcome.COUNTED, entry.count);
         }
@@ -221,6 +233,7 @@ public final class AgentUsageRegistry {
             if (entry == null) {
                 return Released.NOT_COUNTED;
             }
+            entry.runs--;
             changed();
             return usages.get(entry.name) == entry ? Released.RELEASED : Released.STALE;
         }
@@ -536,7 +549,10 @@ public final class AgentUsageRegistry {
                 }
                 final Entry entry = usages.computeIfAbsent(name, Entry::new);
                 entry.count = count;
-                runIds.forEach(runId -> countedRuns.put(runId, entry));
+                runIds.forEach(runId -> {
+                    countedRuns.put(runId, entry);
+                    entry.runs++;
+                });
             });
         }
     }
@@ -560,7 +576,9 @@ public final class AgentUsageRegistry {
         synchronized (lock) {
             boolean modified = false;
             for (String id : over) {
-                if (countedRuns.remove(id) != null) {
+                final Entry entry = countedRuns.remove(id);
+                if (entry != null) {
+                    entry.runs--;
                     modified = true;
                 }
             }
@@ -576,7 +594,10 @@ public final class AgentUsageRegistry {
         get().load(name -> Jenkins.get().getNode(name) instanceof vSphereCloudSlave, AgentUsageRegistry::limitOf);
     }
 
-    /** Once the builds are loaded and resumed, the runs that were saved as counted are the ones still building. */
+    /**
+     * Once the builds are loaded, the runs that were saved as counted and are not building are forgotten. A Pipeline
+     * that has not been resumed yet is building, as far as its run is concerned, so it is kept.
+     */
     @Initializer(after = InitMilestone.JOB_CONFIG_ADAPTED, before = InitMilestone.COMPLETED)
     public static void pruneAtStartup() {
         get().pruneFinishedRuns();
@@ -591,13 +612,19 @@ public final class AgentUsageRegistry {
         // Without permission to see them, the runs would be taken for gone.
         try (ACLContext ignored = ACL.as2(ACL.SYSTEM2)) {
             final Run<?, ?> run = Run.fromExternalizableId(runId);
+            LOOKUP_FAILURES.remove(runId);
             return run != null && run.isBuilding();
         } catch (IllegalArgumentException e) {
             // Not the id of a run that there is.
             return false;
         } catch (RuntimeException e) {
-            // Not knowing is not a reason to let the agent be recycled under it.
+            // Not knowing is not a reason to let the agent be recycled under it, but not for ever either.
+            final int failures = LOOKUP_FAILURES.merge(runId, 1, Integer::sum);
             LOGGER.log(Level.WARNING, "Failed to find out whether the run " + runId + " is building", e);
+            if (failures >= MAX_LOOKUP_FAILURES) {
+                LOOKUP_FAILURES.remove(runId);
+                return false;
+            }
             return true;
         }
     }
@@ -621,6 +648,6 @@ public final class AgentUsageRegistry {
     }
 
     private boolean hasCountedRuns(Entry entry) {
-        return countedRuns.containsValue(entry);
+        return entry.runs > 0;
     }
 }

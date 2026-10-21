@@ -23,6 +23,8 @@ import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -35,9 +37,17 @@ import org.jvnet.hudson.test.junit.jupiter.JenkinsSessionExtension;
 @Timeout(value = 6, unit = TimeUnit.MINUTES, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class vSphereCloudPipelineRestartTest {
 
-    static {
+    private static final String SWEEP_PERIOD = AgentRecycler.class.getName() + ".sweepPeriodMs";
+
+    @BeforeAll
+    static void noSweepOfItsOwn() {
         // The sweep that Jenkins runs by itself, at a time of its own, is not what these tests are about.
-        System.setProperty(AgentRecycler.class.getName() + ".sweepPeriodMs", Long.toString(TimeUnit.DAYS.toMillis(1)));
+        System.setProperty(SWEEP_PERIOD, Long.toString(TimeUnit.DAYS.toMillis(1)));
+    }
+
+    @AfterAll
+    static void sweepOfItsOwnAgain() {
+        System.clearProperty(SWEEP_PERIOD);
     }
 
     private static final String CLOUD = "some-cloud";
@@ -193,9 +203,10 @@ class vSphereCloudPipelineRestartTest {
         sessions.then(r -> {
             // Its machine has not been cleaned, however it came to be at its limit: it is not given a fresh start.
             assertThat(count(), is(1));
-            final SlaveComputer computer = connect(r);
+            AgentRecycler.get().setCheckDelayMs(500);
 
-            assertThat(AgentRecycler.get().sweepOnce().contains("agent"), is(true));
+            // Nothing asks for a look at the agent: it is looked at when it comes online.
+            final SlaveComputer computer = connect(r);
 
             waitFor("the agent to be recycled", () -> computer.getChannel() == null);
             waitFor("the count to start again", () -> count() == 0);

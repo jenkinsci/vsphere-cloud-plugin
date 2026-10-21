@@ -128,6 +128,7 @@ public final class UsageGate {
      */
     private static boolean isHeldIdle(String name, Computer computer, AgentUsageRegistry registry) {
         if (!computer.isIdle() || !registry.holdsCountedRuns(name)) {
+            LAST_REPORTED.remove(name);
             return false;
         }
         final long start = computer.getIdleStartMilliseconds();
