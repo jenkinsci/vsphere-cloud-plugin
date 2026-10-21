@@ -1,12 +1,12 @@
 package org.jenkinsci.plugins.vsphere;
 
+import com.google.common.annotations.VisibleForTesting;
 import hudson.Extension;
 import hudson.ExtensionList;
 import hudson.model.Computer;
 import hudson.model.Node;
 import hudson.model.PeriodicWork;
 import hudson.model.Queue;
-import hudson.slaves.OfflineCause;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -20,6 +20,7 @@ import java.util.function.LongSupplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
+import jenkins.util.SystemProperties;
 import jenkins.util.Timer;
 import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
@@ -42,16 +43,13 @@ public final class AgentRecycler {
     private static final Logger LOGGER = Logger.getLogger(AgentRecycler.class.getName());
 
     private static final long SWEEP_PERIOD_MS =
-            Long.getLong(AgentRecycler.class.getName() + ".sweepPeriodMs", TimeUnit.MINUTES.toMillis(1));
+            SystemProperties.getLong(AgentRecycler.class.getName() + ".sweepPeriodMs", TimeUnit.MINUTES.toMillis(1));
 
     private static final long FIRST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(1);
     private static final long LAST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(30);
 
     /** Recycles that did not work, by agent: how many in a row and when to try again. */
-    private static final class Failures {
-        int count;
-        long notBefore;
-    }
+    private record Failures(int count, long notBefore) {}
 
     private final ConcurrentMap<String, Failures> failures = new ConcurrentHashMap<>();
 
@@ -62,28 +60,44 @@ public final class AgentRecycler {
     private volatile LongSupplier clock = System::currentTimeMillis;
 
     /** How long after a run ends the agent is looked at, so that the executor of the run is done by then. */
-    private volatile long checkDelayMs = Long.getLong(AgentRecycler.class.getName() + ".checkDelayMs", 5_000L);
+    private volatile long checkDelayMs =
+            SystemProperties.getLong(AgentRecycler.class.getName() + ".checkDelayMs", 5_000L);
 
     /** How long to wait for the disconnect to say that it is done. */
-    private volatile long recycleTimeoutMs =
-            Long.getLong(AgentRecycler.class.getName() + ".recycleTimeoutMs", TimeUnit.MINUTES.toMillis(10));
+    private final long recycleTimeoutMs = SystemProperties.getLong(
+            AgentRecycler.class.getName() + ".recycleTimeoutMs", TimeUnit.MINUTES.toMillis(10));
 
     public static AgentRecycler get() {
         return ExtensionList.lookupSingleton(AgentRecycler.class);
     }
 
+    /** For tests only. */
+    @VisibleForTesting
     public void setClock(LongSupplier clock) {
         this.clock = clock;
     }
 
+    /** For tests only. */
+    @VisibleForTesting
     public void setCheckDelayMs(long checkDelayMs) {
         this.checkDelayMs = checkDelayMs;
     }
 
     /** Looks at the agent soon: it may have just become free. */
     public void scheduleCheck(String node) {
+        final Jenkins scheduledBy = Jenkins.getInstanceOrNull();
         try {
-            Timer.get().schedule(() -> checkQuietly(node), checkDelayMs, TimeUnit.MILLISECONDS);
+            Timer.get()
+                    .schedule(
+                            () -> {
+                                // The timer outlives a Jenkins that is stopped, and the agent of the same name of the
+                                // next one is not what this was about.
+                                if (Jenkins.getInstanceOrNull() == scheduledBy) {
+                                    checkQuietly(node);
+                                }
+                            },
+                            checkDelayMs,
+                            TimeUnit.MILLISECONDS);
         } catch (RuntimeException e) {
             // Jenkins is stopping. The sweep after the next start finds the agent.
             LOGGER.log(Level.FINE, "Could not schedule a look at " + node, e);
@@ -135,15 +149,15 @@ public final class AgentRecycler {
 
     /**
      * Left by a recycle that Jenkins was stopped in the middle of, which nobody is going to end. Only at the first
-     * look after Jenkins starts, when no recycle can be under way.
+     * look after Jenkins starts, and not for an agent that has a recycle under way by now.
      */
     private static void clearLeftOver(Node node) {
         final Computer computer = node.toComputer();
         if (computer != null
-                && computer.isTemporarilyOffline()
-                && computer.getOfflineCause() instanceof LimitedBuildsOfflineCause) {
+                && node.getTemporaryOfflineCause() instanceof LimitedBuildsOfflineCause
+                && !AgentUsageRegistry.get().isRecycling(node.getNodeName())) {
             LOGGER.log(Level.INFO, "Putting the vSphere agent {0} back in service after an interrupted recycle", node);
-            computer.setTemporarilyOffline(false, null);
+            computer.setTemporaryOfflineCause(null);
         }
     }
 
@@ -165,7 +179,7 @@ public final class AgentRecycler {
             return false;
         }
         final Failures failed = failures.get(name);
-        if (failed != null && clock.getAsLong() < failed.notBefore) {
+        if (failed != null && clock.getAsLong() < failed.notBefore()) {
             return false;
         }
         // Not connected, or taken offline by someone else: there is nothing to disconnect, or it is not ours to.
@@ -188,16 +202,16 @@ public final class AgentRecycler {
         final LimitedBuildsOfflineCause disconnecting =
                 new LimitedBuildsOfflineCause(Messages._agentRecycler_OfflineReason_Disconnect());
         try {
-            computer.setTemporarilyOffline(true, marked);
+            computer.setTemporaryOfflineCause(marked);
             // Offline, nothing more is handed to the agent. What it got before that is not for us to disconnect.
             if (computer.countBusy() > 0) {
-                end(name, computer, token, false, false, marked, disconnecting);
+                end(name, computer, token, false, false, marked);
                 scheduleCheck(name);
                 return false;
             }
             Computer.threadPoolForRemoting.execute(() -> recycle(name, computer, token, marked, disconnecting));
         } catch (RuntimeException e) {
-            end(name, computer, token, false, true, marked, disconnecting);
+            end(name, computer, token, false, true, marked);
             throw e;
         }
         return true;
@@ -224,7 +238,7 @@ public final class AgentRecycler {
         } catch (ExecutionException | RuntimeException e) {
             LOGGER.log(Level.WARNING, "Recycling the vSphere agent " + name + " failed", e);
         } finally {
-            end(name, computer, token, completed, !completed, marked, disconnecting);
+            end(name, computer, token, completed, !completed, marked);
         }
     }
 
@@ -238,17 +252,17 @@ public final class AgentRecycler {
             RecycleToken token,
             boolean reset,
             boolean failed,
-            LimitedBuildsOfflineCause marked,
-            LimitedBuildsOfflineCause disconnecting) {
+            LimitedBuildsOfflineCause marked) {
         try {
             // Before the agent can be looked at again, or the next look would not know to wait.
             if (reset) {
                 failures.remove(name);
             } else if (failed) {
-                final Failures failure = failures.computeIfAbsent(name, n -> new Failures());
-                failure.count++;
-                final long backoff = Math.min(LAST_BACKOFF_MS, FIRST_BACKOFF_MS << Math.min(failure.count - 1, 20));
-                failure.notBefore = clock.getAsLong() + backoff;
+                failures.compute(name, (n, before) -> {
+                    final int count = before == null ? 1 : before.count() + 1;
+                    final long backoff = Math.min(LAST_BACKOFF_MS, FIRST_BACKOFF_MS << Math.min(count - 1, 20));
+                    return new Failures(count, clock.getAsLong() + backoff);
+                });
             }
             final Jenkins jenkins = Jenkins.getInstanceOrNull();
             if (jenkins != null && jenkins.getNode(name) == null) {
@@ -256,9 +270,9 @@ public final class AgentRecycler {
             }
             // Only what we set: whoever took the agent offline after us, or a recycle that began after this one, keeps
             // it.
-            final OfflineCause now = computer.getOfflineCause();
-            if (computer.isTemporarilyOffline() && (now == marked || now == disconnecting)) {
-                computer.setTemporarilyOffline(false, null);
+            final Node node = computer.getNode();
+            if (node != null && node.getTemporaryOfflineCause() == marked) {
+                computer.setTemporaryOfflineCause(null);
             }
             AgentUsageRegistry.get().endRecycle(token, reset);
         } catch (RuntimeException e) {

@@ -265,11 +265,6 @@ public final class AgentUsageRegistry {
         }
     }
 
-    /** The run is counted on some agent. */
-    public boolean isCountedAnywhere(String runId) {
-        return isCounted(runId);
-    }
-
     /**
      * How many uses the agent will have once the work it was handed has started: what it has, and one for each run
      * among the {@code busyRunIds} that is not counted anywhere yet. A null is work that is not known to be of any run,
@@ -531,7 +526,7 @@ public final class AgentUsageRegistry {
 
     /**
      * Forgets the runs that are not building: one that did not get to say it was over (the job is gone, the build could
-     * not be resumed) would hold its agent for ever. An agent at its limit that is left with no run starts again.
+     * not be resumed) would hold its agent for ever. The usage of the agent is not changed.
      */
     void pruneRuns(Predicate<String> stillBuilding) {
         pruneRuns(stillBuilding, null);

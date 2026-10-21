@@ -315,9 +315,9 @@ class AgentUsageRegistryTest {
 
         assertThat(registry.isCountedOn(counted, "agent"), is(true));
         assertThat(registry.isCountedOn(counted, "elsewhere"), is(false));
-        assertThat(registry.isCountedAnywhere(counted), is(true));
+        assertThat(registry.isCounted(counted), is(true));
         assertThat(registry.isCountedOn(other, "agent"), is(false));
-        assertThat(registry.isCountedAnywhere(other), is(false));
+        assertThat(registry.isCounted(other), is(false));
     }
 
     @Test

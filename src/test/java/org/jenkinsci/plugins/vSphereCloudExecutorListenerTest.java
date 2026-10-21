@@ -147,6 +147,8 @@ class vSphereCloudExecutorListenerTest {
     /** Any running {@link Run} will do as the owner of the node blocks; it does not run on a vSphere agent. */
     private FreeStyleBuild pipelineRun(JenkinsRule r) throws Exception {
         final FreeStyleProject project = r.createFreeStyleProject();
+        // Without a label the job could be scheduled on a vSphere test agent; keep it on the built-in node.
+        project.setAssignedLabel(r.jenkins.getSelfLabel());
         project.getBuildersList().add(new SleepBuilder(600_000));
         final FreeStyleBuild build = project.scheduleBuild2(0).waitForStart();
         startedRuns.add(build);

@@ -15,7 +15,6 @@ import hudson.model.ItemGroup;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Queue.BuildableItem;
-import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.queue.CauseOfBlockage;
@@ -33,6 +32,7 @@ import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
 import org.jenkinsci.plugins.vsphere.AgentRecycler;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
+import org.jenkinsci.plugins.vsphere.UsageGate;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.accmod.Restricted;
@@ -290,11 +290,18 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
 
-        return super.canTake(buildItem);
+        // What the agent cannot take for other reasons first: the queue says that the label is missing, and an item
+        // that the agent could never take is not worth looking into.
+        final CauseOfBlockage other = super.canTake(buildItem);
+        if (other != null) {
+            return other;
+        }
+
+        return UsageGate.check(this, buildItem);
     }
 
     public boolean StartLimitedTestRun(Run r, TaskListener listener) {
-        return startLimitedTest(r, r.getExecutor(), listener, true);
+        return startLimitedTest(r, r.getExecutor(), listener);
     }
 
     /**
@@ -303,10 +310,10 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
      * sees it. Further blocks of the same {@link Run}, on this or another agent, are not counted again.
      */
     void StartLimitedPipelineRun(Executor executor, Run run) {
-        startLimitedTest(run, executor, null, false);
+        startLimitedTest(run, executor, null);
     }
 
-    private boolean startLimitedTest(Run run, Executor executor, TaskListener listener, boolean abortIfOverLimit) {
+    private boolean startLimitedTest(Run run, Executor executor, TaskListener listener) {
         if (executor == null) {
             // Nothing to count it on. As always, say whether there would have been room.
             return LimitedTestRunCount <= 0 || getNumberOfLimitedTestRuns() < LimitedTestRunCount;
@@ -326,14 +333,9 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
                 vSphereCloud.Log(
                         this,
                         listener,
-                        abortIfOverLimit
-                                ? "Terminating build due to limited build count: %d of %d"
-                                : "Not counting work started beyond the limited build count: %d of %d",
+                        "Not counting work started beyond the limited build count: %d of %d",
                         acquired.count(),
                         LimitedTestRunCount);
-                if (abortIfOverLimit) {
-                    executor.interrupt(Result.ABORTED);
-                }
                 return false;
             default:
                 // No limit, or the run is counted already, or it is over.

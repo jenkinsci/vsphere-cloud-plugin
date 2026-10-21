@@ -12,6 +12,7 @@ import hudson.slaves.SlaveComputer;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import org.jenkinsci.plugins.vsphere.AgentRecycler;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
@@ -21,11 +22,14 @@ import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.junit.jupiter.JenkinsSessionExtension;
 
 /** A Pipeline that goes on after Jenkins was restarted, on an agent that counts its builds. */
+// A test that waits for ever for something that never happens fails, with where it was, instead of stopping the build.
+@Timeout(value = 6, unit = TimeUnit.MINUTES, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class vSphereCloudPipelineRestartTest {
 
     private static final String CLOUD = "some-cloud";

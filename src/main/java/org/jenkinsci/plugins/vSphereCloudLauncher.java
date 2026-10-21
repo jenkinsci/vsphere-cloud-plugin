@@ -338,6 +338,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         slaveComputer,
                         taskListener,
                         "Ignoring disconnect attempt because a connect attempt is in progress.");
+                // A recycle waiting for this disconnect would otherwise wait for its timeout.
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
                 return;
             }
             if (Boolean.TRUE.equals(vsSlave.slaveIsDisconnecting)) {
@@ -351,6 +353,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         if (slaveComputer.isTemporarilyOffline()) {
             if (!(slaveComputer.getOfflineCause() instanceof VSphereOfflineCause)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
+                // A recycle waiting for this disconnect would otherwise wait for its timeout.
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
                 return;
             }
         }
@@ -429,8 +433,27 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     reconnect = true;
                 }
             }
-            vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
-            AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.COMPLETED);
+            if (vm == null && !MACHINE_ACTION.NOTHING.equals(localIdle)) {
+                // Nothing was done to a machine that is not there, so it is not for its usage to start again.
+                vSphereCloud.Log(
+                        slaveComputer,
+                        taskListener,
+                        "Could not find the virtual machine %s: idle action %s was not done, so the agent stays at its limit of builds."
+                                + " Fix the name of the virtual machine of the agent, or reset the usage counts of the cloud.",
+                        vmName,
+                        localIdle);
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
+            } else {
+                if (MACHINE_ACTION.NOTHING.equals(localIdle) || MACHINE_ACTION.SUSPEND.equals(localIdle)) {
+                    vSphereCloud.Log(
+                            slaveComputer,
+                            taskListener,
+                            "Idle action %s does not clean the virtual machine: it keeps what the builds left on it.",
+                            localIdle);
+                }
+                vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.COMPLETED);
+            }
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, t, "Got an exception");
             AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
