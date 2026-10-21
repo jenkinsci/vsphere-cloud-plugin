@@ -8,6 +8,10 @@
                  description="${%Internal identifier of this cloud, used in URLs and config.xml. Generated automatically; not editable here.}">
             <f:textbox readonly="true"/>
         </f:entry>
+        <!-- Only for the clouds of Jenkins: the action looks the cloud up there, not among those of a folder. -->
+        <j:if test="${h.hasPermission(app.ADMINISTER) and app.clouds.getByName(instance.name) == instance}">
+            <f:validateButton title="${%Reset usage counts}" progress="${%Resetting...}" method="resetUsages" with="name"/>
+        </j:if>
     </j:if>
     <f:entry>
         <f:property field="vsConnectionConfig"/>

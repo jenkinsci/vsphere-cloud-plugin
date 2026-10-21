@@ -1,33 +1,45 @@
 package org.jenkinsci.plugins;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Computer;
+import hudson.model.Executor;
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import hudson.model.Node.Mode;
 import hudson.model.Result;
 import hudson.model.TaskListener;
 import hudson.slaves.ComputerLauncher;
+import hudson.slaves.ComputerListener;
+import hudson.slaves.OfflineCause;
 import hudson.slaves.RetentionStrategy;
 import hudson.slaves.SlaveComputer;
 import hudson.util.OneShotEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.SleepBuilder;
 import org.jvnet.hudson.test.TestBuilder;
+import org.jvnet.hudson.test.TestExtension;
 import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 
 /**
@@ -100,6 +112,17 @@ class vSphereCloudPipelineLimitedBuildsTest {
 
     private static vSphereCloudSlave connectedAgent(JenkinsRule r, String name, String label, int executors, int limit)
             throws Exception {
+        final vSphereCloudSlave agent = newAgent(r, name, label, executors, limit);
+        r.jenkins.addNode(agent);
+        final SlaveComputer computer = (SlaveComputer) agent.toComputer();
+        computer.connect(false).get();
+        waitFor(name + " to be online", computer::isOnline);
+        return agent;
+    }
+
+    /** An agent that is not part of Jenkins yet. */
+    private static vSphereCloudSlave newAgent(JenkinsRule r, String name, String label, int executors, int limit)
+            throws Exception {
         ensureCloud(r);
         final vSphereCloudSlave agent = new vSphereCloudSlave(
                 name,
@@ -120,10 +143,6 @@ class vSphereCloudPipelineLimitedBuildsTest {
                 "Nothing",
                 Integer.toString(limit));
         agent.setLauncher(new InProcessLauncher(r.createComputerLauncher(null), "vm-" + name, limit));
-        r.jenkins.addNode(agent);
-        final SlaveComputer computer = (SlaveComputer) agent.toComputer();
-        computer.connect(false).get();
-        waitFor(name + " to be online", computer::isOnline);
         return agent;
     }
 
@@ -209,6 +228,32 @@ class vSphereCloudPipelineLimitedBuildsTest {
         assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
     }
 
+    /** What the agents are set temporarily offline with, as text. */
+    private static final List<String> OFFLINE_REASONS = new CopyOnWriteArrayList<>();
+
+    @TestExtension("theAgentIsSetOfflineForTheRightReasonWhileItIsRecycled")
+    public static class RecordOfflineReasons extends ComputerListener {
+        @Override
+        public void onTemporarilyOffline(Computer computer, OfflineCause cause) {
+            OFFLINE_REASONS.add(String.valueOf(cause));
+        }
+    }
+
+    @Test
+    void theAgentIsSetOfflineForTheRightReasonWhileItIsRecycled(JenkinsRule r) throws Exception {
+        OFFLINE_REASONS.clear();
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final FreeStyleProject project = r.createFreeStyleProject();
+        project.setAssignedLabel(r.jenkins.getLabel("lbl"));
+
+        r.buildAndAssertSuccess(project);
+
+        waitFor("the agent to be recycled", () -> isDisconnected(agent));
+        // It is set offline once, and the reason says so (not that it is back online).
+        assertThat(OFFLINE_REASONS.size(), is(1));
+        assertThat(OFFLINE_REASONS.get(0), containsString("Marking the agent as offline"));
+    }
+
     @Test
     void aFailedRunStillRecyclesTheAgent(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
@@ -282,6 +327,189 @@ class vSphereCloudPipelineLimitedBuildsTest {
             releaseFirst.signal();
         }
         r.assertBuildStatusSuccess(r.waitForCompletion(firstBuild));
+    }
+
+    private final List<FreeStyleBuild> runningBuilds = new ArrayList<>();
+
+    /** A build that is going on and does not use any agent. */
+    private FreeStyleBuild runningBuild(JenkinsRule r) throws Exception {
+        final FreeStyleProject project = r.createFreeStyleProject();
+        project.getBuildersList().add(new SleepBuilder(600_000));
+        final FreeStyleBuild build = project.scheduleBuild2(0).waitForStart();
+        runningBuilds.add(build);
+        return build;
+    }
+
+    @AfterEach
+    void stopRunningBuilds() {
+        for (FreeStyleBuild build : runningBuilds) {
+            final Executor executor = build.getExecutor();
+            if (executor != null) {
+                executor.interrupt();
+            }
+        }
+    }
+
+    private static String gateScript(JenkinsRule r, File gate) {
+        return "node('lbl') { waitUntil { fileExists('" + gate.getAbsolutePath().replace('\\', '/') + "') } }\n";
+    }
+
+    @Test
+    void anAbortedOverLimitBuildDoesNotStopTheAgentFromBeingRecycled(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 2, 1);
+        final OneShotEvent insideFirst = new OneShotEvent();
+        final OneShotEvent releaseFirst = new OneShotEvent();
+        final FreeStyleProject first = r.createFreeStyleProject();
+        first.setAssignedLabel(r.jenkins.getLabel("lbl"));
+        first.getBuildersList().add(new TestBuilder() {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener)
+                    throws InterruptedException {
+                insideFirst.signal();
+                releaseFirst.block();
+                return true;
+            }
+        });
+        final FreeStyleBuild firstBuild = first.scheduleBuild2(0).waitForStart();
+        try {
+            insideFirst.block(60_000);
+            final FreeStyleProject second = r.createFreeStyleProject();
+            second.setAssignedLabel(r.jenkins.getLabel("lbl"));
+            r.assertBuildStatus(Result.ABORTED, second.scheduleBuild2(0));
+            // The aborted build was not one of the uses of the agent, so it did not use any of them up.
+            assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
+        } finally {
+            releaseFirst.signal();
+        }
+        r.assertBuildStatusSuccess(r.waitForCompletion(firstBuild));
+
+        waitFor("the agent to be recycled", () -> isDisconnected(agent));
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+    }
+
+    @Test
+    void theCountSurvivesTheAgentBeingSaved(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 5);
+        final File gate = new File(r.jenkins.getRootDir(), "gate");
+        final WorkflowRun run =
+                pipeline(r, "held", gateScript(r, gate)).scheduleBuild2(0).waitForStart();
+        waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
+
+        // What saving the configuration of an agent does: its node is replaced by a new one.
+        final vSphereCloudSlave saved = newAgent(r, "agent", "lbl", 1, 5);
+        r.jenkins.getNodesObject().replaceNode(agent, saved);
+
+        assertThat(saved.getNumberOfLimitedTestRuns(), is(1));
+        Files.createFile(gate.toPath());
+        r.assertBuildStatusSuccess(r.waitForCompletion(run));
+        assertThat(saved.getNumberOfLimitedTestRuns(), is(1));
+    }
+
+    @Test
+    void theAgentIsStillRecycledAfterBeingSaved(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final File gate = new File(r.jenkins.getRootDir(), "gate");
+        final WorkflowRun run =
+                pipeline(r, "held", gateScript(r, gate)).scheduleBuild2(0).waitForStart();
+        waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
+        final vSphereCloudSlave saved = newAgent(r, "agent", "lbl", 1, 1);
+        r.jenkins.getNodesObject().replaceNode(agent, saved);
+
+        Files.createFile(gate.toPath());
+        r.assertBuildStatusSuccess(r.waitForCompletion(run));
+
+        waitFor("the agent to be recycled", () -> isDisconnected(saved));
+        assertThat(saved.getNumberOfLimitedTestRuns(), is(0));
+    }
+
+    @Test
+    void removingTheLimitWhileARunIsUsingTheAgentNeverRecyclesIt(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final File gate = new File(r.jenkins.getRootDir(), "gate");
+        final WorkflowRun run =
+                pipeline(r, "held", gateScript(r, gate)).scheduleBuild2(0).waitForStart();
+        waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
+        final vSphereCloudSlave saved = newAgent(r, "agent", "lbl", 1, 0);
+        r.jenkins.getNodesObject().replaceNode(agent, saved);
+
+        Files.createFile(gate.toPath());
+        r.assertBuildStatusSuccess(r.waitForCompletion(run));
+
+        // The run was counted and has been released, and the agent was not asked to recycle.
+        assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
+        Thread.sleep(2000);
+        assertThat(isDisconnected(saved), is(false));
+        assertThat(saved.getNumberOfLimitedTestRuns(), is(0));
+    }
+
+    @Test
+    void deletingAnAgentForgetsItsUsage(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = newAgent(r, "agent", "lbl", 1, 5);
+        r.jenkins.addNode(agent);
+        AgentUsageRegistry.get().acquire("agent", 5, runningBuild(r));
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
+
+        r.jenkins.removeNode(agent);
+
+        assertThat(AgentUsageRegistry.get().count("agent"), is(0));
+    }
+
+    @Test
+    void anAgentCreatedWithAUsedNameStartsFromNothing(JenkinsRule r) throws Exception {
+        AgentUsageRegistry.get().acquire("agent", 5, runningBuild(r));
+
+        final vSphereCloudSlave agent = newAgent(r, "agent", "lbl", 1, 5);
+        r.jenkins.addNode(agent);
+
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+    }
+
+    @Test
+    void renamingAnAgentKeepsItsUsage(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = newAgent(r, "old", "lbl", 1, 5);
+        r.jenkins.addNode(agent);
+        AgentUsageRegistry.get().acquire("old", 5, runningBuild(r));
+
+        r.jenkins.getNodesObject().replaceNode(agent, newAgent(r, "new", "lbl", 1, 5));
+
+        assertThat(AgentUsageRegistry.get().count("new"), is(1));
+        assertThat(AgentUsageRegistry.get().count("old"), is(0));
+    }
+
+    @Test
+    void anAgentRenamedWhileARunEndsIsStillFound(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        final vSphereCloudSlave renamed = newAgent(r, "new", "lbl", 1, 5);
+        final FreeStyleBuild run = runningBuild(r);
+        registry.acquire("old", 5, run);
+
+        // The agent is renamed after asking where the run was counted and before looking that agent up.
+        final vSphereCloudSlave found = vSphereCloudSlave.findCountedAgent(run, name -> {
+            if (name.equals("old")) {
+                registry.rename("old", "new");
+                return null;
+            }
+            return name.equals("new") ? renamed : null;
+        });
+
+        assertThat(found, is(renamed));
+    }
+
+    @Test
+    void loweringTheLimitToTheUsageOfAnIdleAgentStartsItAgain(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = newAgent(r, "agent", "lbl", 1, 5);
+        r.jenkins.addNode(agent);
+        final FreeStyleBuild one = runningBuild(r);
+        final FreeStyleBuild two = runningBuild(r);
+        AgentUsageRegistry.get().acquire("agent", 5, one);
+        AgentUsageRegistry.get().acquire("agent", 5, two);
+        AgentUsageRegistry.get().release(one, 5);
+        AgentUsageRegistry.get().release(two, 5);
+        assertThat(AgentUsageRegistry.get().count("agent"), is(2));
+
+        r.jenkins.getNodesObject().replaceNode(agent, newAgent(r, "agent", "lbl", 1, 2));
+
+        assertThat(AgentUsageRegistry.get().count("agent"), is(0));
     }
 
     @Test
