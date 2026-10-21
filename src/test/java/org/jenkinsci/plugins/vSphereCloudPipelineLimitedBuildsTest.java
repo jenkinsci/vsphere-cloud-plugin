@@ -770,6 +770,36 @@ class vSphereCloudPipelineLimitedBuildsTest {
     }
 
     @Test
+    void anAgentThatLostItsConnectionWithADurableStepRunningStillTakesWhatItIsLaunchedFor(JenkinsRule r)
+            throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        // A step that goes on in the agent when the connection is lost, as a shell does: the block waits for it.
+        final WorkflowRun run = pipeline(
+                        r,
+                        "durable",
+                        "node('lbl') { if (isUnix()) { sh 'sleep 120' } else { bat 'ping -n 120 127.0.0.1 > nul' } }\n")
+                .scheduleBuild2(0)
+                .waitForStart();
+        waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
+        waitFor("its block to be on the agent", () -> agent.toComputer().countBusy() == 1);
+        r.waitForMessage("ping", run);
+
+        ((SlaveComputer) agent.toComputer()).getChannel().close();
+        waitFor("the agent to be offline", () -> agent.toComputer().isOffline());
+
+        // The block stays on the agent, waiting for it to come back. Anything that comes is what gets a retention
+        // strategy that launches agents when they are needed to launch it, and refusing it would leave the run, and the
+        // agent that cannot be recycled with it, waiting for ever.
+        assertThat(agent.toComputer().countBusy(), is(1));
+        assertThat(run.isBuilding(), is(true));
+        assertThat(UsageGate.check(agent, itemOf(new FakeTask(false, false))), is(nullValue()));
+
+        reconnect(agent);
+        run.doStop();
+        r.waitForCompletion(run);
+    }
+
+    @Test
     void anAgentOfflineForAnotherReasonIsNotRecycled(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
         final FreeStyleBuild one = runningBuild(r);

@@ -89,8 +89,13 @@ public final class UsageGate {
         }
         // Nothing can be handed to an agent that is offline, and refusing would keep it from being launched on demand.
         // Unless a run counted on it keeps it from being recycled: it would be launched, refuse the work, be
-        // disconnected for being idle (by its retention strategy) and be launched again, over and over.
-        if (computer.isOffline() && !(registry.isRetiring(name, limit) && registry.holdsCountedRuns(name))) {
+        // disconnected for being idle (by its retention strategy) and be launched again, over and over. Not if work is
+        // still on it: a durable step goes on in an agent that lost its connection, and its block waits for the agent
+        // to come back, which a retention strategy that launches agents when they are needed does only for new work.
+        if (computer.isOffline()
+                && !(registry.isRetiring(name, limit)
+                        && registry.holdsCountedRuns(name)
+                        && computer.countBusy() == 0)) {
             return null;
         }
         // What the agent will have used is at most what it has and one more for each executor that is busy, so with
