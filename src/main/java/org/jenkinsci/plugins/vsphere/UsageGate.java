@@ -1,5 +1,6 @@
 package org.jenkinsci.plugins.vsphere;
 
+import com.google.common.annotations.VisibleForTesting;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.model.Cause;
 import hudson.model.Computer;
@@ -11,9 +12,13 @@ import hudson.model.queue.SubTask;
 import hudson.model.queue.WorkUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import jenkins.util.SystemProperties;
 import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
@@ -33,6 +38,20 @@ public final class UsageGate {
 
     /** The first failure is a warning; the queue asks again at every pass, so the next ones would fill the log. */
     private static final AtomicBoolean REPORTED = new AtomicBoolean();
+
+    /**
+     * How long an agent that has used all its builds, and has nothing to do at all but for a run counted on it that has
+     * not ended, waits before it takes work again, beyond its limit and uncounted, until that run ends. Such a run may
+     * be waiting for a build that needs this very agent (a lock, or a {@code waitUntil} that depends on another build,
+     * outside any {@code node {}}), which cannot be told from any other new build. Off (negative) unless set, as it
+     * gives up the clean machine that the limit is for.
+     */
+    private static volatile long idleHeldMs = SystemProperties.getLong(UsageGate.class.getName() + ".idleHeldMs", -1L);
+
+    /** How long an agent is held idle before the log says so, and between one time and the next. */
+    private static final long REPORT_IDLE_AFTER_MS = TimeUnit.MINUTES.toMillis(10);
+
+    private static final ConcurrentMap<String, Long> LAST_REPORTED = new ConcurrentHashMap<>();
 
     private UsageGate() {}
 
@@ -86,7 +105,50 @@ public final class UsageGate {
         final CauseOfBlockage refusal = refusalFor(name, limit, computer, item, registry);
         // Something that a run on this agent started, and may be waiting for: refusing it would have them wait for
         // each other for ever. It runs beyond the limit, as it did before new work was kept away.
-        return refusal != null && isStartedByARunOn(name, item, registry) ? null : refusal;
+        if (refusal == null || isStartedByARunOn(name, item, registry) || isHeldIdle(name, computer, registry)) {
+            return null;
+        }
+        return refusal;
+    }
+
+    /** For tests. */
+    @VisibleForTesting
+    public static void setIdleHeldMs(long idleHeldMs) {
+        UsageGate.idleHeldMs = idleHeldMs;
+    }
+
+    /**
+     * The agent has nothing to do at all, and has not for long enough, only because of the runs counted on it that have
+     * not ended. Said in the log, once in a while, when it is for long and nothing is done about it.
+     */
+    private static boolean isHeldIdle(String name, Computer computer, AgentUsageRegistry registry) {
+        if (!computer.isIdle() || !registry.holdsCountedRuns(name)) {
+            return false;
+        }
+        final long start = computer.getIdleStartMilliseconds();
+        // An agent with no executors has no start.
+        if (start == Long.MIN_VALUE) {
+            return false;
+        }
+        final long now = System.currentTimeMillis();
+        final long idle = now - start;
+        final long held = idleHeldMs;
+        if (held >= 0 && idle >= held) {
+            LOGGER.log(Level.FINE, "{0} is idle and kept from being recycled by a counted run: taking work", name);
+            return true;
+        }
+        if (idle >= REPORT_IDLE_AFTER_MS) {
+            final Long last = LAST_REPORTED.get(name);
+            if (last == null || now - last >= REPORT_IDLE_AFTER_MS) {
+                LAST_REPORTED.put(name, now);
+                LOGGER.log(
+                        Level.WARNING,
+                        "{0} has used all its builds and has had nothing to do for {1} minutes, as it cannot be"
+                                + " recycled while these runs have not ended: {2}. The builds that need it wait.",
+                        new Object[] {name, TimeUnit.MILLISECONDS.toMinutes(idle), registry.countedRunIds(name)});
+            }
+        }
+        return false;
     }
 
     @CheckForNull

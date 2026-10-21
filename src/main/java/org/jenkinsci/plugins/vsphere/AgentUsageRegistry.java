@@ -257,6 +257,22 @@ public final class AgentUsageRegistry {
         }
     }
 
+    /** The ids of the runs counted on the agent that have not ended. */
+    public List<String> countedRunIds(String node) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            final List<String> ids = new ArrayList<>();
+            if (entry != null) {
+                countedRuns.forEach((runId, counted) -> {
+                    if (counted == entry) {
+                        ids.add(runId);
+                    }
+                });
+            }
+            return ids;
+        }
+    }
+
     /** The run is counted on the agent as it is now, not on an earlier one of the same name. */
     public boolean isCountedOn(String runId, String node) {
         synchronized (lock) {

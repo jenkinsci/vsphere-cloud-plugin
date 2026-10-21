@@ -121,6 +121,7 @@ class vSphereCloudPipelineLimitedBuildsTest {
         InProcessLauncher.failDisconnect = false;
         InProcessLauncher.DISCONNECTS.set(0);
         AgentRecycler.get().setClock(System::currentTimeMillis);
+        UsageGate.setIdleHeldMs(-1);
     }
 
     /** Waits for the condition, as the recycling of an agent is asynchronous. */
@@ -629,6 +630,97 @@ class vSphereCloudPipelineLimitedBuildsTest {
         new AgentRecycler().sweepOnce();
 
         assertThat(agent.toComputer().isTemporarilyOffline(), is(false));
+    }
+
+    /** Whether the gate refuses an item of the queue (the only one there is) for being beyond the limit. */
+    private static boolean refusesTheQueuedItem(JenkinsRule r, vSphereCloudSlave agent) {
+        for (Queue.BuildableItem item : r.jenkins.getQueue().getBuildableItems()) {
+            if (agent.canTake(item) != null) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Test
+    void aRunWaitingOutsideItsBlockForAnotherBuildDoesNotHoldTheAgentForEver(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final String path =
+                new File(r.jenkins.getRootDir(), "gate").getAbsolutePath().replace('\\', '/');
+        // It waits for the other build, outside of any block, so that the agent is idle but cannot be recycled.
+        final WorkflowJob waiting = r.createProject(WorkflowJob.class, "waiting");
+        waiting.setDefinition(new CpsFlowDefinition(
+                "node('lbl') { echo 'in' }\nwaitUntil { new File('" + path + "').exists() }\n", false));
+        final WorkflowRun waitingRun = waiting.scheduleBuild2(0).waitForStart();
+        waitFor(
+                "the run to be counted, and the agent idle",
+                () -> agent.getNumberOfLimitedTestRuns() == 1
+                        && agent.toComputer().isIdle());
+        final QueueTaskFuture<WorkflowRun> other = pipeline(
+                        r, "other", "node('lbl') { writeFile file: '" + path + "', text: 'x' }\n")
+                .scheduleBuild2(0);
+
+        // As it is by default, the agent does not take work again, however long it has had nothing to do.
+        waitFor("the other build to be refused", () -> refusesTheQueuedItem(r, agent));
+        UsageGate.setIdleHeldMs(0);
+        r.jenkins.getQueue().scheduleMaintenance();
+
+        final WorkflowRun otherRun = r.assertBuildStatusSuccess(other);
+        // It ran beyond the limit, and is not one of the builds of the agent.
+        assertThat(AgentUsageRegistry.get().isCounted(otherRun), is(false));
+        r.assertBuildStatusSuccess(r.waitForCompletion(waitingRun));
+        waitFor("the agent to be recycled", () -> isDisconnected(agent));
+        waitFor("the count to start again", () -> agent.getNumberOfLimitedTestRuns() == 0);
+    }
+
+    @Test
+    void aRunWaitingInsideItsBlockStillKeepsNewBuildsWaiting(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 2, 1);
+        UsageGate.setIdleHeldMs(0);
+        final File gate = new File(r.jenkins.getRootDir(), "gate");
+        final WorkflowRun run =
+                pipeline(r, "held", gateScript(r, gate)).scheduleBuild2(0).waitForStart();
+        waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
+        waitFor("its block to be on the agent", () -> agent.toComputer().countBusy() == 1);
+        final FreeStyleProject other = r.createFreeStyleProject();
+        other.setAssignedLabel(r.jenkins.getLabel("lbl"));
+        final QueueTaskFuture<FreeStyleBuild> otherBuild = other.scheduleBuild2(0);
+
+        // The agent is not idle, so this is the known limit of the way out of waiting for ever.
+        waitFor("the other build to be refused", () -> refusesTheQueuedItem(r, agent));
+        for (int pass = 0; pass < 3; pass++) {
+            r.jenkins.getQueue().maintain();
+        }
+        assertThat(other.getLastBuild(), is(nullValue()));
+
+        Files.createFile(gate.toPath());
+        r.assertBuildStatusSuccess(r.waitForCompletion(run));
+        waitFor("the agent to be recycled", () -> isDisconnected(agent));
+        waitFor("the count to start again", () -> agent.getNumberOfLimitedTestRuns() == 0);
+        reconnect(agent);
+        r.assertBuildStatusSuccess(otherBuild);
+    }
+
+    @Test
+    void anIdleAgentAtItsLimitWithNoRunCountedOnItStillRefusesNewWork(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
+        final int disconnectsBefore = InProcessLauncher.DISCONNECTS.get();
+        InProcessLauncher.failDisconnect = true;
+        final FreeStyleProject project = r.createFreeStyleProject();
+        project.setAssignedLabel(r.jenkins.getLabel("lbl"));
+        r.buildAndAssertSuccess(project);
+        waitFor("the recycle to be tried", () -> InProcessLauncher.DISCONNECTS.get() > disconnectsBefore);
+        waitFor("the recycle to be over", () -> !AgentUsageRegistry.get().isRecycling("agent"));
+        InProcessLauncher.failDisconnect = false;
+        agent.toComputer().connect(false).get();
+        waitFor("the agent to be online", () -> agent.toComputer().isOnline());
+        UsageGate.setIdleHeldMs(0);
+
+        // It is waiting to be recycled again, which nothing is keeping it from: it is not for it to take work now.
+        assertThat(AgentUsageRegistry.get().holdsCountedRuns("agent"), is(false));
+        assertThat(
+                UsageGate.check(agent, itemOf(new FakeTask(false, false))).getShortDescription(),
+                containsString("reached its limit"));
     }
 
     @Test
