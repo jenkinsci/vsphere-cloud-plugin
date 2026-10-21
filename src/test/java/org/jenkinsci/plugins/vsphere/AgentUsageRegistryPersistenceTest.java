@@ -152,7 +152,7 @@ class AgentUsageRegistryPersistenceTest {
         scheduled.forEach(Runnable::run);
         scheduled.clear();
 
-        registry.release(run.get(0), 5);
+        registry.release(run.get(0));
 
         assertThat(scheduled.size(), is(1));
     }

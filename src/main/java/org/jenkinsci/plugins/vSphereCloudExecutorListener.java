@@ -7,6 +7,8 @@ import hudson.model.Job;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Run;
+import org.jenkinsci.plugins.vsphere.AgentRecycler;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
 import org.jenkinsci.plugins.vsphere.ContinuedTasks;
 
 /**
@@ -16,6 +18,26 @@ import org.jenkinsci.plugins.vsphere.ContinuedTasks;
  */
 @Extension
 public final class vSphereCloudExecutorListener implements ExecutorListener {
+
+    /** An agent that has used all its builds may have just become free. */
+    @Override
+    public void taskCompleted(Executor executor, Queue.Task task, long durationMS) {
+        lookAtTheAgent(executor);
+    }
+
+    @Override
+    public void taskCompletedWithProblems(Executor executor, Queue.Task task, long durationMS, Throwable problems) {
+        lookAtTheAgent(executor);
+    }
+
+    private static void lookAtTheAgent(Executor executor) {
+        final Node node = executor.getOwner().getNode();
+        if (node instanceof vSphereCloudSlave
+                && AgentUsageRegistry.get()
+                        .isRetiring(node.getNodeName(), ((vSphereCloudSlave) node).getLimitedTestRunCount())) {
+            AgentRecycler.get().scheduleCheck(node.getNodeName());
+        }
+    }
 
     @Override
     public void taskStarted(Executor executor, Queue.Task task) {

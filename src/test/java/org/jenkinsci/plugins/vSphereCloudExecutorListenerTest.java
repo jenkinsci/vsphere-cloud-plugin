@@ -223,7 +223,7 @@ class vSphereCloudExecutorListenerTest {
     }
 
     @Test
-    void reachingTheLimitRecyclesTheAgentOnlyOnceTheRunIsOver(JenkinsRule r) throws Exception {
+    void theUseStaysCountedOnceTheRunIsOverUntilTheAgentIsRecycled(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = agent(r, "agent", 1);
         final FreeStyleBuild run = pipelineRun(r);
         executorListener.taskStarted(executorOf(agent), new NodeBlockTask(run));
@@ -232,7 +232,8 @@ class vSphereCloudExecutorListenerTest {
 
         runListener.onFinalized(run);
 
-        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+        // The run is over, but the use it was counted for is only given back when the agent is recycled.
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
         assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
     }
 

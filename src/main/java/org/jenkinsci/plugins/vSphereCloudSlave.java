@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
+import org.jenkinsci.plugins.vsphere.AgentRecycler;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -354,7 +355,7 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             agent.endLimitedTest(run);
         } else {
             // The run was not counted, or its agent is gone (e.g. removed by a run-once retention strategy).
-            AgentUsageRegistry.get().release(run, 0);
+            AgentUsageRegistry.get().release(run);
         }
     }
 
@@ -389,37 +390,14 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         return AgentUsageRegistry.get().count(getNodeName());
     }
 
+    /**
+     * The run is over, so it is no longer using the agent. If that was the last of the uses the agent is allowed, it is
+     * recycled once nothing is using it, which is not now: other runs may still be.
+     */
     private boolean endLimitedTest(Run run) {
-        if (AgentUsageRegistry.get().release(run, LimitedTestRunCount) != AgentUsageRegistry.Released.RECYCLE) {
-            return true;
-        }
-        final Computer slave = toComputer();
-        try {
-            if (slave != null) {
-                vSphereCloud.Log(
-                        this, "Disconnecting the slave agent on %s due to limited build threshold", slave.getName());
-
-                final VSphereOfflineCause tempOffline =
-                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporaryOffline());
-                slave.setTemporarilyOffline(true, tempOffline);
-                slave.waitUntilOffline();
-                final VSphereOfflineCause disconnect =
-                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
-                slave.disconnect(disconnect);
-                final VSphereOfflineCause tempOnline =
-                        new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
-                slave.setTemporarilyOffline(false, tempOnline);
-            } else {
-                vSphereCloud.Log(
-                        this,
-                        "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
-            }
-        } catch (NullPointerException ex) {
-            vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
-        } catch (InterruptedException ex) {
-            vSphereCloud.Log(this, ex, "InterruptedException thrown while marking the slave as online or offline");
-        }
-        return false;
+        AgentUsageRegistry.get().release(run);
+        AgentRecycler.get().scheduleCheck(getNodeName());
+        return true;
     }
 
     /**

@@ -8,16 +8,20 @@ import hudson.init.Initializer;
 import hudson.init.Terminator;
 import hudson.model.Node;
 import hudson.model.Run;
+import hudson.security.ACL;
+import hudson.security.ACLContext;
 import hudson.util.XStream2;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -63,16 +67,37 @@ public final class AgentUsageRegistry {
         OVER_LIMIT
     }
 
-    /** What to do when a run that may have been counted is over. */
+    /** What happened when a run that may have been counted was over. */
     public enum Released {
         /** The run was not counted: nothing changes. */
         NOT_COUNTED,
-        /** The run was counted on an agent that is not the one with that name any more: nothing to recycle. */
+        /** The run was counted on an agent that is not the one with that name any more. */
         STALE,
-        /** The agent has more uses left. */
-        KEEP,
-        /** The agent has reached its limit: its usage was reset and it is to be recycled. */
-        RECYCLE
+        /** The run is not counted any more. Its agent is not reset: that is for when it has been recycled. */
+        RELEASED
+    }
+
+    /** How the recycling of an agent ended. */
+    public enum RecycleOutcome {
+        /** The agent was disconnected and what is done to its machine then was done. */
+        COMPLETED,
+        /** Something went wrong, or nobody said what became of it. */
+        FAILED
+    }
+
+    /** The recycling of an agent that is under way, which only one thing at a time can do. */
+    public static final class RecycleToken {
+        private final Entry entry;
+        private final CompletableFuture<RecycleOutcome> done = new CompletableFuture<>();
+
+        private RecycleToken(Entry entry) {
+            this.entry = entry;
+        }
+
+        /** Completes when the disconnect of the agent has done what it does to its machine. */
+        public CompletableFuture<RecycleOutcome> done() {
+            return done;
+        }
     }
 
     /** The outcome and the usage of the agent right after. */
@@ -82,6 +107,7 @@ public final class AgentUsageRegistry {
     private static final class Entry {
         String name;
         int count;
+        RecycleToken recycle;
 
         Entry(String name) {
             this.name = name;
@@ -183,34 +209,120 @@ public final class AgentUsageRegistry {
         }
     }
 
-    /**
-     * The run is over. Only a run that was counted can make its agent be recycled, and only if that agent is still the
-     * one it was counted on and has reached its {@code limit} (the one it has now; none means never).
-     */
-    public Released release(Run<?, ?> run, int limit) {
-        return release(run.getExternalizableId(), limit);
+    /** The run is over: it is not counted as using its agent any more, which keeps the use it was counted for. */
+    public Released release(Run<?, ?> run) {
+        return release(run.getExternalizableId());
     }
 
-    /** As {@link #release(Run, int)}, with the run known by its id. */
-    Released release(String runId, int limit) {
+    /** As {@link #release(Run)}, with the run known by its id. */
+    public Released release(String runId) {
         synchronized (lock) {
             final Entry entry = countedRuns.remove(runId);
             if (entry == null) {
                 return Released.NOT_COUNTED;
             }
             changed();
-            if (usages.get(entry.name) != entry) {
-                return Released.STALE;
+            return usages.get(entry.name) == entry ? Released.RELEASED : Released.STALE;
+        }
+    }
+
+    /** The agent has used all its {@code limit} uses (none means never). Whether it is busy is another matter. */
+    public boolean isRetiring(String node, int limit) {
+        synchronized (lock) {
+            return limit > 0 && limit <= countOf(node);
+        }
+    }
+
+    /** Some run counted on the agent has not ended. */
+    public boolean holdsCountedRuns(String node) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            return entry != null && hasCountedRuns(entry);
+        }
+    }
+
+    /**
+     * Takes the recycling of the agent, if it is due: it has used all its {@code limit} uses, no run counted on it is
+     * still using it, and it is not being recycled already. Null if not. The caller has to end it with
+     * {@link #endRecycle}.
+     */
+    public RecycleToken tryBeginRecycle(String node, int limit) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            if (entry == null || limit <= 0 || entry.count < limit || entry.recycle != null || hasCountedRuns(entry)) {
+                return null;
             }
-            if (limit <= 0) {
-                return Released.KEEP;
+            entry.recycle = new RecycleToken(entry);
+            return entry.recycle;
+        }
+    }
+
+    /** The run is counted on the agent as it is now, not on an earlier one of the same name. */
+    public boolean isCountedOn(String runId, String node) {
+        synchronized (lock) {
+            final Entry entry = countedRuns.get(runId);
+            return entry != null && usages.get(node) == entry;
+        }
+    }
+
+    /** The run is counted on some agent. */
+    public boolean isCountedAnywhere(String runId) {
+        return isCounted(runId);
+    }
+
+    /**
+     * How many uses the agent will have once the work it was handed has started: what it has, and one for each run
+     * among the {@code busyRunIds} that is not counted anywhere yet. A null is work that is not known to be of any run,
+     * which has to be taken as a use of its own.
+     */
+    public int projectedCount(String node, Collection<String> busyRunIds) {
+        synchronized (lock) {
+            final Set<String> uncounted = new HashSet<>();
+            int unknown = 0;
+            for (String runId : busyRunIds) {
+                if (runId == null) {
+                    unknown++;
+                } else if (!countedRuns.containsKey(runId)) {
+                    uncounted.add(runId);
+                }
             }
-            if (entry.count >= limit) {
-                entry.count = 0;
+            return countOf(node) + unknown + uncounted.size();
+        }
+    }
+
+    public boolean isRecycling(String node) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            return entry != null && entry.recycle != null;
+        }
+    }
+
+    /**
+     * Says how the recycling of the agent went. Only the first to say it counts, so it may be said any number of
+     * times. The recycling goes on until {@link #endRecycle}. Returns whether this was the first.
+     */
+    public boolean completeRecycle(String node, RecycleOutcome outcome) {
+        final RecycleToken token;
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            token = entry == null ? null : entry.recycle;
+        }
+        return token != null && token.done.complete(outcome);
+    }
+
+    /**
+     * The recycling is over. If it {@code reset}, the agent starts from nothing again, unless it was replaced in the
+     * meantime by a different one of the same name.
+     */
+    public void endRecycle(RecycleToken token, boolean reset) {
+        synchronized (lock) {
+            if (token.entry.recycle == token) {
+                token.entry.recycle = null;
+            }
+            if (reset && usages.get(token.entry.name) == token.entry) {
+                token.entry.count = 0;
                 changed();
-                return Released.RECYCLE;
             }
-            return Released.KEEP;
         }
     }
 
@@ -256,9 +368,18 @@ public final class AgentUsageRegistry {
     /** The agent is gone, or a new one takes its name: forget it. The runs counted on it become stale. */
     public void forget(String node) {
         synchronized (lock) {
-            if (usages.remove(node) != null) {
+            final Entry entry = usages.remove(node);
+            if (entry != null) {
+                abandonRecycle(entry);
                 changed();
             }
+        }
+    }
+
+    /** Nobody is going to say how the recycling of an agent that is gone went: it did not. */
+    private static void abandonRecycle(Entry entry) {
+        if (entry.recycle != null) {
+            entry.recycle.done.complete(RecycleOutcome.FAILED);
         }
     }
 
@@ -275,9 +396,8 @@ public final class AgentUsageRegistry {
     }
 
     /**
-     * The limit of the agent may have changed. With no limit there is nothing to remember. An agent at or over its limit
-     * with no run using it would never be recycled, so it starts again (one that has runs using it is recycled when the
-     * first of them to end finds it at its limit).
+     * The limit of the agent may have changed. With no limit there is nothing to remember. An agent that is at or over
+     * its new limit keeps its count: it is recycled once nothing is using it.
      */
     public void reconcile(String node, int limit) {
         synchronized (lock) {
@@ -287,9 +407,7 @@ public final class AgentUsageRegistry {
             }
             if (limit <= 0) {
                 usages.remove(node);
-                changed();
-            } else if (entry.count >= limit && !hasCountedRuns(entry)) {
-                entry.count = 0;
+                abandonRecycle(entry);
                 changed();
             }
         }
@@ -415,6 +533,14 @@ public final class AgentUsageRegistry {
      * Forgets the runs that are not building: one that did not get to say it was over (the job is gone, the build could
      * not be resumed) would hold its agent for ever. An agent at its limit that is left with no run starts again.
      */
+    void pruneRuns(Predicate<String> stillBuilding) {
+        pruneRuns(stillBuilding, null);
+    }
+
+    /**
+     * As {@link #pruneRuns(Predicate)}, and an agent at its limit that is left with no run starts again (it has no
+     * {@code limitOf} to know that with the other).
+     */
     void pruneRuns(Predicate<String> stillBuilding, ToIntFunction<String> limitOf) {
         final List<String> ids;
         synchronized (lock) {
@@ -437,8 +563,10 @@ public final class AgentUsageRegistry {
             }
         }
         final Map<String, Integer> limits = new HashMap<>();
-        for (String name : names) {
-            limits.put(name, limitOf.applyAsInt(name));
+        if (limitOf != null) {
+            for (String name : names) {
+                limits.put(name, limitOf.applyAsInt(name));
+            }
         }
         synchronized (lock) {
             boolean modified = false;
@@ -472,16 +600,27 @@ public final class AgentUsageRegistry {
     /** Once the builds are loaded and resumed, the runs that were saved as counted are the ones still building. */
     @Initializer(after = InitMilestone.JOB_CONFIG_ADAPTED, before = InitMilestone.COMPLETED)
     public static void pruneAtStartup() {
-        get().pruneRuns(
-                        runId -> {
-                            try {
-                                final Run<?, ?> run = Run.fromExternalizableId(runId);
-                                return run != null && run.isBuilding();
-                            } catch (RuntimeException e) {
-                                return false;
-                            }
-                        },
-                        AgentUsageRegistry::limitOf);
+        get().pruneRuns(AgentUsageRegistry::isBuilding, AgentUsageRegistry::limitOf);
+    }
+
+    /** Forgets the counted runs that are not building any more, which did not get to say they were over. */
+    public void pruneFinishedRuns() {
+        pruneRuns(AgentUsageRegistry::isBuilding);
+    }
+
+    private static boolean isBuilding(String runId) {
+        // Without permission to see them, the runs would be taken for gone.
+        try (ACLContext ignored = ACL.as2(ACL.SYSTEM2)) {
+            final Run<?, ?> run = Run.fromExternalizableId(runId);
+            return run != null && run.isBuilding();
+        } catch (IllegalArgumentException e) {
+            // Not the id of a run that there is.
+            return false;
+        } catch (RuntimeException e) {
+            // Not knowing is not a reason to let the agent be recycled under it.
+            LOGGER.log(Level.WARNING, "Failed to find out whether the run " + runId + " is building", e);
+            return true;
+        }
     }
 
     private static int limitOf(String name) {

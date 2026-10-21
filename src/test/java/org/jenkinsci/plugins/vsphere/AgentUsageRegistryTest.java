@@ -2,11 +2,13 @@ package org.jenkinsci.plugins.vsphere;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 
 import hudson.model.FreeStyleBuild;
 import hudson.model.FreeStyleProject;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -15,6 +17,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.Acquired;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.Outcome;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleToken;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.Released;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -64,7 +68,7 @@ class AgentUsageRegistryTest {
         assertThat(registry.acquire("agent", 5, id, () -> BUILDING), is(new Acquired(Outcome.ALREADY_COUNTED, 1)));
         assertThat(registry.isCounted(id), is(true));
         assertThat(registry.nodeOf(id), is("agent"));
-        assertThat(registry.release(id, 5), is(Released.KEEP));
+        assertThat(registry.release(id), is(Released.RELEASED));
         assertThat(registry.isCounted(id), is(false));
     }
 
@@ -128,35 +132,23 @@ class AgentUsageRegistryTest {
         acquire(registry, "agent", 1, run.get(1));
 
         // The second run was over the limit and was aborted: it must not reset what the first one is using.
-        assertThat(registry.release(run.get(1), 1), is(Released.NOT_COUNTED));
+        assertThat(registry.release(run.get(1)), is(Released.NOT_COUNTED));
 
         assertThat(registry.count("agent"), is(1));
         assertThat(registry.isCounted(run.get(0)), is(true));
     }
 
     @Test
-    void releaseRecyclesOnlyWhenTheLimitIsReached(JenkinsRule r) throws Exception {
+    void releaseNeverResetsTheCount(JenkinsRule r) throws Exception {
         final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
-        final List<FreeStyleBuild> run = runs(r, 3);
+        final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "agent", 2, run.get(0));
-
-        assertThat(registry.release(run.get(0), 2), is(Released.KEEP));
-        assertThat(registry.count("agent"), is(1));
-
         acquire(registry, "agent", 2, run.get(1));
-        acquire(registry, "agent", 2, run.get(2));
-        assertThat(registry.release(run.get(1), 2), is(Released.RECYCLE));
-        assertThat(registry.count("agent"), is(0));
-    }
 
-    @Test
-    void releaseWithNoLimitDoesNotRecycle(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
-        final FreeStyleBuild run = runs(r, 1).get(0);
-        acquire(registry, "agent", 3, run);
-
-        // The limit was removed while the run was using the agent.
-        assertThat(registry.release(run, 0), is(Released.KEEP));
+        // Resetting is for when the agent has been recycled, not for when a run ends.
+        assertThat(registry.release(run.get(0)), is(Released.RELEASED));
+        assertThat(registry.release(run.get(1)), is(Released.RELEASED));
+        assertThat(registry.count("agent"), is(2));
     }
 
     @Test
@@ -168,7 +160,7 @@ class AgentUsageRegistryTest {
         registry.forget("agent");
         acquire(registry, "agent", 1, run.get(1));
 
-        assertThat(registry.release(run.get(0), 1), is(Released.STALE));
+        assertThat(registry.release(run.get(0)), is(Released.STALE));
 
         assertThat(registry.count("agent"), is(1));
         assertThat(registry.isCounted(run.get(1)), is(true));
@@ -185,35 +177,23 @@ class AgentUsageRegistryTest {
         assertThat(registry.count("old"), is(0));
         assertThat(registry.count("new"), is(1));
         assertThat(registry.nodeOf(run), is("new"));
-        assertThat(registry.release(run, 1), is(Released.RECYCLE));
+        assertThat(registry.release(run), is(Released.RELEASED));
     }
 
     @Test
-    void reconcileResetsAnIdleEntryAtOrOverTheNewLimit(JenkinsRule r) throws Exception {
+    void reconcileKeepsTheCountAtOrOverTheNewLimit(JenkinsRule r) throws Exception {
         final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
         final List<FreeStyleBuild> run = runs(r, 2);
         acquire(registry, "agent", 5, run.get(0));
         acquire(registry, "agent", 5, run.get(1));
-        registry.release(run.get(0), 5);
-        registry.release(run.get(1), 5);
-        assertThat(registry.count("agent"), is(2));
+        registry.release(run.get(0));
+        registry.release(run.get(1));
 
+        // The agent is recycled because it is at its limit, which is not for the registry to do.
         registry.reconcile("agent", 2);
 
-        assertThat(registry.count("agent"), is(0));
-    }
-
-    @Test
-    void reconcileKeepsTheCountOfARunThatIsStillUsingTheAgent(JenkinsRule r) throws Exception {
-        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
-        final FreeStyleBuild run = runs(r, 1).get(0);
-        acquire(registry, "agent", 1, run);
-
-        // Saving the agent while its last allowed run is working must not lose that the run will have to recycle it.
-        registry.reconcile("agent", 1);
-
-        assertThat(registry.count("agent"), is(1));
-        assertThat(registry.release(run, 1), is(Released.RECYCLE));
+        assertThat(registry.count("agent"), is(2));
+        assertThat(registry.isRetiring("agent", 2), is(true));
     }
 
     @Test
@@ -225,7 +205,176 @@ class AgentUsageRegistryTest {
         registry.reconcile("agent", 0);
 
         assertThat(registry.count("agent"), is(0));
-        assertThat(registry.release(run, 0), is(Released.STALE));
+        assertThat(registry.release(run), is(Released.STALE));
+    }
+
+    @Test
+    void retiringIsDerivedFromTheCountAndTheLimit(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final List<FreeStyleBuild> run = runs(r, 2);
+        acquire(registry, "agent", 2, run.get(0));
+        assertThat(registry.isRetiring("agent", 2), is(false));
+        acquire(registry, "agent", 2, run.get(1));
+
+        assertThat(registry.isRetiring("agent", 2), is(true));
+        // Raising the limit gives the agent room again; no limit means never.
+        assertThat(registry.isRetiring("agent", 3), is(false));
+        assertThat(registry.isRetiring("agent", 0), is(false));
+        assertThat(registry.isRetiring("other", 1), is(false));
+        assertThat(registry.holdsCountedRuns("agent"), is(true));
+        registry.release(run.get(0));
+        registry.release(run.get(1));
+        assertThat(registry.holdsCountedRuns("agent"), is(false));
+    }
+
+    @Test
+    void anAgentIsNotRecycledWhileACountedRunUsesIt(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final List<FreeStyleBuild> run = runs(r, 2);
+        acquire(registry, "agent", 2, run.get(0));
+        acquire(registry, "agent", 2, run.get(1));
+        registry.release(run.get(0));
+
+        assertThat(registry.tryBeginRecycle("agent", 2), is(nullValue()));
+
+        registry.release(run.get(1));
+        assertThat(registry.tryBeginRecycle("agent", 2), is(notNullValue()));
+    }
+
+    @Test
+    void onlyAnAgentAtItsLimitCanBeRecycled(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        acquire(registry, "agent", 2, runs(r, 1).get(0));
+
+        assertThat(registry.tryBeginRecycle("agent", 2), is(nullValue()));
+        assertThat(registry.tryBeginRecycle("agent", 0), is(nullValue()));
+        assertThat(registry.tryBeginRecycle("unknown", 1), is(nullValue()));
+    }
+
+    @Test
+    void thereIsOneRecycleAtATime(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final FreeStyleBuild run = runs(r, 1).get(0);
+        acquire(registry, "agent", 1, run);
+        registry.release(run);
+
+        final RecycleToken token = registry.tryBeginRecycle("agent", 1);
+
+        assertThat(token, is(notNullValue()));
+        assertThat(registry.isRecycling("agent"), is(true));
+        assertThat(registry.tryBeginRecycle("agent", 1), is(nullValue()));
+        registry.endRecycle(token, false);
+        assertThat(registry.isRecycling("agent"), is(false));
+        assertThat(registry.count("agent"), is(1));
+        assertThat(registry.tryBeginRecycle("agent", 1), is(notNullValue()));
+    }
+
+    @Test
+    void completingARecycleTwiceCompletesItOnce(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final FreeStyleBuild run = runs(r, 1).get(0);
+        acquire(registry, "agent", 1, run);
+        registry.release(run);
+        final RecycleToken token = registry.tryBeginRecycle("agent", 1);
+
+        assertThat(registry.completeRecycle("agent", RecycleOutcome.COMPLETED), is(true));
+        assertThat(registry.completeRecycle("agent", RecycleOutcome.FAILED), is(false));
+        assertThat(token.done().get(), is(RecycleOutcome.COMPLETED));
+        // Nothing has been reset yet, and the recycle is not over, until whoever began it says so.
+        assertThat(registry.count("agent"), is(1));
+        assertThat(registry.isRecycling("agent"), is(true));
+        registry.endRecycle(token, true);
+        assertThat(registry.count("agent"), is(0));
+        assertThat(registry.isRecycling("agent"), is(false));
+        assertThat(registry.completeRecycle("agent", RecycleOutcome.COMPLETED), is(false));
+    }
+
+    @Test
+    void endingARecycleOfAReplacedAgentDoesNotResetTheNewOne(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final List<FreeStyleBuild> run = runs(r, 2);
+        acquire(registry, "agent", 1, run.get(0));
+        registry.release(run.get(0));
+        final RecycleToken token = registry.tryBeginRecycle("agent", 1);
+        registry.forget("agent");
+        acquire(registry, "agent", 1, run.get(1));
+
+        registry.endRecycle(token, true);
+
+        assertThat(registry.count("agent"), is(1));
+        assertThat(registry.isRecycling("agent"), is(false));
+    }
+
+    @Test
+    void aRunIsCountedOnTheAgentItWasCountedOn(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final List<FreeStyleBuild> run = runs(r, 2);
+        acquire(registry, "agent", 5, run.get(0));
+        final String counted = run.get(0).getExternalizableId();
+        final String other = run.get(1).getExternalizableId();
+
+        assertThat(registry.isCountedOn(counted, "agent"), is(true));
+        assertThat(registry.isCountedOn(counted, "elsewhere"), is(false));
+        assertThat(registry.isCountedAnywhere(counted), is(true));
+        assertThat(registry.isCountedOn(other, "agent"), is(false));
+        assertThat(registry.isCountedAnywhere(other), is(false));
+    }
+
+    @Test
+    void aRunIsNotCountedOnAnAgentThatReplacedTheOneItWasCountedOn(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final FreeStyleBuild run = runs(r, 1).get(0);
+        acquire(registry, "agent", 5, run);
+        registry.forget("agent");
+        registry.acquire("agent", 5, "someone-else#1", () -> BUILDING);
+
+        assertThat(registry.isCountedOn(run.getExternalizableId(), "agent"), is(false));
+    }
+
+    @Test
+    void theProjectedCountAddsTheRunsThatAreNotCountedYet(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final List<FreeStyleBuild> run = runs(r, 3);
+        acquire(registry, "agent", 5, run.get(0));
+        acquire(registry, "other", 5, run.get(1));
+        final String counted = run.get(0).getExternalizableId();
+        final String elsewhere = run.get(1).getExternalizableId();
+        final String fresh = run.get(2).getExternalizableId();
+
+        // Counted here, counted elsewhere: nothing to add. A new run counts once however many blocks it has.
+        assertThat(registry.projectedCount("agent", List.of(counted, elsewhere)), is(1));
+        assertThat(registry.projectedCount("agent", List.of(fresh, fresh)), is(2));
+        // Work that is not known to be of any run is a use of its own, each.
+        assertThat(registry.projectedCount("agent", Arrays.asList(null, null)), is(3));
+        assertThat(registry.projectedCount("nobody", List.of()), is(0));
+    }
+
+    @Test
+    void forgettingAnAgentBeingRecycledFailsItsRecycle(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final FreeStyleBuild run = runs(r, 1).get(0);
+        acquire(registry, "agent", 1, run);
+        registry.release(run);
+        final RecycleToken token = registry.tryBeginRecycle("agent", 1);
+
+        registry.forget("agent");
+
+        // Nobody is left to say how it went, and nobody should wait ten minutes for it.
+        assertThat(token.done().get(), is(RecycleOutcome.FAILED));
+    }
+
+    @Test
+    void runsThatAreOverCanBeForgottenWithoutResettingTheAgent(JenkinsRule r) throws Exception {
+        final AgentUsageRegistry registry = AgentUsageRegistry.inMemory();
+        final FreeStyleBuild run = runs(r, 1).get(0);
+        acquire(registry, "agent", 1, run);
+
+        registry.pruneRuns(id -> false);
+
+        // The agent used its one build: it is for the recycler to give it back, not for this.
+        assertThat(registry.isCounted(run), is(false));
+        assertThat(registry.count("agent"), is(1));
+        assertThat(registry.isRetiring("agent", 1), is(true));
     }
 
     @Test

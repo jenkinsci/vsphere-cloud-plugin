@@ -18,6 +18,8 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import org.jenkinsci.plugins.vsphere.AgentRecycler;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -428,8 +430,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 }
             }
             vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
+            AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.COMPLETED);
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, t, "Got an exception");
+            AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
             taskListener.fatalError(t.getMessage(), t);
         } finally {
             if (v != null) {

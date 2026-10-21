@@ -13,7 +13,9 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.function.BooleanSupplier;
+import org.jenkinsci.plugins.vsphere.AgentRecycler;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
 import org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
@@ -45,6 +47,7 @@ class vSphereCloudPipelineRestartTest {
         @Override
         public void afterDisconnect(SlaveComputer computer, TaskListener listener) {
             getDelegate().afterDisconnect(computer, listener);
+            AgentRecycler.idleActionDone(computer.getName(), RecycleOutcome.COMPLETED);
         }
     }
 
