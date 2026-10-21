@@ -72,8 +72,7 @@ class AgentUsageRegistryPersistenceTest {
     }
 
     @Test
-    void anAgentAtItsLimitWithoutSavedRunsOrWithoutALimitStartsAgainOnLoad(JenkinsRule r, @TempDir Path dir)
-            throws Exception {
+    void anAgentAtItsLimitIsKeptOnLoadAndOneWithoutALimitIsNot(JenkinsRule r, @TempDir Path dir) throws Exception {
         final File store = dir.resolve("usage.xml").toFile();
         // As saved before the runs were: counts only.
         Files.write(
@@ -88,7 +87,8 @@ class AgentUsageRegistryPersistenceTest {
         final AgentUsageRegistry after = registry(store, new ArrayList<>());
         after.load(node -> true, node -> node.equals("atLimit") ? 3 : node.equals("unlimited") ? 0 : 5);
 
-        assertThat(after.count("atLimit"), is(0));
+        // Its machine has not been cleaned, whether or not anything was using it: it is recycled once it is launched.
+        assertThat(after.count("atLimit"), is(3));
         assertThat(after.count("belowLimit"), is(2));
         assertThat(after.count("unlimited"), is(0));
     }
@@ -125,17 +125,16 @@ class AgentUsageRegistryPersistenceTest {
     }
 
     @Test
-    void runsNoLongerBuildingArePrunedAndAnAtLimitEntryWithoutRunsIsDropped(JenkinsRule r, @TempDir Path dir)
-            throws Exception {
+    void runsNoLongerBuildingArePrunedAndTheUsageIsKept(JenkinsRule r, @TempDir Path dir) throws Exception {
         final File store = dir.resolve("usage.xml").toFile();
         final AgentUsageRegistry registry = registry(store, new ArrayList<>());
         final List<FreeStyleBuild> run = runs(r, 3);
         use(registry, "atLimit", 1, run.subList(0, 1), 1);
         use(registry, "below", 5, run.subList(1, 3), 2);
 
-        registry.pruneRuns(id -> id.equals(run.get(1).getExternalizableId()), node -> node.equals("atLimit") ? 1 : 5);
+        registry.pruneRuns(id -> id.equals(run.get(1).getExternalizableId()));
 
-        assertThat(registry.count("atLimit"), is(0));
+        assertThat(registry.count("atLimit"), is(1));
         assertThat(registry.isCounted(run.get(0).getExternalizableId()), is(false));
         assertThat(registry.isCounted(run.get(1).getExternalizableId()), is(true));
         assertThat(registry.isCounted(run.get(2).getExternalizableId()), is(false));

@@ -3,6 +3,8 @@ package org.jenkinsci.plugins;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 
+import hudson.model.FreeStyleBuild;
+import hudson.model.FreeStyleProject;
 import hudson.model.Node.Mode;
 import hudson.model.Result;
 import hudson.model.TaskListener;
@@ -25,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.jvnet.hudson.test.JenkinsRule;
+import org.jvnet.hudson.test.SleepBuilder;
 import org.jvnet.hudson.test.junit.jupiter.JenkinsSessionExtension;
 
 /** A Pipeline that goes on after Jenkins was restarted, on an agent that counts its builds. */
@@ -169,6 +172,33 @@ class vSphereCloudPipelineRestartTest {
             waitFor("the agent to be recycled", () -> computer.getChannel() == null);
             waitFor("the count to be reset", () -> count() == 0);
             assertThat(AgentUsageRegistry.get().isCounted(run.getExternalizableId()), is(false));
+        });
+    }
+
+    @Test
+    void anAgentAtItsLimitWhenJenkinsStoppedIsRecycledOnceItIsLaunched() throws Throwable {
+        sessions.then(r -> {
+            addAgent(r, 1);
+            // A build that is going on, so that it can be counted; it is over when the agent has used its build.
+            final FreeStyleProject project = r.createFreeStyleProject();
+            project.setAssignedLabel(r.jenkins.getSelfLabel());
+            project.getBuildersList().add(new SleepBuilder(600_000));
+            final FreeStyleBuild build = project.scheduleBuild2(0).waitForStart();
+            AgentUsageRegistry.get().acquire("agent", 1, build);
+            AgentUsageRegistry.get().release(build);
+            build.getExecutor().interrupt();
+            r.waitForCompletion(build);
+            assertThat(count(), is(1));
+        });
+        sessions.then(r -> {
+            // Its machine has not been cleaned, however it came to be at its limit: it is not given a fresh start.
+            assertThat(count(), is(1));
+            final SlaveComputer computer = connect(r);
+
+            assertThat(AgentRecycler.get().sweepOnce().contains("agent"), is(true));
+
+            waitFor("the agent to be recycled", () -> computer.getChannel() == null);
+            waitFor("the count to start again", () -> count() == 0);
         });
     }
 }

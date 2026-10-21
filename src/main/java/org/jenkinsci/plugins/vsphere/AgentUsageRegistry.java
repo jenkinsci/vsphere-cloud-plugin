@@ -495,8 +495,9 @@ public final class AgentUsageRegistry {
 
     /**
      * Takes the usage saved by an earlier run of Jenkins. An agent that does not exist any more is not taken, nor is
-     * one that has no limit any more. One that is at its limit is taken if runs counted on it were saved, as those may
-     * go on after the restart; when none was, nothing is using it and it would never be recycled, so it starts again.
+     * one that has no limit any more. One that is at its limit is taken as it is, with the runs counted on it that were
+     * saved, which may go on after the restart: it is recycled once it is launched and nothing is using it, for its
+     * machine has not been cleaned.
      */
     void load(Predicate<String> nodeExists, ToIntFunction<String> limitOf) {
         if (store == null || !store.exists()) {
@@ -530,7 +531,7 @@ public final class AgentUsageRegistry {
                         }
                     });
                 }
-                if (limit <= 0 || (count >= limit && runIds.isEmpty())) {
+                if (limit <= 0) {
                     return;
                 }
                 final Entry entry = usages.computeIfAbsent(name, Entry::new);
@@ -545,14 +546,6 @@ public final class AgentUsageRegistry {
      * not be resumed) would hold its agent for ever. The usage of the agent is not changed.
      */
     void pruneRuns(Predicate<String> stillBuilding) {
-        pruneRuns(stillBuilding, null);
-    }
-
-    /**
-     * As {@link #pruneRuns(Predicate)}, and an agent at its limit that is left with no run starts again (it has no
-     * {@code limitOf} to know that with the other).
-     */
-    void pruneRuns(Predicate<String> stillBuilding, ToIntFunction<String> limitOf) {
         final List<String> ids;
         synchronized (lock) {
             ids = new ArrayList<>(countedRuns.keySet());
@@ -564,35 +557,10 @@ public final class AgentUsageRegistry {
                 over.add(id);
             }
         }
-        final Set<String> names = new HashSet<>();
-        synchronized (lock) {
-            for (String id : over) {
-                final Entry entry = countedRuns.get(id);
-                if (entry != null) {
-                    names.add(entry.name);
-                }
-            }
-        }
-        final Map<String, Integer> limits = new HashMap<>();
-        if (limitOf != null) {
-            for (String name : names) {
-                limits.put(name, limitOf.applyAsInt(name));
-            }
-        }
         synchronized (lock) {
             boolean modified = false;
             for (String id : over) {
                 if (countedRuns.remove(id) != null) {
-                    modified = true;
-                }
-            }
-            for (Map.Entry<String, Integer> limit : limits.entrySet()) {
-                final Entry entry = usages.get(limit.getKey());
-                if (entry != null
-                        && limit.getValue() > 0
-                        && entry.count >= limit.getValue()
-                        && !hasCountedRuns(entry)) {
-                    entry.count = 0;
                     modified = true;
                 }
             }
@@ -611,7 +579,7 @@ public final class AgentUsageRegistry {
     /** Once the builds are loaded and resumed, the runs that were saved as counted are the ones still building. */
     @Initializer(after = InitMilestone.JOB_CONFIG_ADAPTED, before = InitMilestone.COMPLETED)
     public static void pruneAtStartup() {
-        get().pruneRuns(AgentUsageRegistry::isBuilding, AgentUsageRegistry::limitOf);
+        get().pruneFinishedRuns();
     }
 
     /** Forgets the counted runs that are not building any more, which did not get to say they were over. */
