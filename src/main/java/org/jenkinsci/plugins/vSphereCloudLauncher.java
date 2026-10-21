@@ -23,6 +23,8 @@ import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
@@ -328,6 +330,19 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         }
     }
 
+    private static boolean isRevert(MACHINE_ACTION action) {
+        return action == MACHINE_ACTION.REVERT
+                || action == MACHINE_ACTION.REVERT_AND_RESTART
+                || action == MACHINE_ACTION.REVERT_AND_RESET
+                || action == MACHINE_ACTION.RECONNECT_AND_REVERT;
+    }
+
+    /** The agent connects again by itself after it is disconnected and its virtual machine is reverted. */
+    @Restricted(NoExternalUse.class)
+    public boolean reconnectsAfterDisconnect() {
+        return idleAction == MACHINE_ACTION.RECONNECT_AND_REVERT;
+    }
+
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
@@ -444,11 +459,11 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         localIdle);
                 AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
             } else {
-                if (MACHINE_ACTION.NOTHING.equals(localIdle) || MACHINE_ACTION.SUSPEND.equals(localIdle)) {
+                if (!isRevert(localIdle)) {
                     vSphereCloud.Log(
                             slaveComputer,
                             taskListener,
-                            "Idle action %s does not clean the virtual machine: it keeps what the builds left on it.",
+                            "Idle action %s does not revert the virtual machine: it keeps what the builds left on it.",
                             localIdle);
                 }
                 vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);

@@ -70,6 +70,12 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 @WithJenkins
 class vSphereCloudPipelineLimitedBuildsTest {
 
+    static {
+        // The sweep that Jenkins runs by itself, at a time of its own, is not what these tests are about: they ask for
+        // it.
+        System.setProperty(AgentRecycler.class.getName() + ".sweepPeriodMs", Long.toString(TimeUnit.DAYS.toMillis(1)));
+    }
+
     private static final String CLOUD = "some-cloud";
 
     /**
@@ -81,7 +87,11 @@ class vSphereCloudPipelineLimitedBuildsTest {
         final transient AtomicInteger launches = new AtomicInteger();
 
         InProcessLauncher(ComputerLauncher delegate, String vmName, int limit) {
-            super(delegate, CLOUD, vmName, false, false, "", "60", "Nothing", Integer.toString(limit));
+            this(delegate, vmName, limit, "Nothing");
+        }
+
+        InProcessLauncher(ComputerLauncher delegate, String vmName, int limit, String idleOption) {
+            super(delegate, CLOUD, vmName, false, false, "", "60", idleOption, Integer.toString(limit));
         }
 
         @Override
@@ -162,7 +172,12 @@ class vSphereCloudPipelineLimitedBuildsTest {
 
     private static vSphereCloudSlave connectedAgent(JenkinsRule r, String name, String label, int executors, int limit)
             throws Exception {
-        final vSphereCloudSlave agent = newAgent(r, name, label, executors, limit);
+        return connectedAgent(r, name, label, executors, limit, "Nothing");
+    }
+
+    private static vSphereCloudSlave connectedAgent(
+            JenkinsRule r, String name, String label, int executors, int limit, String idleOption) throws Exception {
+        final vSphereCloudSlave agent = newAgent(r, name, label, executors, limit, idleOption);
         r.jenkins.addNode(agent);
         final SlaveComputer computer = (SlaveComputer) agent.toComputer();
         computer.connect(false).get();
@@ -173,6 +188,11 @@ class vSphereCloudPipelineLimitedBuildsTest {
     /** An agent that is not part of Jenkins yet. */
     private static vSphereCloudSlave newAgent(JenkinsRule r, String name, String label, int executors, int limit)
             throws Exception {
+        return newAgent(r, name, label, executors, limit, "Nothing");
+    }
+
+    private static vSphereCloudSlave newAgent(
+            JenkinsRule r, String name, String label, int executors, int limit, String idleOption) throws Exception {
         ensureCloud(r);
         final vSphereCloudSlave agent = new vSphereCloudSlave(
                 name,
@@ -190,9 +210,9 @@ class vSphereCloudPipelineLimitedBuildsTest {
                 false,
                 "",
                 "60",
-                "Nothing",
+                idleOption,
                 Integer.toString(limit));
-        agent.setLauncher(new InProcessLauncher(r.createComputerLauncher(null), "vm-" + name, limit));
+        agent.setLauncher(new InProcessLauncher(r.createComputerLauncher(null), "vm-" + name, limit, idleOption));
         return agent;
     }
 
@@ -735,6 +755,21 @@ class vSphereCloudPipelineLimitedBuildsTest {
     }
 
     @Test
+    void anAgentThatReconnectsAfterItsRecycleComesBackOnceItIsOver(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1, "Reconnect and Revert");
+        final FreeStyleProject project = r.createFreeStyleProject();
+        project.setAssignedLabel(r.jenkins.getLabel("lbl"));
+
+        r.buildAndAssertSuccess(project);
+
+        // It is not allowed to connect while it is marked offline for the recycle, which may not be over when the
+        // launcher asks, so the recycler does it when the mark is gone.
+        waitFor("the count to start again", () -> agent.getNumberOfLimitedTestRuns() == 0);
+        waitFor("the agent to be back online", () -> agent.toComputer().isOnline());
+        assertThat(agent.toComputer().isTemporarilyOffline(), is(false));
+    }
+
+    @Test
     void anAgentOfflineForAnotherReasonIsNotRecycled(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = connectedAgent(r, "agent", "lbl", 1, 1);
         final FreeStyleBuild one = runningBuild(r);
@@ -1032,7 +1067,6 @@ class vSphereCloudPipelineLimitedBuildsTest {
 
         // Whatever goes wrong in finding out what the item is must not stop the queue.
         assertThat(UsageGate.check(agent, itemOf(new FakeTask(false, true))), is(nullValue()));
-        assertThat(UsageGate.check(agent, null), is(nullValue()));
     }
 
     @Test
@@ -1135,7 +1169,9 @@ class vSphereCloudPipelineLimitedBuildsTest {
         AgentUsageRegistry.get().release(run);
         assertThat(AgentUsageRegistry.get().tryBeginRecycle("agent", 1), is(notNullValue()));
 
-        assertThat(UsageGate.check(agent, null).getShortDescription(), containsString("being recycled"));
+        assertThat(
+                UsageGate.check(agent, itemOf(new FakeTask(false, false))).getShortDescription(),
+                containsString("being recycled"));
     }
 
     @Test

@@ -22,6 +22,7 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.util.SystemProperties;
 import jenkins.util.Timer;
+import org.jenkinsci.plugins.vSphereCloudLauncher;
 import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleToken;
@@ -41,9 +42,6 @@ import org.kohsuke.accmod.restrictions.NoExternalUse;
 public final class AgentRecycler {
 
     private static final Logger LOGGER = Logger.getLogger(AgentRecycler.class.getName());
-
-    private static final long SWEEP_PERIOD_MS =
-            SystemProperties.getLong(AgentRecycler.class.getName() + ".sweepPeriodMs", TimeUnit.MINUTES.toMillis(1));
 
     private static final long FIRST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(1);
     private static final long LAST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(30);
@@ -275,6 +273,15 @@ public final class AgentRecycler {
                 computer.setTemporaryOfflineCause(null);
             }
             AgentUsageRegistry.get().endRecycle(token, reset);
+            // The launcher connects such an agent when it is done with the disconnect, but it is not allowed to while
+            // the agent is marked offline, which may be before the mark is taken away.
+            if (reset
+                    && node instanceof vSphereCloudSlave
+                    && ((vSphereCloudSlave) node).getLauncher() instanceof vSphereCloudLauncher
+                    && ((vSphereCloudLauncher) ((vSphereCloudSlave) node).getLauncher()).reconnectsAfterDisconnect()
+                    && computer.isOffline()) {
+                computer.connect(false);
+            }
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Failed to finish recycling the vSphere agent " + name, e);
         }
@@ -298,7 +305,8 @@ public final class AgentRecycler {
     public static final class Sweep extends PeriodicWork {
         @Override
         public long getRecurrencePeriod() {
-            return SWEEP_PERIOD_MS;
+            return SystemProperties.getLong(
+                    AgentRecycler.class.getName() + ".sweepPeriodMs", TimeUnit.MINUTES.toMillis(1));
         }
 
         @Override

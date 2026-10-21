@@ -32,6 +32,11 @@ import org.jvnet.hudson.test.junit.jupiter.JenkinsSessionExtension;
 @Timeout(value = 6, unit = TimeUnit.MINUTES, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
 class vSphereCloudPipelineRestartTest {
 
+    static {
+        // The sweep that Jenkins runs by itself, at a time of its own, is not what these tests are about.
+        System.setProperty(AgentRecycler.class.getName() + ".sweepPeriodMs", Long.toString(TimeUnit.DAYS.toMillis(1)));
+    }
+
     private static final String CLOUD = "some-cloud";
 
     @RegisterExtension
