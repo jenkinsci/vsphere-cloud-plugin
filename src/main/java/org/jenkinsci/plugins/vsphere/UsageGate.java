@@ -1,6 +1,5 @@
 package org.jenkinsci.plugins.vsphere;
 
-import com.google.common.annotations.VisibleForTesting;
 import edu.umd.cs.findbugs.annotations.CheckForNull;
 import hudson.model.Cause;
 import hudson.model.Computer;
@@ -117,7 +116,6 @@ public final class UsageGate {
     }
 
     /** For tests. */
-    @VisibleForTesting
     public static void setIdleHeldMs(long idleHeldMs) {
         UsageGate.idleHeldMs = idleHeldMs;
     }

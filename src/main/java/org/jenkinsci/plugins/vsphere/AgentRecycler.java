@@ -1,6 +1,5 @@
 package org.jenkinsci.plugins.vsphere;
 
-import com.google.common.annotations.VisibleForTesting;
 import hudson.Extension;
 import hudson.ExtensionList;
 import hudson.model.Computer;
@@ -48,6 +47,11 @@ public final class AgentRecycler {
     private static final long FIRST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(1);
     private static final long LAST_BACKOFF_MS = TimeUnit.MINUTES.toMillis(30);
 
+    /** How long the recycle waits for the launcher to be done with an agent before it connects it, and between looks. */
+    private static final long RECONNECT_WAIT_MS = TimeUnit.SECONDS.toMillis(30);
+
+    private static final long RECONNECT_POLL_MS = 50;
+
     /** Recycles that did not work, by agent: how many in a row and when to try again. */
     private record Failures(int count, long notBefore) {}
 
@@ -72,13 +76,11 @@ public final class AgentRecycler {
     }
 
     /** For tests only. */
-    @VisibleForTesting
     public void setClock(LongSupplier clock) {
         this.clock = clock;
     }
 
     /** For tests only. */
-    @VisibleForTesting
     public void setCheckDelayMs(long checkDelayMs) {
         this.checkDelayMs = checkDelayMs;
     }
@@ -275,17 +277,64 @@ public final class AgentRecycler {
                 computer.setTemporaryOfflineCause(null);
             }
             AgentUsageRegistry.get().endRecycle(token, reset);
-            // The launcher connects such an agent when it is done with the disconnect, but it is not allowed to while
-            // the agent is marked offline, which may be before the mark is taken away.
-            if (reset
-                    && node instanceof vSphereCloudSlave
+            // The launcher leaves connecting the agent to the recycle: it may not while the agent is marked offline,
+            // which may be before the mark is taken away. Whether the recycle worked or not, as connecting it is what
+            // the agent is configured to do when it is disconnected.
+            if (node instanceof vSphereCloudSlave
                     && ((vSphereCloudSlave) node).getLauncher() instanceof vSphereCloudLauncher
-                    && ((vSphereCloudLauncher) ((vSphereCloudSlave) node).getLauncher()).reconnectsAfterDisconnect()
-                    && computer.isOffline()) {
-                computer.connect(false);
+                    && ((vSphereCloudLauncher) ((vSphereCloudSlave) node).getLauncher()).reconnectsAfterDisconnect()) {
+                connectWhenTheLauncherIsDone(computer, (vSphereCloudSlave) node);
             }
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Failed to finish recycling the vSphere agent " + name, e);
+        }
+    }
+
+    /**
+     * Connects the agent once the launcher has nothing under way. Jenkins disconnects an agent twice, one after the
+     * other, so the launcher may still be disconnecting when the recycle is over, and refuses to launch the agent then;
+     * and a launch that is refused is what a connect that comes while it lasts is given instead of a launch of its own.
+     */
+    private void connectWhenTheLauncherIsDone(Computer computer, vSphereCloudSlave node) {
+        final long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(RECONNECT_WAIT_MS);
+        try {
+            while (computer.isOffline()) {
+                if (!Boolean.TRUE.equals(node.slaveIsDisconnecting) && !computer.isConnecting()) {
+                    computer.connect(false);
+                    return;
+                }
+                if (System.nanoTime() > deadline) {
+                    // A launch that takes long, as one does, is the agent being connected again.
+                    if (!computer.isConnecting()) {
+                        LOGGER.log(
+                                Level.WARNING, "The vSphere agent {0} was not connected again after its recycle", node);
+                    }
+                    return;
+                }
+                Thread.sleep(RECONNECT_POLL_MS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /** Whether the recycle of the agent has not ended. */
+    public static boolean isRecycling(String node) {
+        try {
+            return AgentUsageRegistry.get().isRecycling(node);
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.FINE, "Could not find out whether the vSphere agent " + node + " was being recycled", e);
+            return false;
+        }
+    }
+
+    /** Whether the agent is being recycled by a disconnect that has not said yet how it went. */
+    public static boolean isAwaitingDisconnect(String node) {
+        try {
+            return AgentUsageRegistry.get().isAwaitingDisconnect(node);
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.FINE, "Could not find out whether the vSphere agent " + node + " was being recycled", e);
+            return false;
         }
     }
 

@@ -1,5 +1,7 @@
 <div>If the value is greater than 0; this will limit the TOTAL number of builds 
-    (from any job) allowed on this agent.  When the threshold number of builds 
-    is reached and the job is finished, the agent will be disconnected. 
+    (from any job) allowed on this agent.  A Pipeline run counts as one build, however many
+    <code>node {}</code> blocks it runs.  When the threshold number of builds
+    is reached, the agent takes no new builds (they wait in the queue, they are not aborted)
+    and, once nothing is using it, it is recycled: the agent is disconnected.
     Use 0 to disable this feature.
 </div>

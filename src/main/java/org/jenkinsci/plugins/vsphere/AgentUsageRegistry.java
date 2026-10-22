@@ -321,6 +321,14 @@ public final class AgentUsageRegistry {
         }
     }
 
+    /** The agent is being recycled and the disconnect has not said yet how it went. */
+    public boolean isAwaitingDisconnect(String node) {
+        synchronized (lock) {
+            final Entry entry = usages.get(node);
+            return entry != null && entry.recycle != null && !entry.recycle.done.isDone();
+        }
+    }
+
     /**
      * Says how the recycling of the agent went. Only the first to say it counts, so it may be said any number of
      * times. The recycling goes on until {@link #endRecycle}. Returns whether this was the first.
