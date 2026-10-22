@@ -791,7 +791,7 @@ class vSphereCloudPipelineLimitedBuildsTest {
                 .waitForStart();
         waitFor("the run to be counted", () -> agent.getNumberOfLimitedTestRuns() == 1);
         waitFor("its block to be on the agent", () -> agent.toComputer().countBusy() == 1);
-        r.waitForMessage("ping", run);
+        r.waitForMessage(hudson.Functions.isWindows() ? "ping" : "sleep 120", run);
 
         ((SlaveComputer) agent.toComputer()).getChannel().close();
         waitFor("the agent to be offline", () -> agent.toComputer().isOffline());
