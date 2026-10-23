@@ -68,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
@@ -778,22 +779,27 @@ public class VSphere {
             VmSize vmSize,
             PrintStream jLogger)
             throws VSphereException {
-        if (namedSnapshot == null && extraConfigParameters == null) {
-            // NOTE: This "if" clause may be superfluous - just that previously
-            // this message was only logged by cloneVm() or deployVm()... so for
-            // least surprise and unexpected noise in the logs, effectively kept
-            // so for upgraded plugins where we can also directly call this method
-            // as a "buildStep" under a "vSphere" pipeline step.
-            if (useCurrentSnapshot) {
-                // Called from cloneVm() above.
-                logMessage(
-                        jLogger,
-                        "Creating a " + (linkedClone ? "shallow" : "deep") + " clone of \"" + sourceName + "\" to \""
-                                + cloneName + "\"");
-            } else {
-                // Called from deployVm() above.
-                logMessage(jLogger, "Deploying new vm \"" + cloneName + "\" from template \"" + sourceName + "\"");
-            }
+        final String cloneKind = linkedClone ? "shallow" : "deep";
+
+        String msgExtraConfigParameters =
+                "with" + ((extraConfigParameters == null || extraConfigParameters.isEmpty()) ? "out" : "")
+                        + " extra config parameters";
+        if (useCurrentSnapshot || (namedSnapshot != null && !namedSnapshot.isEmpty())) {
+            // Called from cloneVm() above.
+            logMessage(
+                    jLogger,
+                    "Creating a " + cloneKind + " clone of \"" + sourceName + "\" to \""
+                            + cloneName + "\" using "
+                            + ((namedSnapshot != null && !namedSnapshot.isEmpty())
+                                    ? "snapshot named " + namedSnapshot
+                                    : "latest snapshot")
+                            + ", " + msgExtraConfigParameters);
+        } else {
+            // Called from deployVm() above: useCurrentSnapshot==false && namedSnapshot==null
+            logMessage(
+                    jLogger,
+                    "Deploying new VM \"" + cloneName + "\" from template \"" + sourceName + "\"" + ", "
+                            + msgExtraConfigParameters);
         }
 
         try {
@@ -819,7 +825,9 @@ public class VSphere {
                     throw new IllegalArgumentException(
                             "It is not valid to request a clone of " + sourceType + " \"" + sourceName
                                     + "\" based on its snapshot \"" + namedSnapshot
-                                    + "\" AND also specify that the latest snapshot should be used.  Either choose to use the latest snapshot, or name a snapshot, or neither, but not both.");
+                                    + "\" AND also specify that the latest snapshot should be used.  "
+                                    + "Either choose to use the latest snapshot, or name a snapshot, "
+                                    + "or neither, but not both.");
                 }
                 final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
                 if (namedVMSnapshot == null) {
@@ -928,16 +936,23 @@ public class VSphere {
                 }
             }
 
+            final long startNanos = System.nanoTime();
             final Task task = sourceVm.cloneVM_Task(folder, cloneName, cloneSpec);
             logMessage(jLogger, "Started cloning of " + sourceType + " \"" + sourceName + "\". Please wait ...");
 
             final String status = task.waitForTask();
+            final long elapsedMillis = (System.nanoTime() - startNanos) / 1000000L;
             if (!TaskInfoState.success.toString().equals(status)) {
                 throw newVSphereException(
                         task.getTaskInfo(),
                         "Couldn't clone \"" + sourceName + "\". " + "Clone task ended with status " + status + ".");
             }
-            logMessage(jLogger, "Successfully cloned VM \"" + sourceName + "\" to create \"" + cloneName + "\".");
+
+            final String took = String.format(Locale.ROOT, "%d.%03d", elapsedMillis / 1000L, elapsedMillis % 1000L);
+            logMessage(
+                    jLogger,
+                    "Successfully cloned VM/template \"" + sourceName + "\" to create \"" + cloneName
+                            + "\" as a \" + cloneKind + \" clone in " + took + " seconds.");
         } catch (RuntimeException | VSphereException e) {
             throw e;
         } catch (Exception e) {
