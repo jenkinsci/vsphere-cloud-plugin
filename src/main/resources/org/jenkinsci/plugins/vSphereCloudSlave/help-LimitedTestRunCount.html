@@ -1,7 +1,15 @@
-<div>If the value is greater than 0; this will limit the TOTAL number of builds 
-    (from any job) allowed on this agent.  A Pipeline run counts as one build, however many
-    <code>node {}</code> blocks it runs.  When the threshold number of builds
-    is reached, the agent takes no new builds (they wait in the queue, they are not aborted)
-    and, once nothing is using it, it is recycled: the slave-agent is disconnected and
-    the disconnect action is performed. Use 0 to disable this feature.
+<div>If the value is greater than 0, the agent is recycled after this many builds
+    (from any job). A Pipeline run counts as one build, however many
+    <code>node {}</code> blocks it runs, and it is counted on the first limited agent
+    that runs one of them only.
+    <p>
+    When the number is reached, the agent takes no new builds: they wait in the queue,
+    they are not aborted. What a run that is already counted on the agent needs is let
+    through all the same (the next <code>node {}</code> blocks of that run, and the builds
+    it starts), and runs beyond the limit. Once nothing is using the agent, it is recycled:
+    the slave-agent is disconnected and the disconnect action is performed, and the count
+    starts again. The count is kept when the agent is saved and when Jenkins is restarted.
+    <p>
+    Agents with the Run-Once retention strategy are not recycled by this: they are
+    terminated after each task. Use 0 to disable this feature.
 </div>
