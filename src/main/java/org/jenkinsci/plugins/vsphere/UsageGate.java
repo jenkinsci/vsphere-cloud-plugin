@@ -202,10 +202,7 @@ public final class UsageGate {
             for (Cause cause : causes) {
                 if (cause instanceof Cause.UpstreamCause) {
                     final Cause.UpstreamCause upstream = (Cause.UpstreamCause) cause;
-                    // By its id, and not the run: finding it could load a build from the disk, and one that is counted
-                    // has not ended.
-                    final String runId = upstream.getUpstreamProject() + "#" + upstream.getUpstreamBuild();
-                    if (registry.isCountedOn(runId, agent)) {
+                    if (registry.isCountedOn(upstreamRunId(upstream), agent)) {
                         return true;
                     }
                     next.addAll(upstream.getUpstreamCauses());
@@ -214,6 +211,21 @@ public final class UsageGate {
             causes = next;
         }
         return false;
+    }
+
+    /**
+     * The identifier that {@link Run#getExternalizableId} gives to the run that the cause points to, which is what the
+     * registry counts runs by.
+     * <p>
+     * It is put together here and not asked of the run, as finding the run goes through the permissions of the job and
+     * can load a build that has ended from the disk, for each item and each agent, holding the lock of the queue. The
+     * format is the one that the documentation of {@code getExternalizableId} gives (the full name of the job, a
+     * {@code #}, the number of the run), and {@link Cause.UpstreamCause} keeps the same two parts; but nothing says it is
+     * the format for ever. If Jenkins changes it, the runs that a counted run started stop being recognised without any
+     * error, and their builds wait for the agent: {@code UpstreamRunIdTest} fails first.
+     */
+    static String upstreamRunId(Cause.UpstreamCause cause) {
+        return cause.getUpstreamProject() + "#" + cause.getUpstreamBuild();
     }
 
     /** The run that the task is a part of, or null if it is not known to be part of one (a new build of a job). */
