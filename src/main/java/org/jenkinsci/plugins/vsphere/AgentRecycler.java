@@ -163,7 +163,16 @@ public final class AgentRecycler {
         }
     }
 
-    /** Starts recycling the agent if it is due, and says whether it did. The recycling itself is done on another thread. */
+    /**
+     * Starts recycling the agent if it is due, and says whether it did. The recycling itself is done on another thread.
+     * <p>
+     * The agent is marked offline here, once it is known to be free, and not when it reaches its limit. Until then
+     * {@link UsageGate} keeps new work away from it and lets through what a run counted on it needs, such as the next
+     * {@code node {}} blocks of a Pipeline; the queue does not offer work to an offline agent, so the run would wait
+     * for an agent that waits for the run to end. Every change of the mark also saves the configuration of the node.
+     * From the moment the recycle is taken (under the lock of the queue) {@link UsageGate} refuses everything, so the
+     * agent is not offered work in the time before it is marked.
+     */
     public boolean check(String name) {
         final Jenkins jenkins = Jenkins.getInstanceOrNull();
         final Node node = jenkins == null ? null : jenkins.getNode(name);
