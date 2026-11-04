@@ -20,6 +20,8 @@ import hudson.util.ListBoxModel;
 import hudson.util.Scrambler;
 import hudson.util.StreamTaskListener;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -1257,7 +1259,7 @@ public class vSphereCloud extends Cloud {
         Folder prevFolder = null;
 
         if (Stapler.getCurrentRequest2() != null) {
-            path = Stapler.getCurrentRequest2().getRequestURI().split("/");
+            path = requestUriPath();
         } else if (jobName != null) {
             path = jobName.split("/");
         }
@@ -1291,6 +1293,19 @@ public class vSphereCloud extends Cloud {
             }
         }
         return vSphereClouds;
+    }
+
+    /**
+     * Splits the URI of the current request into its path segments, decoded, so that they can be compared
+     * with the names of items. Item names that have spaces or non-ASCII characters are URL-encoded in the URI.
+     */
+    public static String[] requestUriPath() {
+        final String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
+        for (int i = 0; i < path.length; i++) {
+            // URLDecoder decodes form data, where a "+" is a space; in a path it is a plain "+".
+            path[i] = URLDecoder.decode(path[i].replace("+", "%2B"), StandardCharsets.UTF_8);
+        }
+        return path;
     }
 
     private static void extractClouds(List<vSphereCloud> vSphereClouds, Folder folder) {
