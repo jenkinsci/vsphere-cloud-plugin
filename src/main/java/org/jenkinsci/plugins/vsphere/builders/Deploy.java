@@ -34,7 +34,10 @@ import java.util.Map;
 import java.util.Set;
 import jenkins.tasks.SimpleBuildStep;
 import org.jenkinsci.plugins.vsphere.VSphereBuildStep;
+import org.jenkinsci.plugins.vsphere.tools.HostLimits;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionWaitNotification;
+import org.jenkinsci.plugins.vsphere.tools.HostSelectionWaitReason;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -88,6 +91,8 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private Boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private Boolean hostSelectionRequireAvailableMemory;
+    /** Opt-in: with no folder given, put the clone in its source's folder rewritten for the clone's host. */
+    private Boolean hostSelectionFolderFollowsHost;
     /**
      * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
      * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
@@ -98,6 +103,33 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
     private String hostWeightFreeCpuPercent;
     private String hostWeightFreeMemoryMB;
     private String hostWeightFreeMemoryPercent;
+    /**
+     * Optional, for this call: how many seconds to wait for a host within the cloud's free resource
+     * limits to become available before failing; 0 for not at all, -1 or "infinite" for as long as it
+     * takes. Blank inherits the cloud's setting.
+     */
+    private String hostSelectionWaitSeconds;
+
+    private String hostSelectionScoreDeviation;
+    /**
+     * Pipeline only: a closure called with ({@code String} message, {@link HostSelectionWaitReason} reason)
+     * whenever host selection finds no host to use at the moment, right after that is logged. Deliberately
+     * transient and without a readable property: it can only be passed in a pipeline's argument map, and is
+     * never saved with a job, shown in a form, or written into the pipeline's recorded step arguments.
+     */
+    private transient Object hostSelectionWaitNotification;
+    /** Pipeline only: if the closure fails, only log that (by default, the failure fails the step). */
+    private transient boolean hostSelectionWaitNotificationIgnoreErrors;
+    /**
+     * Optional free resource limits for this call, same meaning as on the vSphere Cloud but as text. If
+     * any of the four is set, they replace the cloud's limits as a whole (blank ones count as 0); if none
+     * is, the cloud's apply.
+     */
+    private String hostMinFreeCpuMhz;
+
+    private String hostMinFreeCpuPercent;
+    private String hostMinFreeMemoryMB;
+    private String hostMinFreeMemoryPercent;
 
     @DataBoundConstructor
     public Deploy(
@@ -356,6 +388,107 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    /**
+     * Opt-in override of the cloud's default: if no folder is given, put the clone in the folder of its source
+     * with the source's host name replaced by the name of the host the clone is placed on, if such a folder
+     * exists. {@code null} (the default) inherits the cloud's setting.
+     */
+    public Boolean getHostSelectionFolderFollowsHost() {
+        return hostSelectionFolderFollowsHost;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHost(Boolean hostSelectionFolderFollowsHost) {
+        this.hostSelectionFolderFollowsHost = hostSelectionFolderFollowsHost;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionFolderFollowsHost}.
+     */
+    public String getHostSelectionFolderFollowsHostAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionFolderFollowsHost);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHostAsString(String value) {
+        this.hostSelectionFolderFollowsHost = HostSelectionOptions.triStateFromString(value);
+    }
+
+    public String getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(String hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public String getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(String hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public String getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(String hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public String getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(String hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    /** Intentionally always null, see the field: the closure is for the call to use, not to be read back. */
+    public Object getHostSelectionWaitNotification() {
+        return null;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitNotification(Object hostSelectionWaitNotification) {
+        this.hostSelectionWaitNotification = hostSelectionWaitNotification;
+    }
+
+    public boolean isHostSelectionWaitNotificationIgnoreErrors() {
+        return hostSelectionWaitNotificationIgnoreErrors;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitNotificationIgnoreErrors(boolean hostSelectionWaitNotificationIgnoreErrors) {
+        this.hostSelectionWaitNotificationIgnoreErrors = hostSelectionWaitNotificationIgnoreErrors;
+    }
+
+    public String getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** Overrides the cloud's score deviation (0..1, negative: top host only, above 1: any host); blank inherits it. */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(String hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
+    public String getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(String hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
     public String getHostWeightFreeCpuMhz() {
         return hostWeightFreeCpuMhz;
     }
@@ -490,12 +623,26 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
                 hostWeightFreeCpuPercent == null ? null : env.expand(hostWeightFreeCpuPercent),
                 hostWeightFreeMemoryMB == null ? null : env.expand(hostWeightFreeMemoryMB),
                 hostWeightFreeMemoryPercent == null ? null : env.expand(hostWeightFreeMemoryPercent));
-        final HostSelectionOptions hostSelectionOptions = vSphereCloud.hostSelectionOptions(
-                sourceCloud,
-                hostSelectionRequireCores,
-                hostSelectionRequireMemory,
-                hostSelectionRequireAvailableMemory,
-                weightsOverride);
+        final HostSelectionOptions hostSelectionOptions = vSphereCloud
+                .hostSelectionOptions(
+                        sourceCloud,
+                        hostSelectionRequireCores,
+                        hostSelectionRequireMemory,
+                        hostSelectionRequireAvailableMemory,
+                        weightsOverride,
+                        HostSelectionOptions.parseWaitSeconds(
+                                hostSelectionWaitSeconds == null ? null : env.expand(hostSelectionWaitSeconds)),
+                        HostLimits.parseOverride(
+                                hostMinFreeCpuMhz == null ? null : env.expand(hostMinFreeCpuMhz),
+                                hostMinFreeCpuPercent == null ? null : env.expand(hostMinFreeCpuPercent),
+                                hostMinFreeMemoryMB == null ? null : env.expand(hostMinFreeMemoryMB),
+                                hostMinFreeMemoryPercent == null ? null : env.expand(hostMinFreeMemoryPercent)),
+                        hostSelectionFolderFollowsHost)
+                .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(
+                        hostSelectionScoreDeviation == null ? null : env.expand(hostSelectionScoreDeviation)))
+                .withWaitListener(
+                        HostSelectionWaitNotification.of(hostSelectionWaitNotification),
+                        hostSelectionWaitNotificationIgnoreErrors);
         final VmSize vmSize = VmSize.of(
                 cpuCores == null ? null : env.expand(cpuCores),
                 coresPerSocket == null ? null : env.expand(coresPerSocket),
@@ -587,6 +734,12 @@ public class Deploy extends VSphereBuildStep implements SimpleBuildStep {
         public FormValidation doCheckCluster(@QueryParameter String value) {
             if (value.length() == 0) return FormValidation.error(Messages.validation_required("the cluster"));
             return FormValidation.ok();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionFolderFollowsHostAsStringItems(@AncestorInPath Item context) {
+            throwUnlessUserHasPermissionToAccessJob(context);
+            return HostSelectionOptions.triStateItems();
         }
 
         public FormValidation doCheckTimeoutInSeconds(@QueryParameter String value) {

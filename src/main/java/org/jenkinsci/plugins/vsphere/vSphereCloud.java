@@ -20,6 +20,8 @@ import hudson.util.ListBoxModel;
 import hudson.util.Scrambler;
 import hudson.util.StreamTaskListener;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -45,6 +47,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.Stapler;
+import org.kohsuke.stapler.verb.POST;
 
 /**
  * @author Admin
@@ -116,12 +119,34 @@ public class vSphereCloud extends Cloud {
     private int hostWeightFreeMemoryMB;
     private int hostWeightFreeMemoryPercent;
 
+    /**
+     * Minimal free resources a host needs right now to be a candidate at all, however it ranks: free
+     * CPU (MHz), free CPU (% of the host), free memory (MB) and free memory (% of the host). Zero (the
+     * default) switches a limit off.
+     */
+    private long hostMinFreeCpuMhz;
+
+    private int hostMinFreeCpuPercent;
+    private long hostMinFreeMemoryMB;
+    private int hostMinFreeMemoryPercent;
+
+    /**
+     * If the limits leave no candidate host, how long to wait for one to free up before failing: 0 (the
+     * default) does not wait, a negative number waits for as long as it takes.
+     */
+    private long hostSelectionWaitSeconds;
+
+    /** 0..1: pick randomly among hosts scoring this close to the best; negative: always the best. */
+    private Double hostSelectionScoreDeviation;
+
     /** Opt-in: skip candidate hosts with fewer physical cores than the VM has vCPUs. */
     private boolean hostSelectionRequireCores;
     /** Opt-in: skip candidate hosts with less physical RAM than the VM is configured with. */
     private boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private boolean hostSelectionRequireAvailableMemory;
+
+    private boolean hostSelectionFolderFollowsHost;
 
     private transient int currentOnlineSlaveCount = 0;
     private transient ConcurrentHashMap<String, String> currentOnline;
@@ -478,6 +503,60 @@ public class vSphereCloud extends Cloud {
             @CheckForNull Boolean requireMemory,
             @CheckForNull Boolean requireAvailableMemory,
             @CheckForNull HostWeights weightsOverride) {
+        return hostSelectionOptions(cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, null);
+    }
+
+    /**
+     * As above, also with how long the call site is willing to wait for a host within the cloud's free
+     * resource limits: if {@code waitSecondsOverride} is not null it replaces the cloud's wait time.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride) {
+        return hostSelectionOptions(
+                cloud, requireCores, requireMemory, requireAvailableMemory, weightsOverride, waitSecondsOverride, null);
+    }
+
+    /**
+     * As above, also with the free resource limits a call site set for itself: if {@code
+     * limitsOverride} is not null it replaces the cloud's limits as a whole, else the cloud's apply.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride,
+            @CheckForNull HostLimits limitsOverride) {
+        return hostSelectionOptions(
+                cloud,
+                requireCores,
+                requireMemory,
+                requireAvailableMemory,
+                weightsOverride,
+                waitSecondsOverride,
+                limitsOverride,
+                null);
+    }
+
+    /**
+     * As above, also with whether the call site wants the clone's default folder to follow the host chosen
+     * for it: if {@code folderFollowsHostOverride} is not null it replaces the cloud's setting.
+     */
+    public static HostSelectionOptions hostSelectionOptions(
+            @CheckForNull vSphereCloud cloud,
+            @CheckForNull Boolean requireCores,
+            @CheckForNull Boolean requireMemory,
+            @CheckForNull Boolean requireAvailableMemory,
+            @CheckForNull HostWeights weightsOverride,
+            @CheckForNull Long waitSecondsOverride,
+            @CheckForNull HostLimits limitsOverride,
+            @CheckForNull Boolean folderFollowsHostOverride) {
         return new HostSelectionOptions(
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireCores(), requireCores),
@@ -485,7 +564,15 @@ public class vSphereCloud extends Cloud {
                                 cloud != null && cloud.isHostSelectionRequireMemory(), requireMemory),
                         HostSelectionOptions.resolve(
                                 cloud != null && cloud.isHostSelectionRequireAvailableMemory(), requireAvailableMemory))
-                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()));
+                .withWeights(weightsOverride != null ? weightsOverride : (cloud == null ? null : cloud.hostWeights()))
+                .withLimits(limitsOverride != null ? limitsOverride : (cloud == null ? null : cloud.hostLimits()))
+                .withWaitSeconds(
+                        waitSecondsOverride != null
+                                ? waitSecondsOverride.longValue()
+                                : (cloud == null ? 0 : cloud.getHostSelectionWaitSeconds()))
+                .withScoreDeviation(cloud == null ? 0 : cloud.hostScoreDeviation())
+                .withFolderFollowsHost(HostSelectionOptions.resolve(
+                        cloud != null && cloud.isHostSelectionFolderFollowsHost(), folderFollowsHostOverride));
     }
 
     /** For the classic config UI textbox, and pipeline/JCasC callers that prefer a plain string. */
@@ -544,6 +631,84 @@ public class vSphereCloud extends Cloud {
                 hostWeightFreeCpuMhz, hostWeightFreeCpuPercent, hostWeightFreeMemoryMB, hostWeightFreeMemoryPercent);
     }
 
+    public long getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    /** A host with less free CPU than this many MHz is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(long hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public int getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    /** A host with less free CPU than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(int hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public long getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    /** A host with less free memory than this many MB is not a candidate (absolute); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(long hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public int getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    /** A host with less free memory than this share of its capacity is not a candidate (relative); 0 = no limit. */
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(int hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    public long getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    /**
+     * How long, in seconds, to wait for a host within the free resource limits to become available
+     * before failing the clone/deploy: 0 = do not wait, negative = wait for as long as it takes.
+     */
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(long hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
+    public Double getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** The deviation as a number: unset is 0. */
+    public double hostScoreDeviation() {
+        return hostSelectionScoreDeviation == null ? 0d : hostSelectionScoreDeviation.doubleValue();
+    }
+
+    /**
+     * Hosts scoring within this fraction (0..1) of the best one are equally good candidates, and one of
+     * them is picked at random, so that many requests in a short time do not all land on the same host;
+     * 0 (the default) only counts equally scored hosts, a negative value always takes the top host, a
+     * value above 1 picks any available host at random.
+     */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(Double hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
+    /** The four limits as one value; {@link HostLimits#NONE} if none is set. */
+    public HostLimits hostLimits() {
+        return new HostLimits(hostMinFreeCpuMhz, hostMinFreeCpuPercent, hostMinFreeMemoryMB, hostMinFreeMemoryPercent);
+    }
+
     /**
      * Opt-in: only consider hosts with at least as many physical CPU cores as the VM has
      * vCPUs. Off by default (oversubscribed sites). Default for every template/build-step using this cloud; each can override it either way.
@@ -575,6 +740,19 @@ public class vSphereCloud extends Cloud {
      * configured with, so the new VM does not get swapped by the hypervisor. Default for every
      * template/build-step using this cloud; each can override it either way.
      */
+    public boolean isHostSelectionFolderFollowsHost() {
+        return hostSelectionFolderFollowsHost;
+    }
+
+    /**
+     * If the clone step gives no folder, put the clone in its source's folder with the source's host name
+     * replaced by the name of the host the clone is placed on, if such a folder exists.
+     */
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHost(boolean hostSelectionFolderFollowsHost) {
+        this.hostSelectionFolderFollowsHost = hostSelectionFolderFollowsHost;
+    }
+
     public boolean isHostSelectionRequireAvailableMemory() {
         return hostSelectionRequireAvailableMemory;
     }
@@ -1089,7 +1267,7 @@ public class vSphereCloud extends Cloud {
         Folder prevFolder = null;
 
         if (Stapler.getCurrentRequest2() != null) {
-            path = Stapler.getCurrentRequest2().getRequestURI().split("/");
+            path = requestUriPath();
         } else if (jobName != null) {
             path = jobName.split("/");
         }
@@ -1123,6 +1301,19 @@ public class vSphereCloud extends Cloud {
             }
         }
         return vSphereClouds;
+    }
+
+    /**
+     * Splits the URI of the current request into its path segments, decoded, so that they can be compared
+     * with the names of items. Item names that have spaces or non-ASCII characters are URL-encoded in the URI.
+     */
+    public static String[] requestUriPath() {
+        final String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
+        for (int i = 0; i < path.length; i++) {
+            // URLDecoder decodes form data, where a "+" is a space; in a path it is a plain "+".
+            path[i] = URLDecoder.decode(path[i].replace("+", "%2B"), StandardCharsets.UTF_8);
+        }
+        return path;
     }
 
     private static void extractClouds(List<vSphereCloud> vSphereClouds, Folder folder) {
@@ -1184,6 +1375,42 @@ public class vSphereCloud extends Cloud {
             return FormValidation.validateNonNegativeInteger(value);
         }
 
+        public FormValidation doCheckHostMinFreeCpuMhz(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeCpuPercent(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, 0, 100);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryMB(@QueryParameter String value) {
+            return FormValidation.validateNonNegativeInteger(value);
+        }
+
+        public FormValidation doCheckHostMinFreeMemoryPercent(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, 0, 100);
+        }
+
+        /** 0 for not waiting, -1 for waiting as long as it takes. */
+        public FormValidation doCheckHostSelectionWaitSeconds(@QueryParameter String value) {
+            return FormValidation.validateIntegerInRange(value, -1, Integer.MAX_VALUE);
+        }
+
+        /** A number; negative means always the top host, above 1 any host at random. */
+        @POST
+        public FormValidation doCheckHostSelectionScoreDeviation(@QueryParameter String value) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            if (value == null || value.trim().isEmpty()) {
+                return FormValidation.ok();
+            }
+            try {
+                HostSelectionOptions.parseScoreDeviation(value);
+                return FormValidation.ok();
+            } catch (VSphereException e) {
+                return FormValidation.error(e.getMessage());
+            }
+        }
+
         public FormValidation doCheckMaxOnlineSlaves(@QueryParameter String value) {
             return FormValidation.validateNonNegativeInteger(value);
         }
@@ -1214,6 +1441,30 @@ public class vSphereCloud extends Cloud {
                         "This cloud's VM operations will block (and log a message to consumers) until maintenance mode is turned off.");
             }
             return FormValidation.ok();
+        }
+
+        /**
+         * Starts the agents of the cloud again as far as "Disconnect after Limited Builds" goes, as if they had not done
+         * any build. For when everything was restarted after an outage and the agents are known to be clean.
+         */
+        @POST
+        public FormValidation doResetUsages(@QueryParameter String name) {
+            Jenkins.get().checkPermission(Jenkins.ADMINISTER);
+            final Cloud cloud = Jenkins.get().clouds.getByName(name);
+            if (!(cloud instanceof vSphereCloud)) {
+                return FormValidation.error("There is no vSphere cloud with the ID \"%s\".", name);
+            }
+            final String description = ((vSphereCloud) cloud).getVsDescription();
+            int reset = 0;
+            for (Node node : Jenkins.get().getNodes()) {
+                if (node instanceof vSphereCloudSlave
+                        && description != null
+                        && description.equals(((vSphereCloudSlave) node).getVsDescription())) {
+                    AgentUsageRegistry.get().reset(node.getNodeName());
+                    reset++;
+                }
+            }
+            return FormValidation.ok("Reset the usage of %d agent(s).", reset);
         }
 
         public ListBoxModel doFillHostSelectionModeItems() {

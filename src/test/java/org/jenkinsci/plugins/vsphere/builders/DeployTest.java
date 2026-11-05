@@ -177,4 +177,39 @@ class DeployTest {
 
         assertThat(step.getSourceCloud(), is(cloud));
     }
+
+    @Test
+    void waitNotificationClosureBindsLikeAPipelineWouldPassItButIsNeverReadBackOrSaved(
+            org.jvnet.hudson.test.JenkinsRule r) throws Exception {
+        groovy.lang.Closure<Object> closure = new groovy.lang.Closure<Object>(this) {
+            @SuppressWarnings("unused")
+            public Object doCall(String message, Object reason) {
+                return null;
+            }
+        };
+        Map<String, Object> args = baseArgs();
+        args.put("hostSelectionWaitNotification", closure);
+        args.put("hostSelectionWaitNotificationIgnoreErrors", true);
+        Deploy step = DescribableModel.of(Deploy.class).instantiate(args);
+
+        assertThat(step.isHostSelectionWaitNotificationIgnoreErrors(), is(true));
+        // not readable as a property, so it cannot leak into recorded step arguments or generated snippets
+        assertThat(step.getHostSelectionWaitNotification(), nullValue());
+        assertThat(
+                DescribableModel.of(Deploy.class)
+                        .uninstantiate2(step)
+                        .toMap()
+                        .containsKey("hostSelectionWaitNotification"),
+                is(false));
+        // and not persisted with a job's configuration
+        String xml = jenkins.model.Jenkins.XSTREAM2.toXML(step);
+        assertThat(xml.contains("hostSelectionWaitNotification"), is(false));
+        assertThat(xml.contains("hostSelectionWaitNotificationIgnoreErrors"), is(false));
+    }
+
+    @Test
+    void waitNotificationIsOffByDefault() throws Exception {
+        Deploy step = DescribableModel.of(Deploy.class).instantiate(baseArgs());
+        assertThat(step.isHostSelectionWaitNotificationIgnoreErrors(), is(false));
+    }
 }

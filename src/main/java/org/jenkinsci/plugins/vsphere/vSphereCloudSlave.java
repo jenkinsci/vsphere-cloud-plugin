@@ -15,7 +15,6 @@ import hudson.model.ItemGroup;
 import hudson.model.Node;
 import hudson.model.Queue;
 import hudson.model.Queue.BuildableItem;
-import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.queue.CauseOfBlockage;
@@ -28,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import jenkins.model.Jenkins;
 import jenkins.model.NodeListener;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -54,8 +54,6 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     private final String idleOption;
     /** If more than zero then this is the number of build-jobs we limit the agent to. */
     private Integer LimitedTestRunCount = 0;
-    /** A count of the number of build-jobs this agent has done. */
-    private transient Integer NumberOfLimitedTestRuns = 0;
 
     public transient Boolean doingLastInLimitedTestRun = Boolean.FALSE;
 
@@ -113,16 +111,12 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
         this.idleOption = idleOption;
         final Number parsedLimitedTestRunCount = Util.tryParseNumber(LimitedTestRunCount, 0);
         this.LimitedTestRunCount = parsedLimitedTestRunCount != null ? parsedLimitedTestRunCount.intValue() : 0;
-        this.NumberOfLimitedTestRuns = 0;
         readResolve();
     }
 
     @Override
     protected Object readResolve() {
         super.readResolve();
-        if (NumberOfLimitedTestRuns == null) {
-            NumberOfLimitedTestRuns = 0;
-        }
         if (LimitedTestRunCount == null) {
             LimitedTestRunCount = 0;
         }
@@ -292,96 +286,116 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
             return new CauseOfBlockage.BecauseNodeIsOffline(this);
         }
 
-        return super.canTake(buildItem);
-    }
-
-    private static final ConcurrentHashMap<Run, Computer> RunToSlaveMapper = new ConcurrentHashMap<Run, Computer>();
-
-    public boolean StartLimitedTestRun(Run r, TaskListener listener) {
-        boolean ret = false;
-        boolean DoUpdates = false;
-
-        if (LimitedTestRunCount > 0) {
-            DoUpdates = true;
-            if (NumberOfLimitedTestRuns < LimitedTestRunCount) {
-                ret = true;
-            }
-        } else {
-            ret = true;
+        // What the agent cannot take for other reasons first: the queue says that the label is missing, and an item
+        // that the agent could never take is not worth looking into.
+        final CauseOfBlockage other = super.canTake(buildItem);
+        if (other != null) {
+            return other;
         }
 
-        Executor executor = r.getExecutor();
-        if (executor != null && DoUpdates) {
-            if (ret) {
-                NumberOfLimitedTestRuns++;
+        return UsageGate.check(this, buildItem);
+    }
+
+    public boolean StartLimitedTestRun(Run r, TaskListener listener) {
+        return startLimitedTest(r, r.getExecutor(), listener);
+    }
+
+    /**
+     * Counts a Pipeline {@link Run} the first time one of its {@code node {}} blocks starts on an agent: the
+     * {@link Run} itself is owned by a flyweight executor on the controller, so {@link #StartLimitedTestRun} never
+     * sees it. Further blocks of the same {@link Run}, on this or another agent, are not counted again.
+     */
+    void StartLimitedPipelineRun(Executor executor, Run run) {
+        startLimitedTest(run, executor, null);
+    }
+
+    private boolean startLimitedTest(Run run, Executor executor, TaskListener listener) {
+        if (executor == null) {
+            // Nothing to count it on. As always, say whether there would have been room.
+            return LimitedTestRunCount <= 0 || getNumberOfLimitedTestRuns() < LimitedTestRunCount;
+        }
+        final AgentUsageRegistry.Acquired acquired =
+                AgentUsageRegistry.get().acquire(getNodeName(), LimitedTestRunCount, run);
+        switch (acquired.outcome()) {
+            case COUNTED:
                 vSphereCloud.Log(
                         this,
                         listener,
                         "Starting limited count build: %d of %d",
-                        NumberOfLimitedTestRuns,
+                        acquired.count(),
                         LimitedTestRunCount);
-                Computer slave = executor.getOwner();
-                RunToSlaveMapper.put(r, slave);
-            } else {
+                return true;
+            case OVER_LIMIT:
                 vSphereCloud.Log(
                         this,
                         listener,
-                        "Terminating build due to limited build count: %d of %d",
-                        NumberOfLimitedTestRuns,
+                        "Not counting work started beyond the limited build count: %d of %d",
+                        acquired.count(),
                         LimitedTestRunCount);
-                executor.interrupt(Result.ABORTED);
-            }
+                return false;
+            default:
+                // No limit, or the run is counted already, or it is over.
+                return true;
         }
-
-        return ret;
     }
 
     public boolean EndLimitedTestRun(Run r) {
-        boolean ret = true;
+        return endLimitedTest(r);
+    }
 
-        // See if the run maps to an existing computer; remove if found.
-        Computer slave = RunToSlaveMapper.get(r);
-        if (slave != null) {
-            RunToSlaveMapper.remove(r);
-        }
-
-        if (LimitedTestRunCount > 0) {
-            if (NumberOfLimitedTestRuns >= LimitedTestRunCount) {
-                ret = false;
-                NumberOfLimitedTestRuns = 0;
-                try {
-                    if (slave != null) {
-                        vSphereCloud.Log(
-                                this,
-                                "Disconnecting the slave agent on %s due to limited build threshold",
-                                slave.getName());
-
-                        final VSphereOfflineCause tempOffline =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
-                        slave.setTemporarilyOffline(true, tempOffline);
-                        slave.waitUntilOffline();
-                        final VSphereOfflineCause disconnect =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_Disconnect());
-                        slave.disconnect(disconnect);
-                        final VSphereOfflineCause tempOnline =
-                                new VSphereOfflineCause(Messages._vSphereCloudSlave_LimitedBuild_TemporarilyOnline());
-                        slave.setTemporarilyOffline(false, tempOnline);
-                    } else {
-                        vSphereCloud.Log(
-                                this,
-                                "Attempting to shutdown slave due to limited build threshold, but cannot determine slave");
-                    }
-                } catch (NullPointerException ex) {
-                    vSphereCloud.Log(this, ex, "NullPointerException thrown while retrieving the slave agent");
-                } catch (InterruptedException ex) {
-                    vSphereCloud.Log(
-                            this, ex, "InterruptedException thrown while marking the slave as online or offline");
-                }
-            }
+    /**
+     * The {@link Run} is over, whether it is a freestyle build or a Pipeline (so none of its {@code node {}} blocks is
+     * still using the agent). Does nothing for a {@link Run} that was not counted.
+     */
+    static void EndLimitedRun(Run run) {
+        final vSphereCloudSlave agent = findCountedAgent(run, Jenkins.get()::getNode);
+        if (agent != null) {
+            agent.endLimitedTest(run);
         } else {
-            ret = true;
+            // The run was not counted, or its agent is gone (e.g. removed by a run-once retention strategy).
+            AgentUsageRegistry.get().release(run);
         }
-        return ret;
+    }
+
+    /**
+     * The agent the run is counted on, or null if there is none. The agent may be renamed between asking where the run
+     * was counted and looking the agent up, in which case it is asked again. (Jenkins renames the agent in its own list
+     * a moment before the listener that renames it here is called; a run that ends in that moment is not found, and
+     * the agent starts again from nothing when that listener runs.)
+     */
+    static vSphereCloudSlave findCountedAgent(Run run, Function<String, Node> lookup) {
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        String name = registry.nodeOf(run);
+        for (int attempt = 0; name != null && attempt < 2; attempt++) {
+            final Node node = lookup.apply(name);
+            if (node instanceof vSphereCloudSlave) {
+                return (vSphereCloudSlave) node;
+            }
+            final String current = registry.nodeOf(run);
+            if (name.equals(current)) {
+                break;
+            }
+            name = current;
+        }
+        return null;
+    }
+
+    static boolean hasLimitedTestRun(Run run) {
+        return AgentUsageRegistry.get().isCounted(run);
+    }
+
+    int getNumberOfLimitedTestRuns() {
+        return AgentUsageRegistry.get().count(getNodeName());
+    }
+
+    /**
+     * The run is over, so it is no longer using the agent. If that was the last of the uses the agent is allowed, it is
+     * recycled once nothing is using it, which is not now: other runs may still be.
+     */
+    private boolean endLimitedTest(Run run) {
+        AgentUsageRegistry.get().release(run);
+        AgentRecycler.get().scheduleCheck(getNodeName());
+        return true;
     }
 
     /**
@@ -421,10 +435,31 @@ public class vSphereCloudSlave extends AbstractCloudSlave {
     public static class vSphereCloudNodeListener extends NodeListener {
 
         @Override
+        protected void onCreated(@NonNull Node node) {
+            // A new agent that takes the name of one that is gone starts from nothing.
+            if (node instanceof vSphereCloudSlave) {
+                AgentUsageRegistry.get().forget(node.getNodeName());
+            }
+        }
+
+        @Override
+        protected void onDeleted(@NonNull Node node) {
+            if (node instanceof vSphereCloudSlave) {
+                AgentUsageRegistry.get().forget(node.getNodeName());
+            }
+        }
+
+        @Override
         protected void onUpdated(@NonNull Node oldOne, @NonNull Node newOne) {
             if (!(oldOne instanceof vSphereCloudSlave) || !(newOne instanceof vSphereCloudSlave)) {
                 return;
             }
+            // Saving an agent replaces its node, but not its usage: keep it under the name it has now.
+            final AgentUsageRegistry registry = AgentUsageRegistry.get();
+            if (!oldOne.getNodeName().equals(newOne.getNodeName())) {
+                registry.rename(oldOne.getNodeName(), newOne.getNodeName());
+            }
+            registry.reconcile(newOne.getNodeName(), ((vSphereCloudSlave) newOne).getLimitedTestRunCount());
             final Computer computer = newOne.toComputer();
             final boolean connected = computer instanceof SlaveComputer && ((SlaveComputer) computer).isOnline();
             carryOverConnectedLauncher((vSphereCloudSlave) oldOne, (vSphereCloudSlave) newOne, connected);

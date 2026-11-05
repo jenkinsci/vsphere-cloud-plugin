@@ -12,6 +12,12 @@ jenkins:
         hostWeightFreeCpuPercent: 2
         hostWeightFreeMemoryMB: 3
         hostWeightFreeMemoryPercent: 4
+        hostMinFreeCpuMhz: 500
+        hostMinFreeCpuPercent: 10
+        hostMinFreeMemoryMB: 2048
+        hostMinFreeMemoryPercent: 15
+        hostSelectionWaitSeconds: -1
+        hostSelectionScoreDeviation: "0.25"
         hostSelectionCandidatesAsString: "esx01.company.example, esx02.company.example"
         vsConnectionConfig:
           vsHost: "https://company-vsphere"

@@ -1,0 +1,17 @@
+<div>
+  (Optional, a number) Spreads load over the hosts that are about equally good. Normally the
+  best-scoring host wins; when several requests arrive within a short time, they would all land on the same
+  host, as its load only shows after the VM starts. With this set, any host scoring at least
+  <i>(1 - deviation)</i> times the best score is as good as the best one, and one of them is picked at
+  random. The build log says when that happened.
+  <ul>
+    <li><tt>0</tt> (the default): choose randomly only among hosts with exactly the best score.</li>
+    <li>e.g. <tt>0.1</tt>: hosts within 10% of the best score are all candidates.</li>
+    <li><tt>1</tt>: all hosts that pass the filters are candidates.</li>
+    <li>above <tt>1</tt> (e.g. <tt>2</tt>): choose <b>any</b> available host at random, whatever its load:
+      reachable, not in maintenance, among the candidate hosts and not too small (where its size is known),
+      including hosts that report no usage statistics. The free resource limits and the free RAM requirement,
+      which need usage figures, are not applied.</li>
+    <li>a negative number: always take the single top host (the first one on a tie).</li>
+  </ul>
+</div>

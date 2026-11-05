@@ -44,7 +44,6 @@ import org.jenkinsci.plugins.vsphere.tools.VSphereException;
 import org.jenkinsci.plugins.vsphere.tools.VSphereLogger;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
-import org.kohsuke.stapler.Stapler;
 
 public class VSphereBuildStepContainer extends Builder implements SimpleBuildStep {
 
@@ -181,7 +180,7 @@ public class VSphereBuildStepContainer extends Builder implements SimpleBuildSte
             Folder prevFolder = null;
 
             try {
-                String[] path = Stapler.getCurrentRequest2().getRequestURI().split("/");
+                String[] path = vSphereCloud.requestUriPath();
                 for (String item : path) {
 
                     if (item.equals("job") || item.equals("jenkins")) continue;

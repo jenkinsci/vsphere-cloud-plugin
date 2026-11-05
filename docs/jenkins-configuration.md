@@ -113,8 +113,22 @@ when enabled, Jenkins will wait until VMTools is running before continuing with 
 allowing a lower "Delay between launch and boot complete" value without sacrificing reliability.
 * Delay between launch and boot complete:
 Number of seconds to delay after starting the virtual machine (or after waiting for VMTools) before assuming the node is operational.
-* Disconnect after Limited Builds: Will force the node agent to disconnect after the specified number of builds have been performed, triggering the disconnect action.
-**Note:** Currently, the "Disconnect After Limited Builds" configuration parameter is not used.
+* Disconnect after Limited Builds: Will force the node agent to be recycled after the specified number of builds have been performed, triggering the disconnect action. A Pipeline run counts as one build, however many `node {}` blocks or stages it runs: it is counted when its first block starts on a limited vSphere agent, and only on that agent (the other agents it uses afterwards are not charged for it).
+  * Recycling: An agent that has reached its limit takes no new builds, but it does not lose the ones it has: it is disconnected, and its idle action done, once nothing is using it, which is looked at a few seconds after a counted run ends and every minute. Agents with the "Run-Once" retention strategy are not recycled by this: their retention strategy terminates them after each task (for a Pipeline, after each `node {}` block), whatever the limit.
+  * Waiting builds: A build that would have started on such an agent waits in the queue ("has reached its limit of N builds") instead of being aborted, until the agent has been recycled.
+  * When the count starts again: The count starts again when the disconnect has done its idle action, not before. If that goes wrong, or the virtual machine cannot be found, or it is not powered on (it is off or suspended) and the idle action is one that reverts it, and the agent is not launched from a snapshot (which it is reverted to when launched, whatever the state of the machine), the agent stays at its limit of builds and is recycled again the next time it is launched (not sooner than one minute after, then further apart up to half an hour).
+  * What a recycle cleans: Only a revert cleans the virtual machine (the idle actions that revert it, or the snapshot that the agent is launched from). With `Nothing`, `Suspend`, `Shutdown` or `Reset`, or `Reconnect and Revert` with no snapshot to launch the agent from, the count starts again but the machine keeps what the builds left on it, and a message in the log of the agent says so. A clone made from a template has no idle action and no snapshot, so recycling it does not clean it.
+  * Other disconnects and connecting again: The recycle does not connect the agent again, except for one with `Reconnect and Revert`, which it connects whatever happened (a retention strategy that launches agents may still do it). If something else disconnects an agent that has reached its limit, such as its retention strategy when it is idle, its idle action is done but its count is not started again: it is recycled once more when it is launched again.
+  * Let through all the same: Some things are let through all the same, as refusing them would make the agent wait for them for ever: the next `node {}` blocks of a Pipeline that is counted on the agent, a Pipeline that was running when Jenkins was restarted, and any build (of a job, or a `node {}` block of a Pipeline) that a run counted on the agent started, e.g. with a `build` step, for as long as that run lasts; these run beyond the limit.
+  * Known limits, what a counted run waits for: Anything else that a run counted on the agent waits for, such as a lock, a `waitUntil` or an `input`, has to wait for the agent to be recycled, which does not happen until that run is over: do not make a run on a limited agent wait for another build that needs the same agent. A Pipeline that waits for an `input` outside any `node {}` holds the agent until it goes on.
+  * Known limits, how the agent looks: While it waits to be recycled the agent looks online (and the blocks of a Pipeline that is counted on another agent are let through while this one has runs of its own, for the same reason). It still counts, for Jenkins, as capacity with free executors: builds that wait only because of it may not make Jenkins provision a new clone for their label until the agent has been recycled.
+  * Known limits, after the recycle: An agent that Jenkins cannot launch by itself stays offline until someone launches it, as before: that is the case unless "Force VM Launch" is set, and builds that only that agent can take wait for it. While the agent waits to be recycled again after a recycle that went wrong, a retention strategy that launches agents when they are needed may launch it and disconnect it for being idle over and over, doing its idle action each time, until the wait is over.
+  * Known limits, restarts and jobs that change: A `node {}` block of a Pipeline that is counted on another agent, and was running on this one when Jenkins was restarted, is handed to the agent only once Jenkins has resumed the Pipeline: if the agent is launched and has nothing else to do before that, it is recycled and its machine reverted under the block. Moving or renaming a job while one of its runs is counted makes the run look finished (its identifier changes): the agent may be recycled before that run ends.
+  * A run that keeps an idle agent from being recycled: a run counted on the agent may be waiting for a build that needs that very agent (a lock, or a `waitUntil` that depends on another build, outside any `node {}`), and such a build cannot be told from any other new one, so the two wait for each other for ever. When the system property `org.jenkinsci.plugins.vsphere.UsageGate.idleHeldMs` is set to a number of milliseconds, an agent that has reached its limit and has had nothing to do for that long only because of such a run takes work again, one build at a time, beyond its limit and uncounted, until the run is over. It is off by default (negative), as it gives up the clean machine that the limit is for, and a message in the log says, once in a while, that builds are kept waiting by an agent that has been held idle for more than 10 minutes. A run that waits inside its `node {}` block on an agent with several executors still makes new builds wait.
+  * Saving and restarting: The number of builds an agent has done is kept when the agent is saved and when Jenkins is restarted (in `vsphere-cloud-usage.xml` in the Jenkins home, with the runs that are using the agent), and a Pipeline that was running when Jenkins was restarted is not counted again when it resumes. An agent that had reached its limit when Jenkins stopped is kept as it was, as its machine has not been cleaned, and is recycled once it is launched and nothing is using it (an agent that Jenkins cannot launch by itself, as above, has to be launched by hand once for that, and once more after it). Nothing is reset when Jenkins starts.
+  * Tuning: the system properties (all in milliseconds) `org.jenkinsci.plugins.vsphere.AgentRecycler.checkDelayMs` (default 5000: how long after a counted run ends the agent is looked at), `org.jenkinsci.plugins.vsphere.AgentRecycler.sweepPeriodMs` (default 60000: how often all the agents are looked at) and `org.jenkinsci.plugins.vsphere.AgentRecycler.recycleTimeoutMs` (default 600000: how long to wait for the disconnect to say that it is done). `org.jenkinsci.plugins.vsphere.UsageGate.idleHeldMs` is described above.
+  * Reset button: The "Reset usage counts" button of a cloud (visible once the cloud is saved, for administrators) makes all the agents of that cloud start counting again, e.g. after an outage that restarted everything; it does not recycle them. The builds that are running on an agent when it is pressed go on using it, and are counted as before; but a Pipeline that is running then, if Jenkins is restarted, is counted again at its next `node {}` block. The button is not implemented for clouds that are defined in a folder: the action looks the cloud up among the clouds of Jenkins, so the button is not shown on a folder's cloud. It can be added, maybe with a lesser permission than the administrator's, when someone needs it.
+  * A fresh clone for each `node {}` block: Give the template the "Run-Once" retention strategy. Each clone is then terminated when a task ends, so every `node {}` block of a Pipeline that only asks for a label needs a new clone, and the limit does not apply to it. Give such a template a single executor: with several, the first block that ends terminates the clone even if another block is still running on it, and that block's run is aborted. Every block also pays for a full clone and its boot. Counting each block against the limit, or a fresh clone every N blocks, is not available.
 * GuestInfo Properties:
 you can use "guestinfos" to provide properties (e.g. the URL to the Jenkins Master and the JNLP "secret") to the clone.
 This is especially useful if you chose "Java Web Start" (JNLP) as launch method, e.g. for a Windows VM.
@@ -418,11 +432,11 @@ The four measures of each host, as the formula sees them (the best free MHz, 541
 free MB, 1027075, are the reference of the two absolute ones), approximately because the log rounds
 the percentages:
 
-| Host | MHz `a` (weight 1) | CPU % `b` (1) | MB `c` (5) | RAM % `d` (5) | Score |
-|------|------|------|------|------|------|
-| virthost3 | 0.90 | 0.51 | 0.99 | 0.49 | 0.73 |
-| virthost1 | 1.00 | 0.57 | 0.96 | 0.47 | 0.73 |
-| virthost2 | 0.78 | 0.44 | 1.00 | 0.49 | 0.72 |
+| Host      | MHz `a` (weight 1) | CPU % `b` (1) | MB `c` (5) | RAM % `d` (5) | Score |
+|-----------|--------------------|---------------|------------|---------------|-------|
+| virthost3 | 0.90               | 0.51          | 0.99       | 0.49          | 0.73  |
+| virthost1 | 1.00               | 0.57          | 0.96       | 0.47          | 0.73  |
+| virthost2 | 0.78               | 0.44          | 1.00       | 0.49          | 0.72  |
 
 Things this shows:
 
@@ -437,6 +451,99 @@ Things this shows:
   and `0.63` for `virthost2`), and `1, 1, 1, 1` would pick it as well (`0.75`, `0.72`, `0.68`).
   Which of the hosts is "right" is the decision the weights express, not something the plugin can tell.
 
+##### Keeping overloaded hosts off the list, and waiting for a free one
+
+Weights only choose among the hosts that are acceptable; **limits** decide which hosts are
+acceptable at all. On the vSphere Cloud (under *Advanced*) an admin can set the minimal free
+resources a host must have *right now* to be considered:
+
+| Setting                    | Meaning                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| `hostMinFreeCpuMhz`        | free CPU in MHz (absolute)                                            |
+| `hostMinFreeCpuPercent`    | free CPU as a percentage of the host's own capacity, 0-100 (relative) |
+| `hostMinFreeMemoryMB`      | free RAM in MB (absolute)                                             |
+| `hostMinFreeMemoryPercent` | free RAM as a percentage of the host's own memory, 0-100 (relative)   |
+
+A host with less free than a limit is ruled out (the log says which limit); a host must satisfy
+every limit that is set, and one whose usage is unknown cannot be shown to, so it is ruled out too.
+`0`, the default, switches a limit off, so nothing changes until you set one. Use the absolute
+limits for farms of similar hosts, and the relative ones for mixed farms - e.g.
+`hostMinFreeCpuPercent: 20` and `hostMinFreeMemoryPercent: 10` mean "never start a new VM on a
+host that is over 80% CPU-busy or has less than a tenth of its RAM free".
+
+A template or build step can set the same four limits for itself (given as text, so variables
+work), with the same rule as for weights: leave all four blank to use the cloud's; if **any** is
+set, the four values replace the cloud's limits as a whole and the blank ones count as `0`. Setting
+all four to `0` therefore lifts the cloud's limits for that call.
+
+Limits apply whenever automatic host selection runs (`LEAST_LOADED` or `DRS_RECOMMENDED`). They
+are not applied to a fixed `host`, which always wins, nor when no mode is set.
+
+Because the limits can leave **no** host - and so can other situations - automatic host selection
+can **wait** for a suitable host to become available. `hostSelectionWaitSeconds` says for how long:
+
+* `0` (the default): do not wait;
+* a positive number: look at the hosts' load again every 15 seconds for up to that many seconds,
+  and carry on as soon as one qualifies;
+* `-1` (or, in the text fields of build steps and templates, `infinite`): wait for as long as it
+  takes. An aborted build stops waiting.
+
+It applies whenever no host can be used at the moment, whatever the reason, and the build log says
+which one, whether the build will wait (and for how long) or give up right away, and what giving up
+means, at the moment the situation is found:
+
+| Reason (`HostSelectionWaitReason`) | Situation | Assumed to be |
+| ---------------------------------- | --- | --- |
+| `BELOW_FREE_RESOURCE_LIMITS`       | every usable host has less free CPU/RAM than the limits | transient |
+| `NO_HOST_WITH_FREE_RAM_FOR_VM`     | with *Require enough free RAM*, no host has the VM's memory size free right now | transient |
+| `NO_USABLE_HOSTS`                  | all hosts disconnected, in maintenance mode, or not among the candidates | persistent |
+| `NO_HOST_FITS_VM_SIZE`             | no host has enough cores/RAM for the VM, as the *Require enough ...* settings ask | persistent |
+| `NO_USAGE_STATISTICS`              | no candidate host reports CPU/memory usage (`LEAST_LOADED` needs it; `DRS_RECOMMENDED` does not) | persistent |
+
+*Giving up* (not waiting, or the time ran out) means **failing** the clone/deploy when it was the
+free resource limits that ruled out every host - vCenter must not then place the VM regardless of
+them - and, in all other situations, leaving the placement to vCenter, as it always was. So with the
+default of `0` nothing changes for setups without limits. After a wait, the situation may have
+changed; what counts is the last one seen.
+
+Set it on the cloud for a default, and override it per template or per *Clone VM*/*Deploy VM*
+step (`hostSelectionWaitSeconds: '600'`; blank inherits). While waiting, the build occupies its
+executor and a connection to vCenter, so a finite wait is advisable on busy farms.
+
+A pipeline can also be told, at the moment the situation is found and logged - see
+[the pipeline documentation](pipeline.md#being-told-that-no-host-is-available).
+
+```yaml
+jenkins:
+  clouds:
+    - vSphere:
+        hostSelectionMode: "LEAST_LOADED"
+        hostMinFreeCpuPercent: 20
+        hostMinFreeMemoryMB: 4096
+        hostSelectionWaitSeconds: 900   # up to 15 minutes
+```
+
+##### Not sending every request to the same host
+
+The load of a host only shows after a new VM has started on it, so requests that arrive in quick
+succession would all pick the same best-scoring host. `hostSelectionScoreDeviation` (a number from 0
+to 1, or beyond) makes every host that scores at least *(1 - deviation)* times the best score an equally good
+candidate, and picks one of them at random; the build log says so when it happens:
+
+* `0` (the default): random among hosts with exactly the best score only;
+* e.g. `0.1`: hosts within 10% of the best score;
+* `1`: any host that has a score, i.e. reports usage;
+* above `1` (e.g. `2`): **any available host at random**, whatever its load: reachable, not in
+  maintenance, among the candidate hosts and not too small where its size is known - including hosts
+  that report no usage statistics. The free resource limits and *Require enough free RAM*, which need
+  usage figures, are not applied;
+* a negative number: always the single top host (the first one on a tie), as before.
+
+It can be set on the cloud, and overridden by a template or a *Clone VM*/*Deploy VM* step
+(`hostSelectionScoreDeviation: '0.05'`; blank inherits the cloud's, any value set replaces it).
+It does not apply when DRS recommends the host. In Configuration as Code, write the number in
+quotes (`hostSelectionScoreDeviation: "0.1"`): an unquoted fraction is not picked up.
+
 ##### Seeing why a host was chosen
 
 With a host selection mode set, the build console log (and the template's provisioning log)
@@ -445,6 +552,25 @@ maintenance mode, not in the candidate list, too few cores, too little RAM, no u
 statistics), then every remaining candidate with its score and free CPU/memory, best first,
 and finally the host chosen. When DRS decides, the log names the DRS recommendation instead of
 scores. The cloud's CPU/memory figures are those vCenter reports at that moment.
+
+##### Per-host VM folders
+
+Some inventories group VMs in *logical* folders defined per host: the folder of a template has
+the name of the host it lives on as one element of its path (e.g. `.../virt5x/kubevms` holding
+a `kube_template` VM definition).
+
+A clone requested without an explicit *Folder* parameter lands in the folder of its source by
+default, so every clone *seems* (in vCenter Web-UI object tree) to belong to the template's
+host, despite actively running on a possibly different host (due to an explicit `host` argument,
+or due to load-balancing done by this plugin).
+
+With `hostSelectionFolderFollowsHost` (cloud default `false`; templates and *Clone VM*/*Deploy VM*
+steps can set `true`/`false`, blank inherits) the clone instead goes to the same folder under the
+host the plugin chose, e.g. `.../virt4x/kubevms`. Short and fully qualified host names are matched
+alike. If the source's folder path does not name its host, or there is no such folder for the chosen
+host, the source's own folder is used and the log says so. An explicit folder always wins, and it
+applies to any host the plugin sets - a fixed `host` too - and is only about where the VM is
+listed, not where it runs.
 
 ##### Settings for the classic UI, pipeline and JCasC YAML
 

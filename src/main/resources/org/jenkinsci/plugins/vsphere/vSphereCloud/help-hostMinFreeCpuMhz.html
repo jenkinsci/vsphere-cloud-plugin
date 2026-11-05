@@ -1,0 +1,17 @@
+<div>
+  (Optional, a whole number) A host with <b>less than this much free CPU, in MHz</b>, is kept off the
+  list of candidates for automatic host selection, however it would otherwise rank. This is a
+  limit on how much load is too much, as opposed to the host weights, which only decide which of the
+  acceptable hosts is preferred.
+  <p>
+  Zero (the default) switches this limit off. It is an absolute amount, which suits farms of
+  similar hosts; see the percentage limit for mixed farms. All four limits can be combined: a host
+  must satisfy every one that is set. A host whose usage statistics are unknown cannot be shown to
+  satisfy a limit, and is left out.
+  </p>
+  <p>
+  If the limits leave no host at all, the clone or deploy fails, unless it is told to wait for
+  a host to free up (see <i>Seconds to wait for a host within the limits</i>). The build console log
+  lists every host ruled out and why.
+  </p>
+</div>

@@ -65,6 +65,7 @@ import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureCpu;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureMemory;
 import org.jenkinsci.plugins.vsphere.builders.ReconfigureStep;
+import org.jenkinsci.plugins.vsphere.tools.HostLimits;
 import org.jenkinsci.plugins.vsphere.tools.HostSelectionOptions;
 import org.jenkinsci.plugins.vsphere.tools.HostWeights;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
@@ -130,6 +131,8 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private Boolean hostSelectionRequireMemory;
     /** Opt-in: skip candidate hosts that do not have the VM's memory size free right now. */
     private Boolean hostSelectionRequireAvailableMemory;
+    /** Opt-in: with no folder given, put the clone in its source's folder rewritten for the clone's host. */
+    private Boolean hostSelectionFolderFollowsHost;
     /**
      * Optional host weights for this call, same meaning as on the vSphere Cloud but as text (variables
      * allowed in build steps). If any of the four is set, they replace the cloud's weights as a whole
@@ -140,6 +143,24 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
     private String hostWeightFreeCpuPercent;
     private String hostWeightFreeMemoryMB;
     private String hostWeightFreeMemoryPercent;
+    /**
+     * Optional: how many seconds to wait for a host within the cloud's free resource limits to become
+     * available before failing; 0 for not at all, -1 or "infinite" for as long as it takes. Blank
+     * inherits the cloud's setting.
+     */
+    private String hostSelectionWaitSeconds;
+
+    private String hostSelectionScoreDeviation;
+    /**
+     * Optional free resource limits for this call, same meaning as on the vSphere Cloud but as text. If
+     * any of the four is set, they replace the cloud's limits as a whole (blank ones count as 0); if none
+     * is, the cloud's apply.
+     */
+    private String hostMinFreeCpuMhz;
+
+    private String hostMinFreeCpuPercent;
+    private String hostMinFreeMemoryMB;
+    private String hostMinFreeMemoryPercent;
     /**
      * Credentials from old configuration format. Credentials are now in the
      * {@link #launcher} configuration
@@ -467,6 +488,88 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                 HostSelectionOptions.triStateFromString(hostSelectionRequireAvailableMemoryAsString);
     }
 
+    /**
+     * Opt-in override of the cloud's default: if no folder is given, put the clone in the folder of its source
+     * with the source's host name replaced by the name of the host the clone is placed on, if such a folder
+     * exists. {@code null} (the default) inherits the cloud's setting.
+     */
+    public Boolean getHostSelectionFolderFollowsHost() {
+        return hostSelectionFolderFollowsHost;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHost(Boolean hostSelectionFolderFollowsHost) {
+        this.hostSelectionFolderFollowsHost = hostSelectionFolderFollowsHost;
+    }
+
+    /**
+     * For the classic config UI, where an unset ("inherit") value has to survive a round trip as
+     * an empty string; pipeline and JCasC callers should use {@link #getHostSelectionFolderFollowsHost}.
+     */
+    public String getHostSelectionFolderFollowsHostAsString() {
+        return HostSelectionOptions.triStateToString(hostSelectionFolderFollowsHost);
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionFolderFollowsHostAsString(String value) {
+        this.hostSelectionFolderFollowsHost = HostSelectionOptions.triStateFromString(value);
+    }
+
+    public String getHostMinFreeCpuMhz() {
+        return hostMinFreeCpuMhz;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuMhz(String hostMinFreeCpuMhz) {
+        this.hostMinFreeCpuMhz = hostMinFreeCpuMhz;
+    }
+
+    public String getHostMinFreeCpuPercent() {
+        return hostMinFreeCpuPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeCpuPercent(String hostMinFreeCpuPercent) {
+        this.hostMinFreeCpuPercent = hostMinFreeCpuPercent;
+    }
+
+    public String getHostMinFreeMemoryMB() {
+        return hostMinFreeMemoryMB;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryMB(String hostMinFreeMemoryMB) {
+        this.hostMinFreeMemoryMB = hostMinFreeMemoryMB;
+    }
+
+    public String getHostMinFreeMemoryPercent() {
+        return hostMinFreeMemoryPercent;
+    }
+
+    @DataBoundSetter
+    public void setHostMinFreeMemoryPercent(String hostMinFreeMemoryPercent) {
+        this.hostMinFreeMemoryPercent = hostMinFreeMemoryPercent;
+    }
+
+    public String getHostSelectionScoreDeviation() {
+        return hostSelectionScoreDeviation;
+    }
+
+    /** Overrides the cloud's score deviation (0..1, negative: top host only, above 1: any host); blank inherits it. */
+    @DataBoundSetter
+    public void setHostSelectionScoreDeviation(String hostSelectionScoreDeviation) {
+        this.hostSelectionScoreDeviation = hostSelectionScoreDeviation;
+    }
+
+    public String getHostSelectionWaitSeconds() {
+        return hostSelectionWaitSeconds;
+    }
+
+    @DataBoundSetter
+    public void setHostSelectionWaitSeconds(String hostSelectionWaitSeconds) {
+        this.hostSelectionWaitSeconds = hostSelectionWaitSeconds;
+    }
+
     public String getHostWeightFreeCpuMhz() {
         return hostWeightFreeCpuMhz;
     }
@@ -696,7 +799,15 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
                         hostSelectionRequireCores,
                         hostSelectionRequireMemory,
                         hostSelectionRequireAvailableMemory,
-                        weightsOverride)
+                        weightsOverride,
+                        HostSelectionOptions.parseWaitSeconds(hostSelectionWaitSeconds),
+                        HostLimits.parseOverride(
+                                hostMinFreeCpuMhz,
+                                hostMinFreeCpuPercent,
+                                hostMinFreeMemoryMB,
+                                hostMinFreeMemoryPercent),
+                        hostSelectionFolderFollowsHost)
+                .withScoreDeviationOverride(HostSelectionOptions.parseScoreDeviation(hostSelectionScoreDeviation))
                 .withVmSize(reconfiguredCpuCores(), reconfiguredMemoryMB());
     }
 
@@ -978,6 +1089,13 @@ public class vSphereCloudSlaveTemplate implements Describable<vSphereCloudSlaveT
 
         @RequirePOST
         public ListBoxModel doFillHostSelectionRequireAvailableMemoryAsStringItems(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
+            return HostSelectionOptions.triStateItems();
+        }
+
+        @RequirePOST
+        public ListBoxModel doFillHostSelectionFolderFollowsHostAsStringItems(
                 @AncestorInPath AbstractFolder<?> containingFolderOrNull) {
             throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             return HostSelectionOptions.triStateItems();
