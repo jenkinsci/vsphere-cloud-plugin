@@ -11,7 +11,9 @@ import com.vmware.vim25.VirtualDevice;
 import com.vmware.vim25.VirtualDeviceFileBackingInfo;
 import com.vmware.vim25.VirtualDisk;
 import com.vmware.vim25.VirtualIDEController;
+import com.vmware.vim25.VirtualNVMEController;
 import com.vmware.vim25.VirtualPCIController;
+import com.vmware.vim25.VirtualSATAController;
 import com.vmware.vim25.VirtualSCSIController;
 import java.util.HashMap;
 import java.util.Map;
@@ -277,6 +279,36 @@ class ReconfigureDiskTest {
 
         assertThat(step.findDiskByLabel(devices, "vm", "SCSI(0:0)", true), sameInstance(onScsi));
         assertThat(step.findDiskByLabel(devices, "vm", "IDE(0:0)", true), sameInstance(onIde));
+    }
+
+    @Test
+    void findDiskByLabelMatchesSataAndNvmeMonikersInAnyCase() throws Exception {
+        ReconfigureDisk step = newStep();
+        VirtualSATAController sata = new VirtualSATAController();
+        sata.setKey(15000);
+        sata.setBusNumber(1);
+        VirtualNVMEController nvme = new VirtualNVMEController();
+        nvme.setKey(31000);
+        nvme.setBusNumber(0);
+        VirtualDisk onSata = disk(1, 15000, 3, "[ds] vm/vm_1.vmdk", null);
+        VirtualDisk onNvme = disk(2, 31000, 3, "[ds] vm/vm_2.vmdk", null);
+        VirtualDevice[] devices = {sata, nvme, onSata, onNvme};
+
+        assertThat(step.findDiskByLabel(devices, "vm", "SATA(1:3)", true), sameInstance(onSata));
+        assertThat(step.findDiskByLabel(devices, "vm", "NVME(0:3)", true), sameInstance(onNvme));
+        assertThat(step.findDiskByLabel(devices, "vm", "nvme(0:3)", true), sameInstance(onNvme));
+        assertThrows(VSphereException.class, () -> step.findDiskByLabel(devices, "vm", "SCSI(0:3)", true));
+        assertThrows(VSphereException.class, () -> step.findDiskByLabel(devices, "vm", "SATA(0:3)", true));
+    }
+
+    @Test
+    void theBusOfANewDiskIsScsiUnlessSaidOtherwise() throws Exception {
+        ReconfigureDisk step = newStep();
+        assertThat(step.getDiskBus(), is(ReconfigureDisk.DiskBus.SCSI));
+        step.setDiskBus(ReconfigureDisk.DiskBus.NVME);
+        assertThat(step.getDiskBus(), is(ReconfigureDisk.DiskBus.NVME));
+        step.setDiskBus(null);
+        assertThat(step.getDiskBus(), is(ReconfigureDisk.DiskBus.SCSI));
     }
 
     @Test

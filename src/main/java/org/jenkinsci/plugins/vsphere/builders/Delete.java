@@ -85,7 +85,10 @@ public class Delete extends VSphereBuildStep {
             expandedVm = env.expand(vm);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Destroying VM \"" + expandedVm + ".\" Please wait ...");
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Destroying VM " + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm)
+                        + ". Please wait ...");
         vsphere.destroyVm(expandedVm, failOnNoExist);
         VSphereLogger.vsLogger(jLogger, "Destroyed!");
 

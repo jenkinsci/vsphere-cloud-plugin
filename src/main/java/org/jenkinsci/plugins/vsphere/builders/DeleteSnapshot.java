@@ -121,7 +121,10 @@ public class DeleteSnapshot extends VSphereBuildStep implements SimpleBuildStep 
             expandedVm = env.expand(vm);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Deleting snapshot \"" + expandedSnap + "\" of VM " + expandedVm + "...");
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Deleting snapshot " + VSphereLogger.quoted(expandedSnap) + " of VM " + VSphereLogger.quoted(expandedVm)
+                        + VSphereLogger.onHost(vsphere, expandedVm) + "...");
         vsphere.deleteSnapshot(expandedVm, expandedSnap, consolidate, failOnNoExist);
         VSphereLogger.vsLogger(jLogger, "Complete.");
 

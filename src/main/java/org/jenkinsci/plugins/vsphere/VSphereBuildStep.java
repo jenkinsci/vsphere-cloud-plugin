@@ -22,7 +22,6 @@ import hudson.Launcher;
 import hudson.model.*;
 import java.io.IOException;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.builders.Messages;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
@@ -105,6 +104,23 @@ public abstract class VSphereBuildStep implements Describable<VSphereBuildStep>,
 
         public static vSphereCloud getVSphereCloudByName(String serverName) throws RuntimeException, VSphereException {
             return getVSphereCloudByName(serverName, null);
+        }
+
+        /**
+         * The type of connection of the cloud of that name, for a form to offer what fits it; null if there is no such
+         * cloud (yet), which is not an error there.
+         */
+        public static VSphereConnectionConfig.BackendType backendTypeOf(String serverName) {
+            if (serverName == null || serverName.isEmpty()) {
+                return null;
+            }
+            try {
+                final VSphereConnectionConfig config =
+                        getVSphereCloudByName(serverName, null).getVsConnectionConfig();
+                return config == null ? null : config.getBackendType();
+            } catch (RuntimeException | VSphereException e) {
+                return null;
+            }
         }
 
         public static vSphereCloud getVSphereCloudByHash(int hash) throws RuntimeException, VSphereException {

@@ -108,7 +108,9 @@ public class Rename extends VSphereBuildStep implements SimpleBuildStep {
         }
 
         VSphereLogger.vsLogger(
-                jLogger, "Renaming VM \"" + expandedOldName + ".\" to \"" + expandedNewName + "\" Please wait ...");
+                jLogger,
+                "Renaming VM " + VSphereLogger.quoted(expandedOldName) + VSphereLogger.onHost(vsphere, expandedOldName)
+                        + " to " + VSphereLogger.quoted(expandedNewName) + ". Please wait ...");
         vsphere.renameVm(expandedOldName, expandedNewName);
         VSphereLogger.vsLogger(jLogger, "Renamed!");
 

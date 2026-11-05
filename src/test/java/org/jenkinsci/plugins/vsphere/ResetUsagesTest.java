@@ -17,9 +17,7 @@ import java.util.Collections;
 import jenkins.model.Jenkins;
 import org.htmlunit.HttpMethod;
 import org.htmlunit.WebRequest;
-import org.jenkinsci.plugins.folder.FolderVSphereCloudProperty;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vSphereCloudSlave;
+import org.jenkinsci.plugins.vsphere.folder.FolderVSphereCloudProperty;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
 import org.jvnet.hudson.test.MockAuthorizationStrategy;
@@ -69,7 +67,7 @@ class ResetUsagesTest {
     }
 
     private static String resetUrl(String cloudId) {
-        return "descriptorByName/org.jenkinsci.plugins.vSphereCloud/resetUsages?name=" + cloudId;
+        return "descriptorByName/org.jenkinsci.plugins.vsphere.vSphereCloud/resetUsages?name=" + cloudId;
     }
 
     private static vSphereCloud.DescriptorImpl descriptor() {

@@ -1,0 +1,1316 @@
+/*   Copyright 2013, MANDIANT, Eric Lordahl
+ *
+ *   Licensed under the Apache License, Version 2.0 (the "License");
+ *   you may not use this file except in compliance with the License.
+ *   You may obtain a copy of the License at
+ *
+ *       http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *   Unless required by applicable law or agreed to in writing, software
+ *   distributed under the License is distributed on an "AS IS" BASIS,
+ *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *   See the License for the specific language governing permissions and
+ *   limitations under the License.
+ */
+package org.jenkinsci.plugins.vsphere.tools;
+
+import com.vmware.vim25.ClusterRecommendation;
+import com.vmware.vim25.CustomizationSpecItem;
+import com.vmware.vim25.HostHardwareSummary;
+import com.vmware.vim25.HostListSummary;
+import com.vmware.vim25.HostListSummaryQuickStats;
+import com.vmware.vim25.HostRuntimeInfo;
+import com.vmware.vim25.HostSystemConnectionState;
+import com.vmware.vim25.InvalidProperty;
+import com.vmware.vim25.ManagedObjectReference;
+import com.vmware.vim25.PlacementResult;
+import com.vmware.vim25.PlacementSpec;
+import com.vmware.vim25.RuntimeFault;
+import com.vmware.vim25.TaskInfoState;
+import com.vmware.vim25.VirtualHardware;
+import com.vmware.vim25.VirtualMachineCloneSpec;
+import com.vmware.vim25.VirtualMachineConfigInfo;
+import com.vmware.vim25.VirtualMachineConfigSpec;
+import com.vmware.vim25.VirtualMachineRelocateSpec;
+import com.vmware.vim25.mo.ClusterComputeResource;
+import com.vmware.vim25.mo.CustomizationSpecManager;
+import com.vmware.vim25.mo.Datacenter;
+import com.vmware.vim25.mo.Datastore;
+import com.vmware.vim25.mo.DistributedVirtualPortgroup;
+import com.vmware.vim25.mo.DistributedVirtualSwitch;
+import com.vmware.vim25.mo.Folder;
+import com.vmware.vim25.mo.HostSystem;
+import com.vmware.vim25.mo.InventoryNavigator;
+import com.vmware.vim25.mo.ManagedEntity;
+import com.vmware.vim25.mo.Network;
+import com.vmware.vim25.mo.ResourcePool;
+import com.vmware.vim25.mo.ServerConnection;
+import com.vmware.vim25.mo.ServiceInstance;
+import com.vmware.vim25.mo.Task;
+import com.vmware.vim25.mo.VirtualMachine;
+import com.vmware.vim25.mo.VirtualMachineSnapshot;
+import com.vmware.vim25.ws.ClientCreator;
+import edu.umd.cs.findbugs.annotations.CheckForNull;
+import edu.umd.cs.findbugs.annotations.NonNull;
+import java.io.PrintStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.rmi.RemoteException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.Level;
+import org.apache.commons.lang3.StringUtils;
+import org.jenkinsci.plugins.vsphere.VCenterBackendConfig;
+import org.jenkinsci.plugins.vsphere.VSphereConnectionConfig;
+import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
+
+public class VSphereYavijava extends AbstractVSphere {
+    private final URL url;
+    private final String session;
+
+    private VSphereYavijava(@NonNull String url, boolean ignoreCert, @NonNull String user, @CheckForNull String pw)
+            throws VSphereException {
+        try {
+            ClientCreator.clientClass = VSphereConnectionConfig.setupGlobalHttpClientClass();
+            this.url = new URL(url);
+            final ServiceInstance serviceInstance = new ServiceInstance(this.url, user, pw, ignoreCert);
+            final ServerConnection serverConnection = serviceInstance.getServerConnection();
+            this.session = serverConnection.getSessionStr();
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    private ServiceInstance getServiceInstance() throws RemoteException, MalformedURLException {
+        return new ServiceInstance(url, session, true);
+    }
+
+    /**
+     * Initiates Connection to vSphere Server
+     * @param connectionDetails Contains all the details we need to connect.
+     * @throws VSphereException If an error occurred.
+     * @return A connected instance.
+     */
+    public static VSphereYavijava connect(@NonNull VSphereConnectionConfig connectionDetails) throws VSphereException {
+        final String server = connectionDetails.getVsHost() + "/sdk";
+        final VCenterBackendConfig vcenter = connectionDetails.getVCenter();
+        if (vcenter == null) {
+            throw new VSphereException(
+                    "The connection to " + connectionDetails.getVsHost() + " is not set up for vCenter");
+        }
+        final boolean ignoreCert = vcenter.getAllowUntrustedCertificate();
+        final String user = connectionDetails.getUsername();
+        final String pw = connectionDetails.getPassword();
+        if (user == null) {
+            throw new VSphereException("Username is not specified for " + connectionDetails.getVsHost());
+        }
+        return new VSphereYavijava(server, ignoreCert, user, pw);
+    }
+
+    /**
+     * Initiates Connection to vSphere Server
+     * @param server Server URL
+     * @param ignoreCert If true then we disable certificate verification, allowing the use of untrusted certificates but risk man-in-the-middle attacks.
+     * @param user Username.
+     * @param pw Password.
+     * @throws VSphereException If an error occurred.
+     * @return A connected instance.
+     * @deprecated Use {@link #connect(VSphereConnectionConfig)} instead.
+     */
+    @Deprecated
+    public static VSphereYavijava connect(
+            @NonNull String server, boolean ignoreCert, @NonNull String user, @CheckForNull String pw)
+            throws VSphereException {
+        return new VSphereYavijava(server, ignoreCert, user, pw);
+    }
+
+    @Override
+    protected void closeSession() throws Exception {
+        this.getServiceInstance().getServerConnection().logout();
+    }
+
+    @Override
+    public String hostNameOf(VirtualMachine vm) {
+        try {
+            final ManagedObjectReference host =
+                    vm == null ? null : vm.getRuntime().getHost();
+            return host == null ? null : new HostSystem(vm.getServerConnection(), host).getName();
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "The host of a VM is not known", e);
+            return null;
+        }
+    }
+
+    /**
+     * Checks whether the current vSphere session is still alive by issuing a
+     * lightweight {@code currentTime()} call.
+     *
+     * @return {@code true} if the session responds normally; {@code false} if it
+     *         has expired or the server is unreachable.
+     */
+    @Override
+    public boolean isSessionAlive() {
+        try {
+            getServiceInstance().currentTime();
+            return true;
+        } catch (Exception e) {
+            LOGGER.log(Level.FINE, "vSphere session alive-check failed", e);
+            return false;
+        }
+    }
+
+    /**
+     * As the overload without them, plus the size to create the VM with.
+     *
+     * @param vmSize
+     *            (Optional, null means {@link VmSize#NONE}) CPU and memory settings to give the
+     *            new VM in the same operation that creates it, instead of reconfiguring it
+     *            afterwards; unset parts keep the source's. {@code cpuCores} and {@code
+     *            memorySize} are also what the host size checks compare against, in place of the
+     *            source's.
+     * @throws VSphereException
+     *             if anything goes wrong.
+     */
+    @Override
+    public void cloneOrDeployVm(
+            String cloneName,
+            String sourceName,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            String folderName,
+            boolean useCurrentSnapshot,
+            final String namedSnapshot,
+            boolean powerOn,
+            Map<String, String> extraConfigParameters,
+            String customizationSpec,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions,
+            VmSize vmSize,
+            PrintStream jLogger)
+            throws VSphereException {
+        final String cloneKind = linkedClone ? "shallow" : "deep";
+
+        String msgExtraConfigParameters =
+                "with" + ((extraConfigParameters == null || extraConfigParameters.isEmpty()) ? "out" : "")
+                        + " extra config parameters";
+        if (useCurrentSnapshot || (namedSnapshot != null && !namedSnapshot.isEmpty())) {
+            // Called from cloneVm() above.
+            logMessage(
+                    jLogger,
+                    "Creating a " + cloneKind + " clone of \"" + sourceName + "\" to \""
+                            + cloneName + "\" using "
+                            + ((namedSnapshot != null && !namedSnapshot.isEmpty())
+                                    ? "snapshot named " + namedSnapshot
+                                    : "latest snapshot")
+                            + ", " + msgExtraConfigParameters);
+        } else {
+            // Called from deployVm() above: useCurrentSnapshot==false && namedSnapshot==null
+            logMessage(
+                    jLogger,
+                    "Deploying new VM \"" + cloneName + "\" from template \"" + sourceName + "\"" + ", "
+                            + msgExtraConfigParameters);
+        }
+
+        try {
+            final VirtualMachine sourceVm = getVmByName(sourceName);
+            if (sourceVm == null) {
+                throw new VSphereNotFoundException("VM or template", sourceName);
+            }
+            if (getVmByName(cloneName) != null) {
+                throw new VSphereDuplicateException("VM", cloneName);
+            }
+
+            final VirtualMachineConfigInfo vmConfig = sourceVm.getConfig();
+            final boolean sourceIsATemplate = vmConfig.template;
+            final String sourceType = sourceIsATemplate ? "Template" : "VM";
+            final VirtualMachineRelocateSpec rel = createRelocateSpec(
+                    jLogger, linkedClone, resourcePoolName, cluster, datastoreName, sourceIsATemplate);
+            final VirtualMachineCloneSpec cloneSpec = createCloneSpec(rel);
+            cloneSpec.setTemplate(false);
+            cloneSpec.powerOn = powerOn;
+
+            if (namedSnapshot != null && !namedSnapshot.isEmpty()) {
+                if (useCurrentSnapshot) {
+                    throw new IllegalArgumentException(
+                            "It is not valid to request a clone of " + sourceType + " \"" + sourceName
+                                    + "\" based on its snapshot \"" + namedSnapshot
+                                    + "\" AND also specify that the latest snapshot should be used.  "
+                                    + "Either choose to use the latest snapshot, or name a snapshot, "
+                                    + "or neither, but not both.");
+                }
+                final VirtualMachineSnapshot namedVMSnapshot = getSnapshotInTree(sourceVm, namedSnapshot);
+                if (namedVMSnapshot == null) {
+                    throw new VSphereNotFoundException(
+                            "Snapshot",
+                            namedSnapshot,
+                            "Source " + sourceType + " \"" + sourceName + "\" has no snapshot called \"" + namedSnapshot
+                                    + "\".");
+                }
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be based on named snapshot \""
+                                + namedSnapshot + "\".");
+                cloneSpec.setSnapshot(namedVMSnapshot.getMOR());
+            }
+            if (useCurrentSnapshot) {
+                final VirtualMachineSnapshot currentSnapShot = sourceVm.getCurrentSnapShot();
+                if (currentSnapShot == null) {
+                    throw new VSphereNotFoundException(
+                            "Snapshot",
+                            null,
+                            "Source " + sourceType + " \"" + sourceName + "\" requires at least one snapshot.");
+                }
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be based on current snapshot \""
+                                + currentSnapShot.toString() + "\".");
+                cloneSpec.setSnapshot(currentSnapShot.getMOR());
+            }
+            if (extraConfigParameters != null && !extraConfigParameters.isEmpty()) {
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will have extra configuration parameters "
+                                + extraConfigParameters + ".");
+                VirtualMachineConfigSpec cs = createVMConfigSpecFromExtraConfigParameters(extraConfigParameters);
+                cloneSpec.setConfig(cs);
+            }
+            if (customizationSpec != null && customizationSpec.length() > 0) {
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will use customization specification \""
+                                + customizationSpec + "\".");
+                CustomizationSpecItem spec = getCustomizationSpecByName(customizationSpec);
+                cloneSpec.setCustomization(spec.getSpec());
+            }
+
+            final VmSize size = vmSize == null ? VmSize.NONE : vmSize;
+            if (!size.isEmpty()) {
+                final VirtualHardware sourceHardware = vmConfig.getHardware();
+                size.validateAgainstSource(
+                        sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()),
+                        sourceHardware == null ? null : sourceHardware.getNumCoresPerSocket());
+                VirtualMachineConfigSpec sizeSpec = cloneSpec.getConfig();
+                if (sizeSpec == null) {
+                    sizeSpec = new VirtualMachineConfigSpec();
+                }
+                size.applyTo(sizeSpec);
+                cloneSpec.setConfig(sizeSpec);
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be created with " + size.describe()
+                                + ".");
+            }
+
+            Folder folder;
+            boolean folderIsSourcesDefault = false;
+            if (folderName == null || folderName.isEmpty() || folderName.equals(" ")) {
+                // same folder as source
+                folder = (Folder) sourceVm.getParent();
+                folderIsSourcesDefault = true;
+            } else if (!folderExists(folderName)) {
+                folder = (Folder) sourceVm.getParent();
+                logMessage(
+                        jLogger, "Unable to find the specified folder. Creating VM in the same folder as its parent ");
+            } else {
+                folder = getFolder(folderName);
+            }
+
+            // What the VM will be created with beats what the caller announced, which beats the source's.
+            final HostSelectionOptions announced =
+                    hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
+            final Integer sizeCpus = size.getCpuCores();
+            final Integer sizeMemory = size.getMemorySize();
+            final HostSelectionOptions selectionOptions = announced.withVmSize(
+                    sizeCpus != null ? sizeCpus : announced.getVmCpus(),
+                    sizeMemory != null ? Long.valueOf(sizeMemory.longValue()) : announced.getVmMemoryMB());
+            final HostSystem selectedHost = selectHost(
+                    jLogger,
+                    getClusterByName(cluster),
+                    sourceVm,
+                    cloneName,
+                    cloneSpec,
+                    rel,
+                    host,
+                    hostSelectionMode,
+                    hostSelectionCandidates,
+                    selectionOptions);
+            if (selectedHost != null) {
+                rel.setHost(selectedHost.getMOR());
+                logMessage(
+                        jLogger,
+                        "Clone of " + sourceType + " \"" + sourceName + "\" will be placed on host \""
+                                + selectedHost.getName() + "\".");
+                if (selectionOptions.isFolderFollowsHost() && folderIsSourcesDefault) {
+                    folder = folderForHost(jLogger, sourceVm, folder, selectedHost);
+                }
+            }
+
+            final long startNanos = System.nanoTime();
+            final Task task = sourceVm.cloneVM_Task(folder, cloneName, cloneSpec);
+            logMessage(jLogger, "Started cloning of " + sourceType + " \"" + sourceName + "\". Please wait ...");
+
+            final String status = task.waitForTask();
+            final long elapsedMillis = (System.nanoTime() - startNanos) / 1000000L;
+            if (!TaskInfoState.success.toString().equals(status)) {
+                throw newVSphereException(
+                        task.getTaskInfo(),
+                        "Couldn't clone \"" + sourceName + "\". " + "Clone task ended with status " + status + ".");
+            }
+
+            final String took = String.format(Locale.ROOT, "%d.%03d", elapsedMillis / 1000L, elapsedMillis % 1000L);
+            logMessage(
+                    jLogger,
+                    "Successfully cloned VM/template \"" + sourceName + "\" to create \"" + cloneName + "\" as a "
+                            + cloneKind + " clone in " + took + " seconds.");
+        } catch (RuntimeException | VSphereException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * For inventories with per-host VM folders: the folder of the clone is that of its source with the name of
+     * the source's host replaced by the name of the clone's host (see {@link HostFolderPath}). Returns {@code
+     * sourceFolder} if the source's folder path does not mention its host, there is no folder for the clone's
+     * host, or anything fails on the way, saying so in the log.
+     */
+    private Folder folderForHost(
+            PrintStream jLogger, VirtualMachine sourceVm, Folder sourceFolder, HostSystem selectedHost) {
+        try {
+            final ManagedObjectReference sourceHostMor =
+                    sourceVm.getRuntime() == null ? null : sourceVm.getRuntime().getHost();
+            if (sourceHostMor == null) {
+                logMessage(jLogger, "Source has no known host, so its folder is not changed to follow the new host.");
+                return sourceFolder;
+            }
+            final String sourceHostName = new HostSystem(sourceVm.getServerConnection(), sourceHostMor).getName();
+            if (sourceHostName.equalsIgnoreCase(selectedHost.getName())) {
+                return sourceFolder;
+            }
+
+            final LinkedList<String> path = new LinkedList<>();
+            ManagedEntity entity = sourceFolder;
+            while (entity != null && entity.getParent() != null) {
+                path.addFirst(entity.getName());
+                entity = entity.getParent();
+            }
+            final List<String> hostPath = HostFolderPath.rewrite(path, sourceHostName, selectedHost.getName());
+            if (hostPath == null) {
+                logMessage(
+                        jLogger,
+                        "Folder \"" + String.join("/", path) + "\" of the source does not name its host \""
+                                + sourceHostName + "\", so it is used as it is.");
+                return sourceFolder;
+            }
+
+            ManagedEntity found = getServiceInstance().getRootFolder();
+            for (String name : hostPath) {
+                found = childByName(found, name);
+                if (found == null) {
+                    break;
+                }
+            }
+            if (!(found instanceof Folder)) {
+                logMessage(
+                        jLogger,
+                        "No folder \"" + String.join("/", hostPath) + "\" for host \"" + selectedHost.getName()
+                                + "\", so the folder of the source is used.");
+                return sourceFolder;
+            }
+            logMessage(jLogger, "Clone will be created in folder \"" + String.join("/", hostPath) + "\".");
+            return (Folder) found;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Could not find the folder for the new host, using the source's", e);
+            logMessage(jLogger, "Could not find a folder for the new host (" + e + "), using the source's.");
+            return sourceFolder;
+        }
+    }
+
+    private static @CheckForNull ManagedEntity childByName(ManagedEntity parent, String name) throws RemoteException {
+        if (!(parent instanceof Folder)) {
+            return null;
+        }
+        final ManagedEntity[] children = ((Folder) parent).getChildEntity();
+        if (children != null) {
+            for (ManagedEntity child : children) {
+                if (name.equals(child.getName())) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    private VirtualMachineCloneSpec createCloneSpec(VirtualMachineRelocateSpec rel) {
+        VirtualMachineCloneSpec cloneSpec = new VirtualMachineCloneSpec();
+        cloneSpec.setLocation(rel);
+        cloneSpec.setTemplate(false);
+        cloneSpec.setPowerOn(true);
+        return cloneSpec;
+    }
+
+    private VirtualMachineRelocateSpec createRelocateSpec(
+            PrintStream jLogger,
+            boolean linkedClone,
+            String resourcePoolName,
+            String cluster,
+            String datastoreName,
+            boolean isResourcePoolRequired)
+            throws RemoteException, MalformedURLException, VSphereException {
+        VirtualMachineRelocateSpec rel = new VirtualMachineRelocateSpec();
+
+        if (linkedClone) {
+            rel.setDiskMoveType("createNewChildDiskBacking");
+        } else {
+            rel.setDiskMoveType("moveAllDiskBackingsAndDisallowSharing");
+        }
+
+        ClusterComputeResource clusterResource = getClusterByName(cluster);
+
+        // probably only of interest if someone actually entered a cluster name
+        if (clusterResource == null && StringUtils.isNotBlank(cluster)) {
+            logMessage(
+                    jLogger,
+                    "Cluster resource " + cluster
+                            + " does not exist, root folder will be used for getting resource pool and datastore");
+        }
+
+        if (resourcePoolName != null && !resourcePoolName.isEmpty()) {
+            ResourcePool resourcePool = getResourcePoolByName(resourcePoolName, clusterResource);
+            if (resourcePool == null) {
+                throw new VSphereNotFoundException("Resource pool", resourcePoolName);
+            }
+            rel.setPool(resourcePool.getMOR());
+        } else if (isResourcePoolRequired) {
+            throw new VSphereException("You must specify a resource  pool  when using a template");
+        }
+
+        if (datastoreName != null && !datastoreName.isEmpty()) {
+            Datastore datastore = getDatastoreByName(datastoreName, clusterResource);
+            if (datastore == null) {
+                throw new VSphereNotFoundException("Datastore", datastoreName);
+            }
+            rel.setDatastore(datastore.getMOR());
+        }
+        return rel;
+    }
+
+    /**
+     * Checks whether a host with this name exists anywhere in the vCenter inventory. Used by
+     * build-step/config live-validation ("Check Data"/"Check Template" buttons) for the
+     * {@code host}/{@code targetHost} and {@code hostSelectionCandidates} fields.
+     *
+     * @throws VSphereException If an error occurred while querying vCenter.
+     */
+    @Override
+    public boolean hostExists(final String hostName) throws VSphereException {
+        try {
+            return getHostByName(hostName, null) != null;
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * @param hostName - Name of host to find
+     * @param rootEntity - managed entity to search, or null to search the whole inventory
+     * @return - HostSystem object, or null if not found
+     */
+    private HostSystem getHostByName(final String hostName, ManagedEntity rootEntity)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity == null) rootEntity = getServiceInstance().getRootFolder();
+
+        return (HostSystem) new InventoryNavigator(rootEntity).searchManagedEntity("HostSystem", hostName);
+    }
+
+    /**
+     * If the vCenter inventory contains exactly one cluster, returns it - so that host
+     * selection can still work when the caller didn't (or couldn't be bothered to)
+     * specify a {@code cluster}. Returns null if there are zero or multiple clusters,
+     * since then there's no way to pick one automatically.
+     */
+    private ClusterComputeResource getSingleClusterIfUnambiguous(PrintStream jLogger)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        final ManagedEntity[] allClusters = new InventoryNavigator(
+                        getServiceInstance().getRootFolder())
+                .searchManagedEntities("ClusterComputeResource");
+        if (allClusters == null || allClusters.length == 0) {
+            logMessage(
+                    jLogger,
+                    "No cluster was specified, and no cluster exists in this vCenter's inventory; cannot auto-select a host.");
+            return null;
+        }
+        if (allClusters.length > 1) {
+            logMessage(
+                    jLogger,
+                    "No cluster was specified, and " + allClusters.length
+                            + " clusters exist in this vCenter's inventory; specify \"cluster\" explicitly to enable host selection.");
+            return null;
+        }
+        final ClusterComputeResource onlyCluster = (ClusterComputeResource) allClusters[0];
+        logMessage(
+                jLogger,
+                "No cluster was specified; auto-detected the only cluster in this vCenter's inventory: \""
+                        + onlyCluster.getName() + "\".");
+        return onlyCluster;
+    }
+
+    /**
+     * Decides which ESXi host (if any) a clone should be placed on. Returns null to mean
+     * "no restriction, let vCenter/DRS decide with its own default logic" (today's behaviour).
+     */
+    private HostSystem selectHost(
+            PrintStream jLogger,
+            ClusterComputeResource clusterResource,
+            VirtualMachine sourceVm,
+            String cloneName,
+            VirtualMachineCloneSpec cloneSpec,
+            VirtualMachineRelocateSpec rel,
+            String host,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions hostSelectionOptions)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException, VSphereException {
+        if (host != null && !host.isEmpty()) {
+            HostSystem explicitHost = getHostByName(host, clusterResource);
+            if (explicitHost == null) {
+                throw new VSphereNotFoundException("Host", host);
+            }
+            return explicitHost;
+        }
+
+        if (hostSelectionMode == null || hostSelectionMode.isEmpty()) {
+            return null;
+        }
+
+        if (clusterResource == null) {
+            clusterResource = getSingleClusterIfUnambiguous(jLogger);
+        }
+        if (clusterResource == null) {
+            logMessage(
+                    jLogger,
+                    "Host selection mode \"" + hostSelectionMode
+                            + "\" requires a valid cluster to be specified (or exactly one cluster to exist in the vCenter inventory); letting vSphere decide placement.");
+            return null;
+        }
+
+        final HostSelectionOptions opts =
+                hostSelectionOptions == null ? HostSelectionOptions.NONE : hostSelectionOptions;
+        final VirtualMachineConfigInfo sourceConfig = sourceVm.getConfig();
+        final VirtualHardware sourceHardware = sourceConfig == null ? null : sourceConfig.getHardware();
+        // A size announced by the caller (e.g. a template whose reconfigure steps resize the
+        // clone right after creation) beats the source VM's, which is only what we clone from.
+        final Integer announcedCpus = opts.getVmCpus();
+        final Integer vmCpus = announcedCpus != null
+                ? announcedCpus
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getNumCPU()));
+        final Long announcedMemoryMB = opts.getVmMemoryMB();
+        final Integer vmMemoryMB = announcedMemoryMB != null
+                ? Integer.valueOf((int) Math.min(Integer.MAX_VALUE, announcedMemoryMB.longValue()))
+                : (sourceHardware == null ? null : Integer.valueOf(sourceHardware.getMemoryMB()));
+        if ((opts.isRequireCores() && vmCpus == null)
+                || ((opts.isRequireMemory() || opts.isRequireAvailableMemory()) && vmMemoryMB == null)) {
+            logMessage(
+                    jLogger,
+                    "Could not determine the CPU/memory size of the VM to create; skipping the corresponding host size check.");
+        }
+
+        final ClusterComputeResource cluster = clusterResource;
+        VSphereHostSelection.Evaluation evaluation =
+                evaluateHosts(jLogger, cluster, hostSelectionMode, hostSelectionCandidates, opts, vmCpus, vmMemoryMB);
+        if (!evaluation.isEligible()) {
+            // Whether to wait for the situation to pass, or to give up now, and why: for the log, and for
+            // whoever wants to be told (a pipeline's hostSelectionWaitNotification).
+            final long waitSeconds = opts.getWaitSeconds();
+            final String announcement =
+                    VSphereHostSelection.waitAnnouncement(evaluation, waitSeconds, HOST_SELECTION_POLL_MILLIS);
+            logMessage(jLogger, announcement);
+            notifyWaitListener(jLogger, opts, announcement, evaluation.getReason());
+            // A host may have meanwhile come out of maintenance, joined the cluster, ... so each look starts
+            // again from the cluster's current members.
+            evaluation = VSphereHostSelection.waitForEligible(
+                    evaluation,
+                    () -> evaluateHosts(
+                            null, cluster, hostSelectionMode, hostSelectionCandidates, opts, vmCpus, vmMemoryMB),
+                    waitSeconds,
+                    HOST_SELECTION_POLL_MILLIS,
+                    System::currentTimeMillis,
+                    Thread::sleep,
+                    message -> logMessage(jLogger, message));
+            if (!evaluation.isEligible()) {
+                if (evaluation.getReason().failsWhenGivingUp()) {
+                    throw new VSphereException("No host in cluster \"" + cluster.getName()
+                            + "\" is available for the new VM (" + evaluation.getReason() + "): "
+                            + evaluation.getDetail()
+                            + (waitSeconds == 0
+                                    ? " Not waiting, as hostSelectionWaitSeconds is 0."
+                                    : " Gave up after waiting " + waitSeconds + " second(s)."));
+                }
+                logMessage(jLogger, "Letting vSphere decide placement.");
+                return null;
+            }
+        }
+        final List<HostCandidate> filtered = evaluation.getEligible();
+        final List<HostSystem> hostSystems = new ArrayList<>();
+        final HostSystem[] members = cluster.getHost();
+        if (members != null) {
+            hostSystems.addAll(Arrays.asList(members));
+        }
+
+        if ("DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            HostSystem recommended = recommendHostViaDrs(
+                    jLogger, clusterResource, sourceVm, cloneName, cloneSpec, rel, hostSystems, filtered);
+            if (recommended != null) {
+                logMessage(
+                        jLogger,
+                        "  DRS recommended host \"" + recommended.getName() + "\" out of the " + filtered.size()
+                                + " candidate host(s) above that passed the filters.");
+                return recommended;
+            }
+            logMessage(
+                    jLogger,
+                    "DRS placement recommendation was unavailable (DRS may be disabled or unlicensed on this cluster); falling back to least-loaded host selection.");
+        }
+
+        if (opts.isPickAnyHostAtRandom()) {
+            final HostCandidate any = filtered.get(
+                    java.util.concurrent.ThreadLocalRandom.current().nextInt(filtered.size()));
+            logMessage(
+                    jLogger,
+                    "hostSelectionScoreDeviation is above 1: chose host \"" + any.getName() + "\" at random among the "
+                            + filtered.size() + " available host(s), whatever their load.");
+            return findHostSystemByName(hostSystems, any.getName());
+        }
+
+        final HostWeights weights = opts.getWeights();
+        final List<VSphereHostSelection.ScoredHost> ranking = VSphereHostSelection.rank(filtered, weights);
+        VSphereHostSelection.logRanking(message -> logMessage(jLogger, message), filtered, weights, ranking);
+        if (ranking.isEmpty()) {
+            logMessage(
+                    jLogger,
+                    "Unable to determine current load for any candidate host; letting vSphere decide placement.");
+            return null;
+        }
+        final double deviation = opts.getScoreDeviation();
+        final List<VSphereHostSelection.ScoredHost> contenders = VSphereHostSelection.topContenders(ranking, deviation);
+        HostCandidate winner = ranking.get(0).getHost();
+        if (contenders.size() > 1) {
+            winner = contenders
+                    .get(java.util.concurrent.ThreadLocalRandom.current().nextInt(contenders.size()))
+                    .getHost();
+            logMessage(
+                    jLogger,
+                    String.format(
+                            "  %d host(s) score within %.3g of the best one (hostSelectionScoreDeviation): chose \"%s\" among them at random.",
+                            contenders.size(), deviation, winner.getName()));
+        }
+        return findHostSystemByName(hostSystems, winner.getName());
+    }
+
+    /** How often to look at the hosts' load again while waiting for one with enough free resources. */
+    private static final long HOST_SELECTION_POLL_MILLIS = 15_000L;
+
+    /**
+     * Looks at the cluster's hosts now: which of them may be given the new VM (usable, big enough, with
+     * enough free resources, ...), or why none may. Logs what it rules out unless {@code jLogger} is null,
+     * which is for repeated looks while waiting.
+     */
+    private VSphereHostSelection.Evaluation evaluateHosts(
+            PrintStream jLogger,
+            ClusterComputeResource cluster,
+            String hostSelectionMode,
+            Set<String> hostSelectionCandidates,
+            HostSelectionOptions opts,
+            Integer vmCpus,
+            Integer vmMemoryMB) {
+        final HostSystem[] members = cluster.getHost();
+        final List<HostCandidate> candidates = new ArrayList<>();
+        if (members != null) {
+            for (HostSystem hostSystem : members) {
+                candidates.add(toHostCandidate(hostSystem));
+            }
+        }
+        if (jLogger != null) {
+            logMessage(
+                    jLogger,
+                    "Host selection (" + hostSelectionMode + ") in cluster \"" + cluster.getName() + "\": "
+                            + candidates.size() + " host(s) found.");
+        }
+
+        final List<HostCandidate> usable = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String excluded = VSphereHostSelection.excludedBecause(candidate, hostSelectionCandidates);
+            if (excluded == null) {
+                usable.add(candidate);
+            } else if (jLogger != null) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + excluded + ".");
+            }
+        }
+        if (usable.isEmpty()) {
+            return VSphereHostSelection.Evaluation.none(
+                    HostSelectionWaitReason.NO_USABLE_HOSTS,
+                    "no usable candidate host (connected, not in maintenance mode, and among the candidate hosts"
+                            + " if any are listed) found in cluster \"" + cluster.getName() + "\".");
+        }
+
+        List<HostCandidate> filtered = filterBySize(jLogger, usable, opts, vmCpus, vmMemoryMB, false);
+        if (filtered.isEmpty()) {
+            return VSphereHostSelection.Evaluation.none(
+                    HostSelectionWaitReason.NO_HOST_FITS_VM_SIZE,
+                    "no candidate host in cluster \"" + cluster.getName() + "\" satisfies the requested"
+                            + (opts.isRequireCores() ? " core count (>= " + vmCpus + ")" : "")
+                            + (opts.isRequireCores() && opts.isRequireMemory() ? " and" : "")
+                            + (opts.isRequireMemory() ? " RAM size (>= " + vmMemoryMB + " MB)" : "")
+                            + " of the VM.");
+        }
+        if (opts.isRequireAvailableMemory()
+                && !(opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode))) {
+            filtered = filterBySize(jLogger, filtered, opts, vmCpus, vmMemoryMB, true);
+            if (filtered.isEmpty()) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.NO_HOST_WITH_FREE_RAM_FOR_VM,
+                        "no candidate host in cluster \"" + cluster.getName() + "\" has the VM's memory size ("
+                                + vmMemoryMB + " MB) free right now.");
+            }
+        }
+
+        // Asked to pick any host at random: only the checks above (reachable, in service, big enough
+        // where known) count, not the load, so hosts that report no usage are as good as any.
+        if (opts.isPickAnyHostAtRandom() && !"DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            return VSphereHostSelection.Evaluation.eligible(filtered);
+        }
+
+        // Ranking by load needs the statistics; DRS does its own.
+        if (!"DRS_RECOMMENDED".equals(hostSelectionMode)) {
+            boolean anyStatistics = false;
+            for (HostCandidate candidate : filtered) {
+                anyStatistics |= candidate.loadFraction() != null;
+            }
+            if (!anyStatistics) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.NO_USAGE_STATISTICS,
+                        "none of the " + filtered.size() + " candidate host(s) in cluster \"" + cluster.getName()
+                                + "\" reports CPU/memory usage statistics.");
+            }
+        }
+
+        final HostLimits limits = opts.getLimits();
+        if (limits.isActive()) {
+            if (jLogger != null) {
+                logMessage(jLogger, "Keeping hosts off the list that do not satisfy the " + limits + ":");
+            }
+            filtered = filterByLimits(jLogger, filtered, limits, jLogger != null);
+            if (filtered.isEmpty()) {
+                return VSphereHostSelection.Evaluation.none(
+                        HostSelectionWaitReason.BELOW_FREE_RESOURCE_LIMITS,
+                        "every candidate host in cluster \"" + cluster.getName()
+                                + "\" has less free resources than the " + limits + ".");
+            }
+        }
+        return VSphereHostSelection.Evaluation.eligible(filtered);
+    }
+
+    /**
+     * Tells the pipeline's {@code hostSelectionWaitNotification}, if any, that no host is available. If
+     * it throws, so does this (failing the clone/deploy), unless it was asked to ignore its errors, when
+     * they are only logged.
+     */
+    private void notifyWaitListener(
+            PrintStream jLogger, HostSelectionOptions opts, String message, HostSelectionWaitReason reason)
+            throws VSphereException {
+        final HostSelectionOptions.Listener listener = opts.getWaitListener();
+        if (listener == null) {
+            return;
+        }
+        try {
+            listener.hostSelectionWaiting(message, reason);
+        } catch (VirtualMachineError e) {
+            throw e;
+        } catch (Throwable t) {
+            if (!opts.isIgnoreWaitListenerErrors()) {
+                throw new VSphereException("The hostSelectionWaitNotification failed: " + t, t);
+            }
+            logMessage(jLogger, "Warning: the hostSelectionWaitNotification failed, ignoring it as requested: " + t);
+            LOGGER.log(Level.WARNING, "hostSelectionWaitNotification failed, ignored", t);
+        }
+    }
+
+    /**
+     * Drops hosts that are too small for the VM (see {@link HostSelectionOptions}), and with {@code
+     * checkFreeMemory} also those without the VM's memory size free right now; logs why unless {@code
+     * jLogger} is null.
+     */
+    private List<HostCandidate> filterBySize(
+            PrintStream jLogger,
+            List<HostCandidate> candidates,
+            HostSelectionOptions opts,
+            Integer vmCpus,
+            Integer vmMemoryMB,
+            boolean checkFreeMemory) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.sizeShortfall(
+                    candidate, opts.isRequireCores(), vmCpus, opts.isRequireMemory(), checkFreeMemory, vmMemoryMB);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (jLogger != null) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
+    }
+
+    /** Drops hosts with less free resources than the limits; logs why if {@code verbose}. */
+    private List<HostCandidate> filterByLimits(
+            PrintStream jLogger, List<HostCandidate> candidates, HostLimits limits, boolean verbose) {
+        final List<HostCandidate> kept = new ArrayList<>();
+        for (HostCandidate candidate : candidates) {
+            final String shortfall = VSphereHostSelection.limitShortfall(candidate, limits);
+            if (shortfall == null) {
+                kept.add(candidate);
+            } else if (verbose) {
+                logMessage(jLogger, "  Host \"" + candidate.getName() + "\" ruled out: " + shortfall + ".");
+            }
+        }
+        return kept;
+    }
+
+    /**
+     * Asks vCenter's own DRS engine for a placement recommendation, restricted to the given
+     * (already permission/availability-filtered) candidate hosts. Returns null - never throws -
+     * if DRS is unavailable, unlicensed, disabled on the cluster, or gives no recommendation, so
+     * callers can fall back to a simpler heuristic.
+     */
+    private HostSystem recommendHostViaDrs(
+            PrintStream jLogger,
+            ClusterComputeResource clusterResource,
+            VirtualMachine sourceVm,
+            String cloneName,
+            VirtualMachineCloneSpec cloneSpec,
+            VirtualMachineRelocateSpec rel,
+            List<HostSystem> hostSystems,
+            List<HostCandidate> filtered) {
+        try {
+            final ManagedObjectReference[] candidateMors = new ManagedObjectReference[filtered.size()];
+            for (int i = 0; i < filtered.size(); i++) {
+                HostSystem hostSystem =
+                        findHostSystemByName(hostSystems, filtered.get(i).getName());
+                if (hostSystem == null) {
+                    return null;
+                }
+                candidateMors[i] = hostSystem.getMOR();
+            }
+
+            final PlacementSpec placementSpec = new PlacementSpec();
+            placementSpec.setPlacementType("clone");
+            placementSpec.setVm(sourceVm.getMOR());
+            placementSpec.setCloneName(cloneName);
+            placementSpec.setCloneSpec(cloneSpec);
+            placementSpec.setRelocateSpec(rel);
+            placementSpec.setHosts(candidateMors);
+
+            final PlacementResult result = clusterResource.placeVm(placementSpec);
+            if (result == null || result.getRecommendations() == null || result.getRecommendations().length == 0) {
+                return null;
+            }
+
+            ClusterRecommendation best = null;
+            for (ClusterRecommendation recommendation : result.getRecommendations()) {
+                if (best == null || recommendation.getRating() > best.getRating()) {
+                    best = recommendation;
+                }
+            }
+            if (best == null || best.getTarget() == null) {
+                return null;
+            }
+            for (HostSystem hostSystem : hostSystems) {
+                if (hostSystem.getMOR().equals(best.getTarget())) {
+                    return hostSystem;
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            LOGGER.log(
+                    Level.WARNING,
+                    "DRS placement recommendation failed, will fall back to least-loaded host selection",
+                    e);
+            return null;
+        }
+    }
+
+    private HostCandidate toHostCandidate(HostSystem hostSystem) {
+        final HostListSummary summary = hostSystem.getSummary();
+        final HostRuntimeInfo runtime = hostSystem.getRuntime();
+        final boolean connected =
+                runtime != null && runtime.getConnectionState() == HostSystemConnectionState.connected;
+        final boolean inMaintenanceMode = runtime != null && runtime.isInMaintenanceMode();
+
+        Integer cpuUsageMhz = null;
+        Integer memUsageMB = null;
+        int cpuCapacityMhz = 0;
+        int cpuCores = 0;
+        long memCapacityMB = 0L;
+        if (summary != null) {
+            final HostListSummaryQuickStats quickStats = summary.getQuickStats();
+            if (quickStats != null) {
+                cpuUsageMhz = quickStats.getOverallCpuUsage();
+                memUsageMB = quickStats.getOverallMemoryUsage();
+            }
+            final HostHardwareSummary hardware = summary.getHardware();
+            if (hardware != null) {
+                cpuCores = hardware.getNumCpuCores();
+                cpuCapacityMhz = hardware.getCpuMhz() * cpuCores;
+                memCapacityMB = hardware.getMemorySize() / (1024L * 1024L);
+            }
+        }
+        return new HostCandidate(
+                hostSystem.getName(),
+                connected,
+                inMaintenanceMode,
+                cpuUsageMhz,
+                cpuCapacityMhz,
+                memUsageMB,
+                memCapacityMB,
+                cpuCores);
+    }
+
+    private static HostSystem findHostSystemByName(List<HostSystem> hostSystems, String name) {
+        for (HostSystem hostSystem : hostSystems) {
+            if (hostSystem.getName().equals(name)) {
+                return hostSystem;
+            }
+        }
+        return null;
+    }
+
+    @Override
+    public void markAsTemplate(String vmName, String snapName, boolean force) throws VSphereException {
+
+        final String message = "Could not mark as Template. Check its power state or select \"force\".";
+        try {
+            VirtualMachine vm = getVmByName(vmName);
+            if (vm.getConfig().template) return;
+
+            if (isPoweredOff(vm) || force) {
+                powerOffVm(vm, force, 0);
+                vm.markAsTemplate();
+                return;
+            }
+        } catch (Exception e) {
+            throw new VSphereException(message, e);
+        }
+        throw new VSphereException(message);
+    }
+
+    @Override
+    public void markAsVm(String name, String resourcePool, String cluster) throws VSphereException {
+        try {
+            VirtualMachine vm = getVmByName(name);
+            if (vm.getConfig().template) {
+                vm.markAsVirtualMachine(getResourcePoolByName(resourcePool, getClusterByName(cluster)), null);
+            }
+        } catch (Exception e) {
+            throw new VSphereException("Could not convert to VM", e);
+        }
+    }
+
+    /**
+     * @param vmName - name of VM object to retrieve
+     * @return - VirtualMachine object
+     * @throws VSphereException If an error occurred.
+     */
+    @Override
+    public VirtualMachine getVmByName(String vmName) throws VSphereException {
+        try {
+            return (VirtualMachine) new InventoryNavigator(getServiceInstance().getRootFolder())
+                    .searchManagedEntity("VirtualMachine", vmName);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    @Override
+    public int countVms() throws VSphereException {
+        int count = 0;
+        try {
+            final InventoryNavigator navigator =
+                    new InventoryNavigator(getServiceInstance().getRootFolder());
+            final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+            count = entities.length;
+        } catch (Exception ex) {
+            throw new VSphereException(ex);
+        }
+        return count;
+    }
+
+    @Override
+    public int countVmsByPrefix(final String prefix) throws VSphereException {
+        int count = 0;
+        try {
+            final InventoryNavigator navigator =
+                    new InventoryNavigator(getServiceInstance().getRootFolder());
+            final ManagedEntity[] entities = navigator.searchManagedEntities(false);
+            for (final ManagedEntity entity : entities) {
+                if (entity.getName().startsWith(prefix)) {
+                    ++count;
+                }
+            }
+        } catch (Exception ex) {
+            throw new VSphereException(ex);
+        }
+        return count;
+    }
+
+    private Datastore getDatastoreByName(final String datastoreName, ManagedEntity rootEntity)
+            throws RemoteException, MalformedURLException {
+        if (rootEntity == null) {
+            rootEntity = getServiceInstance().getRootFolder();
+        }
+
+        Datastore datastore =
+                (Datastore) new InventoryNavigator(rootEntity).searchManagedEntity("Datastore", datastoreName);
+        if (datastore != null) {
+            return datastore;
+        }
+
+        if (rootEntity == null || !(rootEntity instanceof ClusterComputeResource)) {
+            return null;
+        }
+
+        // try to fetch data store directly from cluster if above approach doesn't work
+        ClusterComputeResource clusterResource = (ClusterComputeResource) rootEntity;
+
+        for (Datastore dataStore : clusterResource.getDatastore()) {
+            if (dataStore.getName().equals(datastoreName)) {
+                return dataStore;
+            }
+        }
+        return null;
+    }
+
+    /*
+    Check if folder exists along all the vSphere folders
+    */
+    @Override
+    public Boolean folderExists(String folderPath) throws VSphereException {
+        try {
+            String[] folderHierarchy = folderPath.split("/");
+            ManagedEntity folder = null;
+
+            for (int i = 0; i < folderHierarchy.length; i++) {
+                if (i == 0) {
+                    folder = new InventoryNavigator(getServiceInstance().getRootFolder())
+                            .searchManagedEntity("Folder", folderHierarchy[i]);
+                } else {
+                    folder = new InventoryNavigator(folder).searchManagedEntity(null, folderHierarchy[i]);
+                }
+                if (folder == null) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Failed while checking if folder exists");
+            throw new VSphereException(e);
+        }
+    }
+
+    @Override
+    public Folder getFolder(String folderPath) throws VSphereException {
+        try {
+            String[] folderHierarchy = folderPath.split("/");
+            ManagedEntity folder = null;
+
+            for (int i = 0; i < folderHierarchy.length; i++) {
+                if (i == 0) {
+                    folder = new InventoryNavigator(getServiceInstance().getRootFolder())
+                            .searchManagedEntity("Folder", folderHierarchy[i]);
+                } else {
+                    folder = new InventoryNavigator(folder).searchManagedEntity(null, folderHierarchy[i]);
+                }
+            }
+            return (Folder) folder;
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Invalid folder");
+            throw new VSphereException(e);
+        }
+    }
+
+    @Override
+    public CustomizationSpecItem getCustomizationSpecByName(final String customizationSpecName)
+            throws VSphereException {
+        try {
+            ServerConnection conn = getServiceInstance().getServerConnection();
+            CustomizationSpecManager mgr = new CustomizationSpecManager(
+                    conn, getServiceInstance().getServiceContent().customizationSpecManager);
+
+            return mgr.getCustomizationSpec(customizationSpecName);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * @return - ManagedEntity array of Datastore
+     * @throws VSphereException If an error occurred.
+     */
+    @Override
+    public ManagedEntity[] getDatastores() throws VSphereException {
+        try {
+            return new InventoryNavigator(getServiceInstance().getRootFolder()).searchManagedEntities("Datastore");
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    /**
+     * @param poolName - Name of pool to use
+     * @return - ResourcePool object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException
+     * @throws VSphereException
+     */
+    private ResourcePool getResourcePoolByName(final String poolName, ManagedEntity rootEntity)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity == null) rootEntity = getServiceInstance().getRootFolder();
+
+        return (ResourcePool) new InventoryNavigator(rootEntity).searchManagedEntity("ResourcePool", poolName);
+    }
+
+    /**
+     * @param clusterName - Name of cluster name to find
+     * @param rootEntity - managed entity to search
+     * @return - ClusterComputeResource object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException
+     * @throws VSphereException
+     */
+    private ClusterComputeResource getClusterByName(final String clusterName, ManagedEntity rootEntity)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        if (rootEntity == null) rootEntity = getServiceInstance().getRootFolder();
+
+        return (ClusterComputeResource)
+                new InventoryNavigator(rootEntity).searchManagedEntity("ClusterComputeResource", clusterName);
+    }
+
+    /**
+     * @param clusterName - Name of cluster name to find
+     * @return - ClusterComputeResource object
+     * @throws InvalidProperty
+     * @throws RuntimeFault
+     * @throws RemoteException
+     * @throws MalformedURLException
+     * @throws VSphereException
+     */
+    private ClusterComputeResource getClusterByName(final String clusterName)
+            throws InvalidProperty, RuntimeFault, RemoteException, MalformedURLException {
+        return getClusterByName(clusterName, null);
+    }
+
+    /**
+     * Private helper functions that finds the datanceter a VirtualMachine belongs to
+     * @param managedEntity - VM object
+     * @return returns Datacenter object
+     */
+    private Datacenter getDataCenter(ManagedEntity managedEntity) {
+        if (managedEntity != null) {
+            ManagedEntity parent = managedEntity.getParent();
+            if (parent.getMOR().getType().equals("Datacenter")) {
+                return (Datacenter) parent;
+            } else {
+                return getDataCenter(managedEntity.getParent());
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+     * @param virtualMachine - VM object
+     * @param name - the name of the Port Group
+     * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @throws VSphereException If an error occurred.
+     */
+    @Override
+    public Network getNetworkPortGroupByName(VirtualMachine virtualMachine, String name) throws VSphereException {
+        try {
+            Datacenter datacenter = getDataCenter(virtualMachine);
+            for (Network network : datacenter.getNetwork()) {
+                if (name.isEmpty() || network.getName().contentEquals(name)) {
+                    return network;
+                }
+            }
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+        return null;
+    }
+
+    /**
+     * Find Distributed Virtual Port Group name in the same Datacenter as the VM
+     * @param virtualMachine - VM object
+     * @param name - the name of the Port Group
+     * @return returns DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @throws VSphereException If an error occurred.
+     */
+    @Override
+    public DistributedVirtualPortgroup getDistributedVirtualPortGroupByName(VirtualMachine virtualMachine, String name)
+            throws VSphereException {
+        try {
+            Datacenter datacenter = getDataCenter(virtualMachine);
+            for (Network network : datacenter.getNetwork()) {
+                if (network instanceof DistributedVirtualPortgroup
+                        && (name.isEmpty() || network.getName().contentEquals(name))) {
+                    return (DistributedVirtualPortgroup) network;
+                }
+            }
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+        return null;
+    }
+
+    /**
+     * Find Distributed Virtual Switch from the provided Distributed Virtual Portgroup
+     * @param distributedVirtualPortgroup - DistributedVirtualPortgroup object for the provided vDS PortGroup
+     * @return returns DistributedVirtualSwitch object that represents the vDS Switch
+     * @throws VSphereException If an error occurred.
+     */
+    @Override
+    public DistributedVirtualSwitch getDistributedVirtualSwitchByPortGroup(
+            DistributedVirtualPortgroup distributedVirtualPortgroup) throws VSphereException {
+        try {
+            ManagedObjectReference managedObjectReference = new ManagedObjectReference();
+            managedObjectReference.setType("DistributedVirtualSwitch");
+            managedObjectReference.setVal(distributedVirtualPortgroup
+                    .getConfig()
+                    .getDistributedVirtualSwitch()
+                    .getVal());
+            return new DistributedVirtualSwitch(getServiceInstance().getServerConnection(), managedObjectReference);
+        } catch (Exception e) {
+            throw new VSphereException(e);
+        }
+    }
+
+    private void logMessage(PrintStream jLogger, String message) {
+        if (jLogger != null) {
+            VSphereLogger.vsLogger(jLogger, message);
+        }
+        LOGGER.log(Level.FINER, message);
+    }
+}

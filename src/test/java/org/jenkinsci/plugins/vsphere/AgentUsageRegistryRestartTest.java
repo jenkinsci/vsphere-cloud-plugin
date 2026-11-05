@@ -8,7 +8,6 @@ import hudson.model.Node.Mode;
 import hudson.slaves.JNLPLauncher;
 import hudson.slaves.RetentionStrategy;
 import java.util.Collections;
-import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.jvnet.hudson.test.JenkinsRule;

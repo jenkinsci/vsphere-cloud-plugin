@@ -5,7 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
+import org.jenkinsci.plugins.vsphere.vSphereCloudSlaveTemplate;
 
 /**
  * There's a delay between when we give a bunch of nodes to Jenkins (when

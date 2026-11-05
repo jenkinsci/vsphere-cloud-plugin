@@ -123,11 +123,13 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
             resolvedEnvVariablePrefix = env.expand(envVariablePrefix).replace("-", "_");
         }
 
-        VSphereLogger.vsLogger(jLogger, "Exposing guest info for VM \"" + vmName + "\" as environment variables");
-
         VirtualMachine vsphereVm = vsphere.getVmByName(vmName);
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Exposing guest info for VM " + VSphereLogger.quoted(vmName) + VSphereLogger.onHost(vsphere, vsphereVm)
+                        + " as environment variables");
         if (vsphereVm == null) {
-            throw new RuntimeException(Messages.validation_notFound("vm " + vmName));
+            throw new RuntimeException(Messages.validation_notFound("VM " + VSphereLogger.quoted(vmName)));
         }
         VSphereEnvAction envAction = createGuestInfoEnvAction(vsphereVm, jLogger);
 
@@ -147,7 +149,7 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
 
         run.addAction(envAction);
 
-        VSphereLogger.vsLogger(jLogger, "Successfully exposed guest info for VM \"" + vmName + "\"");
+        VSphereLogger.vsLogger(jLogger, "Successfully exposed guest info for VM " + VSphereLogger.quoted(vmName));
         return true;
     }
 
@@ -168,7 +170,8 @@ public class ExposeGuestInfo extends VSphereBuildStep implements SimpleBuildStep
             Class returnType = method.getReturnType();
             if (!USABLE_CLASS_TYPES.contains(returnType) && !returnType.isEnum()) {
                 VSphereLogger.vsLogger(
-                        jLogger, "Skipped \"" + variableName + "\" as it is of type " + returnType.toString());
+                        jLogger,
+                        "Skipped " + VSphereLogger.quoted(variableName) + " as it is of type " + returnType.toString());
                 continue;
             }
 

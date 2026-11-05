@@ -11,6 +11,7 @@
 
 ## Documentation:
 * [Jenkins configuration](docs/jenkins-configuration.md)
+* [Standalone ESXi hosts over SSH](docs/esxi-ssh.md)
 * [VM setup hints](docs/vm-configuration.md)
 * [Using the plugin in pipelines](docs/pipeline.md)
 * [Miscellaneous](docs/misc.md)

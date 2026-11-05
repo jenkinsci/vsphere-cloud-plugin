@@ -26,6 +26,13 @@ If you do not have existing credentials defined for this within Jenkins then you
 
 The "Test Connection" button will test to see if your vSphere is accessible with the specified host name, user name and password.
 
+The **Connection type** is how the host is connected to, and decides what the other settings are:
+the default is vCenter, as described here. A standalone ESXi host without vCenter (such as one
+with the free license, or an old one) can be used over SSH instead, with only a part of what
+is described below being available:
+see [Standalone ESXi hosts over SSH](esxi-ssh.md), which also describes how the settings are laid out in
+Configuration as Code, and that the layout from before is still understood.
+
 Under "Advanced...", "Default Host Selection Mode" and "Default Host Selection Candidates"
 let you set a cloud-wide default for how clones are placed on a host, applied to every
 template and build step that uses this cloud and doesn't set its own value. See

@@ -8,8 +8,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vSphereCloudSlaveTemplate;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
+import org.jenkinsci.plugins.vsphere.vSphereCloudSlaveTemplate;
 
 /**
  * Utility class that works out what agents we should start up in response to

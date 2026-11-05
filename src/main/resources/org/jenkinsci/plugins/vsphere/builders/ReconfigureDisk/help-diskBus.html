@@ -1,0 +1,11 @@
+<div>
+  The kind of controller that a new disk is put on (when the action is Add; default SCSI). The first controller of
+  that kind that has a free unit is used. If there is none, a SCSI, SATA or NVMe controller is added; a VM has two
+  IDE controllers always, with two units each, which cannot be added to, so the step fails if they are full.
+  An IDE disk is put on the first free unit, the master (unit 0) before the slave, as a host will not start a VM
+  that has a slave and no master.
+  <b>Note on IDE:</b> a VM often has a CD-ROM on one of its IDE units (an ISO image, emulation or passthrough of a
+  drive), commonly <code>IDE(1:0)</code>, and sometimes <code>IDE(0:0)</code>. Such a device occupies its unit, so
+  fewer than four are left for disks. There are alternatives: attach the CD-ROM to SATA, or have none, or put the
+  disks on SCSI, SATA or NVMe.
+</div>

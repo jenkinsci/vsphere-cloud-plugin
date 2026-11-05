@@ -278,7 +278,9 @@ public class ReconfigureNetworkAdapters extends ReconfigureStep {
         VirtualDeviceConfigSpec vdspec = new VirtualDeviceConfigSpec();
 
         vdspec.setDevice(vEth);
-        if (deviceAction == DeviceAction.EDIT) {
+        if (deviceAction == DeviceAction.ADD) {
+            vdspec.setOperation(VirtualDeviceConfigSpecOperation.add);
+        } else if (deviceAction == DeviceAction.EDIT) {
             vdspec.setOperation(VirtualDeviceConfigSpecOperation.edit);
         } else if (deviceAction == DeviceAction.REMOVE) {
             vdspec.setOperation(VirtualDeviceConfigSpecOperation.remove);

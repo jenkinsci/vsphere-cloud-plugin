@@ -118,7 +118,10 @@ public class RevertToSnapshot extends VSphereBuildStep implements SimpleBuildSte
             expandedVm = env.expand(vm);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Reverting to snapshot \"" + expandedSnap + "\" for VM " + expandedVm + "...");
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Reverting to snapshot " + VSphereLogger.quoted(expandedSnap) + " of VM "
+                        + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm) + "...");
         vsphere.revertToSnapshot(expandedVm, expandedSnap, suppressPowerOn);
         VSphereLogger.vsLogger(jLogger, "Complete.");
 

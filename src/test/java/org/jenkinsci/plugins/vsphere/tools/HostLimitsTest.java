@@ -12,8 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import org.jenkinsci.plugins.vSphereCloud;
 import org.jenkinsci.plugins.vsphere.tools.VSphereHostSelection.HostCandidate;
+import org.jenkinsci.plugins.vsphere.vSphereCloud;
 import org.junit.jupiter.api.Test;
 
 class HostLimitsTest {

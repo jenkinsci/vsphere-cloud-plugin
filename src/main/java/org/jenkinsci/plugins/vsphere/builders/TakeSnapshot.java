@@ -122,7 +122,10 @@ public class TakeSnapshot extends VSphereBuildStep implements SimpleBuildStep {
             expandedDescription = env.expand(description);
         }
 
-        VSphereLogger.vsLogger(jLogger, "Taking snapshot...");
+        VSphereLogger.vsLogger(
+                jLogger,
+                "Taking snapshot " + VSphereLogger.quoted(expandedSnapshotName) + " of VM "
+                        + VSphereLogger.quoted(expandedVm) + VSphereLogger.onHost(vsphere, expandedVm) + "...");
         vsphere.takeSnapshot(expandedVm, expandedSnapshotName, expandedDescription, includeMemory);
         VSphereLogger.vsLogger(jLogger, "Complete.");
 

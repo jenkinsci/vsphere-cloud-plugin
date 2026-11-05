@@ -23,8 +23,6 @@ import java.util.logging.Logger;
 import jenkins.model.Jenkins;
 import jenkins.util.SystemProperties;
 import jenkins.util.Timer;
-import org.jenkinsci.plugins.vSphereCloudLauncher;
-import org.jenkinsci.plugins.vSphereCloudSlave;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleToken;
 import org.kohsuke.accmod.Restricted;

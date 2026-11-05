@@ -13,7 +13,6 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.model.Jenkins;
-import org.jenkinsci.plugins.vSphereCloud;
 
 /**
  * Startup sanity check: Jenkins identifies a {@link Cloud} by its {@code name}, so two clouds sharing

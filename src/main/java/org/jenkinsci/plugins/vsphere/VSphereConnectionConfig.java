@@ -26,7 +26,6 @@ import com.cloudbees.plugins.credentials.CredentialsScope;
 import com.cloudbees.plugins.credentials.CredentialsStore;
 import com.cloudbees.plugins.credentials.SystemCredentialsProvider;
 import com.cloudbees.plugins.credentials.common.StandardCredentials;
-import com.cloudbees.plugins.credentials.common.StandardListBoxModel;
 import com.cloudbees.plugins.credentials.common.StandardUsernameCredentials;
 import com.cloudbees.plugins.credentials.common.StandardUsernamePasswordCredentials;
 import com.cloudbees.plugins.credentials.domains.Domain;
@@ -41,18 +40,17 @@ import hudson.Extension;
 import hudson.Util;
 import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
-import hudson.model.Item;
 import hudson.security.ACL;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import jenkins.model.Jenkins;
-import org.apache.commons.lang3.StringUtils;
-import org.jenkinsci.plugins.vSphereCloud;
-import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.kohsuke.stapler.AncestorInPath;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -65,11 +63,33 @@ import org.kohsuke.stapler.interceptor.RequirePOST;
  */
 public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConnectionConfig> {
 
-    private final @CheckForNull String vsHost;
-    private /*final*/ boolean allowUntrustedCertificate;
-    private final @CheckForNull String credentialsId;
+    private static final Logger LOGGER = Logger.getLogger(VSphereConnectionConfig.class.getName());
 
-    private enum HttpClientClassName {
+    private final @CheckForNull String vsHost;
+
+    /** What is specific to the way of connecting, which is never null once the configuration is complete. */
+    private VSphereBackendConfig backend;
+
+    // The settings of vCenter as they used to be, flat, in the saved configuration: they are moved into the backend
+    // when it is loaded (see readResolve), and so are not in what is saved from then on.
+    @Deprecated
+    private @CheckForNull String credentialsId;
+
+    @Deprecated
+    private @CheckForNull Boolean allowUntrustedCertificate;
+
+    @Deprecated
+    private @CheckForNull String httpClientClassName;
+
+    /** What the connection is made to, which decides which of the settings are in use. */
+    public enum BackendType {
+        /** vCenter (or an ESXi host whose API can be written to), through the vSphere Web Services API. */
+        VCENTER,
+        /** A standalone ESXi host, through SSH and its {@code vim-cmd}. */
+        ESXI_SSH
+    }
+
+    enum HttpClientClassName {
         ApacheHttpClientClass("ApacheHttpClient"),
         WSClientClass("WSClient");
 
@@ -80,7 +100,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         }
     }
 
-    private static Class<?> httpClientNameToClass(String httpClientClassName) {
+    static Class<?> httpClientNameToClass(String httpClientClassName) {
         // May be null for configs deserialized from XML saved before this field existed
         if (HttpClientClassName.ApacheHttpClientClass.name.equals(httpClientClassName)) {
             return ApacheHttpClient.class;
@@ -88,14 +108,12 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
         return WSClient.class;
     }
 
-    private static String httpClientClassToName(Class<?> httpClientClass) {
+    static String httpClientClassToName(Class<?> httpClientClass) {
         if (httpClientClass == ApacheHttpClient.class) {
             return HttpClientClassName.ApacheHttpClientClass.name;
         }
         return HttpClientClassName.WSClientClass.name;
     }
-
-    private String httpClientClassName;
 
     private static Class<?> httpClientClass;
 
@@ -105,65 +123,168 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             List<vSphereCloud> clouds = vSphereCloud.findAllVsphereClouds(null);
             if (!clouds.isEmpty()) {
                 VSphereConnectionConfig firstConfig = clouds.get(0).getVsConnectionConfig();
-                if (firstConfig != null) {
-                    VSphereConnectionConfig.httpClientClass = httpClientNameToClass(firstConfig.httpClientClassName);
+                final VCenterBackendConfig first = firstConfig == null ? null : firstConfig.getVCenter();
+                if (first != null) {
+                    VSphereConnectionConfig.httpClientClass = httpClientNameToClass(first.getHttpClientClassName());
                 }
             }
         }
         return VSphereConnectionConfig.httpClientClass;
     }
 
-    public static String getHttpClientClassName() {
+    public static String currentHttpClientClassName() {
         return httpClientClassToName(setupGlobalHttpClientClass());
     }
 
-    @DataBoundSetter
-    public void setHttpClientClassName(String httpClientClassName) {
-        this.httpClientClassName = (httpClientClassName == null) ? getHttpClientClassName() : httpClientClassName;
+    /** The HTTP client is one setting for the whole plugin: this makes it so for all the clouds that use vCenter. */
+    static void applyHttpClientClassNameToAll(String httpClientClassName) {
         for (vSphereCloud cloud : vSphereCloud.findAllVsphereClouds(null)) {
             VSphereConnectionConfig config = cloud.getVsConnectionConfig();
-            if (config != null) {
-                config.httpClientClassName = this.httpClientClassName;
+            final VCenterBackendConfig vcenter = config == null ? null : config.getVCenter();
+            if (vcenter != null) {
+                vcenter.setHttpClientClassNameQuietly(httpClientClassName);
             }
         }
-        VSphereConnectionConfig.httpClientClass = httpClientNameToClass(this.httpClientClassName);
+        VSphereConnectionConfig.httpClientClass = httpClientNameToClass(httpClientClassName);
     }
 
+    static ListBoxModel httpClientItems() {
+        return new ListBoxModel(
+                new ListBoxModel.Option(
+                        "Use HttpURLConnection to connect to the vSphere cloud",
+                        HttpClientClassName.WSClientClass.name,
+                        HttpClientClassName.WSClientClass.name.equals(currentHttpClientClassName())),
+                new ListBoxModel.Option(
+                        "Use CloseableHttpClient to connect to the vSphere cloud",
+                        HttpClientClassName.ApacheHttpClientClass.name,
+                        HttpClientClassName.ApacheHttpClientClass.name.equals(currentHttpClientClassName())));
+    }
+
+    /** For the form and for Configuration as Code: the host, and then what is specific to the way of connecting. */
     @DataBoundConstructor
-    public VSphereConnectionConfig(String vsHost, String credentialsId, String httpClientClassName) {
+    public VSphereConnectionConfig(String vsHost) {
         this.vsHost = vsHost;
-        this.credentialsId = credentialsId;
-        setHttpClientClassName(httpClientClassName);
+        this.backend = new VCenterBackendConfig();
+    }
+
+    /** For vCenter: the host (as an https:// URL), the credentials and the HTTP client. */
+    public VSphereConnectionConfig(String vsHost, String credentialsId, String httpClientClassName) {
+        this(vsHost);
+        final VCenterBackendConfig vcenter = (VCenterBackendConfig) backend;
+        vcenter.setCredentialsId(credentialsId);
+        vcenter.setHttpClientClassName(httpClientClassName);
     }
 
     /** Full constructor for internal use, initializes all fields */
     public VSphereConnectionConfig(String vsHost, boolean allowUntrustedCertificate, String credentialsId) {
         this(vsHost, credentialsId, null);
-        setAllowUntrustedCertificate(allowUntrustedCertificate);
+        ((VCenterBackendConfig) backend).setAllowUntrustedCertificate(allowUntrustedCertificate);
+    }
+
+    /**
+     * The settings that used to be flat in this configuration, in what was saved before they were grouped by
+     * the way of connecting, are those of vCenter: they become its group.
+     */
+    protected Object readResolve() {
+        if (backend == null) {
+            final VCenterBackendConfig vcenter = new VCenterBackendConfig();
+            vcenter.setCredentialsId(credentialsId);
+            vcenter.setAllowUntrustedCertificate(Boolean.TRUE.equals(allowUntrustedCertificate));
+            vcenter.setHttpClientClassNameAsLoaded(httpClientClassName);
+            backend = vcenter;
+            LOGGER.log(Level.FINE, "Moved the settings of the connection to {0} into its vCenter group", vsHost);
+        }
+        credentialsId = null;
+        allowUntrustedCertificate = null;
+        httpClientClassName = null;
+        return this;
     }
 
     public @CheckForNull String getVsHost() {
         return vsHost;
     }
 
+    /** What is specific to the way of connecting. */
+    public VSphereBackendConfig getBackend() {
+        return backend;
+    }
+
+    @DataBoundSetter
+    public void setBackend(@CheckForNull VSphereBackendConfig backend) {
+        this.backend = backend == null ? new VCenterBackendConfig() : backend;
+    }
+
+    public BackendType getBackendType() {
+        return backend.getBackendType();
+    }
+
+    /** The settings of connecting to vCenter, or null if the connection is of another kind. */
+    public @CheckForNull VCenterBackendConfig getVCenter() {
+        return backend instanceof VCenterBackendConfig ? (VCenterBackendConfig) backend : null;
+    }
+
+    /** The settings of connecting to a standalone ESXi host over SSH, or null if the connection is of another kind. */
+    public @CheckForNull EsxiSshBackendConfig getEsxiSsh() {
+        return backend instanceof EsxiSshBackendConfig ? (EsxiSshBackendConfig) backend : null;
+    }
+
+    private VCenterBackendConfig vCenterToSet(String what) {
+        final VCenterBackendConfig vcenter = getVCenter();
+        if (vcenter == null) {
+            throw new IllegalArgumentException(what + " is a setting of the vCenter backend, but the backend of this"
+                    + " connection configuration is " + backend.getBackendType()
+                    + ": put it in the settings of the backend instead");
+        }
+        return vcenter;
+    }
+
+    // The next three setters (and the getters after them) are the layout from before the settings were grouped by
+    // the way of connecting (now the vCenter group of the backend, where they are exported to), and are still
+    // understood, as the settings of vCenter, so that what was written or exported in that layout can be imported.
+    // They are write-only on purpose: Configuration as Code needs a getter to take them as attributes, and what
+    // the getters give is always "nothing", so that the old layout is never exported again. They are not marked
+    // as deprecated, as Configuration as Code refuses deprecated attributes by default. What the settings are is
+    // read from the vCenter group: see getVCenter().
+
+    /** The old layout of {@code vCenter: allowUntrustedCertificate: ...}. */
     @DataBoundSetter
     public void setAllowUntrustedCertificate(boolean allowUntrustedCertificate) {
-        this.allowUntrustedCertificate = allowUntrustedCertificate;
+        vCenterToSet("allowUntrustedCertificate").setAllowUntrustedCertificate(allowUntrustedCertificate);
     }
 
-    public boolean getAllowUntrustedCertificate() {
-        return allowUntrustedCertificate;
+    /** The old layout of {@code vCenter: credentialsId: ...}. */
+    @DataBoundSetter
+    public void setCredentialsId(@CheckForNull String credentialsId) {
+        vCenterToSet("credentialsId").setCredentialsId(credentialsId);
     }
 
+    /** The old layout of {@code vCenter: httpClientClassName: ...}. */
+    @DataBoundSetter
+    public void setHttpClientClassName(@CheckForNull String httpClientClassName) {
+        vCenterToSet("httpClientClassName").setHttpClientClassName(httpClientClassName);
+    }
+
+    /** Write-only, see above: always null. The credentials are in {@link #getVCenter()}. */
     public @CheckForNull String getCredentialsId() {
-        return credentialsId;
+        return null;
+    }
+
+    /** Write-only, see above: always false. The setting is in {@link #getVCenter()}. */
+    public boolean getAllowUntrustedCertificate() {
+        return false;
+    }
+
+    /** Write-only, see above: always null. The setting is in {@link #getVCenter()}. */
+    public @CheckForNull String getHttpClientClassName() {
+        return null;
     }
 
     public @CheckForNull StandardCredentials getCredentials() {
         if (vsHost == null) {
             return null;
         }
-        return DescriptorImpl.lookupCredentials(credentialsId, vsHost);
+        final VCenterBackendConfig vcenter = getVCenter();
+        return DescriptorImpl.lookupCredentials(vcenter == null ? null : vcenter.getCredentialsId(), vsHost);
     }
 
     public @CheckForNull String getPassword() {
@@ -250,137 +371,50 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
             return "N/A";
         }
 
-        @RequirePOST
-        public ListBoxModel doFillHttpClientClassNameItems(@AncestorInPath AbstractFolder<?> containingFolderOrNull) {
-            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-
-            ListBoxModel items = new ListBoxModel(
-                    new ListBoxModel.Option(
-                            "Use HttpURLConnection to connect to the vSphere cloud",
-                            VSphereConnectionConfig.HttpClientClassName.WSClientClass.name,
-                            VSphereConnectionConfig.HttpClientClassName.WSClientClass.name.equals(
-                                    getHttpClientClassName())),
-                    new ListBoxModel.Option(
-                            "Use CloseableHttpClient to connect to the vSphere cloud",
-                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name,
-                            VSphereConnectionConfig.HttpClientClassName.ApacheHttpClientClass.name.equals(
-                                    getHttpClientClassName())));
-            return items;
+        /** The ways of connecting that the form offers. */
+        public Collection<Descriptor<VSphereBackendConfig>> getBackendDescriptors() {
+            return VSphereBackendConfig.all();
         }
 
-        public FormValidation doCheckVsHost(@QueryParameter String value) {
+        /** What is chosen for a configuration that has none yet. */
+        public Descriptor<VSphereBackendConfig> getDefaultBackendDescriptor() {
+            return Jenkins.get().getDescriptor(VCenterBackendConfig.class);
+        }
+
+        /**
+         * @param port a setting of the connection type "standalone ESXi host over SSH", which is not there (so not sent)
+         *     for the other: that is how this tells which of the two is chosen
+         */
+        @RequirePOST
+        public FormValidation doCheckVsHost(
+                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
+                @QueryParameter String value,
+                @QueryParameter String port) {
+            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
             if (value != null && value.length() != 0) {
-                if (!value.startsWith("https://")) {
-                    return FormValidation.error("vSphere host must start with https://");
-                }
                 if (value.endsWith("/")) {
                     return FormValidation.error("vSphere host name must NOT end with a trailing slash");
+                }
+                // a plain name is a standalone ESXi host over SSH, which is for the connection type to say
+                if (!value.startsWith("https://") && value.contains("://")) {
+                    return FormValidation.error("vSphere host must start with https:// (for vCenter), or be"
+                            + " a plain host name (for a standalone ESXi host over SSH)");
+                }
+                if (!value.startsWith("https://") && port == null) {
+                    // vCenter is what is chosen: a plain name is not one
+                    return FormValidation.warning("Without https:// this is not a vCenter, which needs an https:// URL"
+                            + " here: a plain host name is for a standalone ESXi host, which is a connection type of its"
+                            + " own");
                 }
             }
             return FormValidation.validateRequired(value);
         }
 
-        public FormValidation doCheckAllowUntrustedCertificate(@QueryParameter boolean value) {
-            if (value) {
-                return FormValidation.warning("Warning: This is not secure.");
-            }
-            return FormValidation.ok();
-        }
-
-        @RequirePOST
-        public ListBoxModel doFillCredentialsIdItems(
-                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                @QueryParameter String vsHost,
-                @QueryParameter String credentialsId) {
-            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            final StandardListBoxModel result = new StandardListBoxModel();
-            // Only those who may use credentials get to see which ones exist; everybody else just sees the
-            // value that is currently configured.
-            final boolean mayListCredentials = containingFolderOrNull == null
-                    ? Jenkins.get().hasPermission(Jenkins.ADMINISTER)
-                    : containingFolderOrNull.hasPermission(CredentialsProvider.USE_ITEM)
-                            || containingFolderOrNull.hasPermission(Item.EXTENDED_READ);
-            if (!mayListCredentials) {
-                return result.includeCurrentValue(credentialsId);
-            }
-            // Credentials are looked up from the root when connecting (see lookupCredentials), so that is where
-            // they are listed from.
-            return result.includeEmptyValue()
-                    .includeMatchingAs(
-                            ACL.SYSTEM2,
-                            Jenkins.get(),
-                            StandardCredentials.class,
-                            Collections.singletonList(getDomainRequirement(vsHost)),
-                            CREDENTIALS_MATCHER)
-                    .includeCurrentValue(credentialsId);
-        }
-
-        @RequirePOST
-        public FormValidation doCheckCredentialsId(
-                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                @QueryParameter String vsHost,
-                @QueryParameter String value) {
-            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-
-            value = Util.fixEmptyAndTrim(value);
-            if (value == null) {
-                return FormValidation.ok();
-            }
-
-            vsHost = Util.fixEmptyAndTrim(vsHost);
-            if (vsHost == null) {
-                return FormValidation.warning("Cannot validate credentials. Host is not set");
-            }
-
-            final StandardCredentials credentials = lookupCredentials(value, vsHost);
-            if (credentials == null) {
-                return FormValidation.warning("Cannot find any credentials with id " + value);
-            }
-
-            return FormValidation.ok();
-        }
-
-        /**
-         * For UI.
-         *
-         * @param vsHost        From UI.
-         * @param credentialsId From UI.
-         * @return Result of the validation.
-         */
-        @RequirePOST
-        public FormValidation doTestConnection(
-                @AncestorInPath AbstractFolder<?> containingFolderOrNull,
-                @QueryParameter String vsHost,
-                @QueryParameter boolean allowUntrustedCertificate,
-                @QueryParameter String credentialsId) {
-            throwUnlessUserHasPermissionToConfigureCloud(containingFolderOrNull);
-            try {
-                final VSphereConnectionConfig config =
-                        new VSphereConnectionConfig(vsHost, allowUntrustedCertificate, credentialsId);
-                final String effectiveUsername = config.getUsername();
-                final String effectivePassword = config.getPassword();
-
-                if (StringUtils.isEmpty(effectiveUsername)) {
-                    return FormValidation.error("Username is not specified");
-                }
-
-                if (effectivePassword == null) {
-                    return FormValidation.error("Password is not specified");
-                }
-
-                VSphere.connect(config).disconnect();
-
-                return FormValidation.ok("Connected successfully");
-            } catch (Exception e) {
-                return FormValidation.error(e, "Failed to connect");
-            }
-        }
-
         // Support on login/password authentication
-        private static final CredentialsMatcher CREDENTIALS_MATCHER =
+        static final CredentialsMatcher CREDENTIALS_MATCHER =
                 CredentialsMatchers.anyOf(CredentialsMatchers.instanceOf(StandardUsernamePasswordCredentials.class));
 
-        private static @NonNull DomainRequirement getDomainRequirement(String hostname) {
+        static @NonNull DomainRequirement domainRequirement(String hostname) {
             return new HostnameRequirement(hostname);
         }
 
@@ -393,7 +427,7 @@ public class VSphereConnectionConfig extends AbstractDescribableImpl<VSphereConn
                                 StandardCredentials.class,
                                 instance,
                                 ACL.SYSTEM2,
-                                Collections.singletonList(getDomainRequirement(vsHost))),
+                                Collections.singletonList(domainRequirement(vsHost))),
                         CredentialsMatchers.withId(credentialsId));
             }
             return null;

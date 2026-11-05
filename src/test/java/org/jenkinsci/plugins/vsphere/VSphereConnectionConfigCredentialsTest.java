@@ -21,8 +21,8 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 @Issue("JENKINS-35534")
 class VSphereConnectionConfigCredentialsTest {
 
-    private static VSphereConnectionConfig.DescriptorImpl descriptor(JenkinsRule r) {
-        return r.jenkins.getDescriptorByType(VSphereConnectionConfig.DescriptorImpl.class);
+    private static VCenterBackendConfig.DescriptorImpl descriptor(JenkinsRule r) {
+        return r.jenkins.getDescriptorByType(VCenterBackendConfig.DescriptorImpl.class);
     }
 
     private static void addCredentials(String id) throws Exception {

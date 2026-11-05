@@ -89,7 +89,7 @@ limitations under the License.
     </f:entry>
 
     <f:entry title="${%Host Selection Mode}" field="hostSelectionMode">
-      <f:select/>
+      <f:select fillDependsOn="serverName"/>
     </f:entry>
 
     <f:entry title="${%Host Selection Candidates}" field="hostSelectionCandidatesAsString">
