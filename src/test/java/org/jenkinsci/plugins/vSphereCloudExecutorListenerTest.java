@@ -20,6 +20,7 @@ import hudson.slaves.RetentionStrategy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.jenkinsci.plugins.durabletask.executors.ContinuedTask;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -35,7 +36,7 @@ import org.jvnet.hudson.test.junit.jupiter.WithJenkins;
 class vSphereCloudExecutorListenerTest {
 
     /** Stands in for the {@code PlaceholderTask} that Pipeline's {@code node {}} step queues. */
-    private static final class NodeBlockTask extends AbstractQueueTask {
+    private static class NodeBlockTask extends AbstractQueueTask {
         private final FreeStyleBuild pipelineRun;
 
         NodeBlockTask(FreeStyleBuild pipelineRun) {
@@ -96,6 +97,21 @@ class vSphereCloudExecutorListenerTest {
         }
     }
 
+    /** Stands in for a block that Pipeline queued again after a restart. */
+    private static final class ResumedNodeBlockTask extends NodeBlockTask implements ContinuedTask {
+        private final boolean continued;
+
+        ResumedNodeBlockTask(FreeStyleBuild pipelineRun, boolean continued) {
+            super(pipelineRun);
+            this.continued = continued;
+        }
+
+        @Override
+        public boolean isContinued() {
+            return continued;
+        }
+    }
+
     private final vSphereCloudExecutorListener executorListener = new vSphereCloudExecutorListener();
     private final vSphereCloudRunListener runListener = new vSphereCloudRunListener();
 
@@ -131,6 +147,8 @@ class vSphereCloudExecutorListenerTest {
     /** Any running {@link Run} will do as the owner of the node blocks; it does not run on a vSphere agent. */
     private FreeStyleBuild pipelineRun(JenkinsRule r) throws Exception {
         final FreeStyleProject project = r.createFreeStyleProject();
+        // Without a label the job could be scheduled on a vSphere test agent; keep it on the built-in node.
+        project.setAssignedLabel(r.jenkins.getSelfLabel());
         project.getBuildersList().add(new SleepBuilder(600_000));
         final FreeStyleBuild build = project.scheduleBuild2(0).waitForStart();
         startedRuns.add(build);
@@ -180,6 +198,19 @@ class vSphereCloudExecutorListenerTest {
     }
 
     @Test
+    void aContinuedNodeBlockIsNotCountedAgain(JenkinsRule r) throws Exception {
+        final vSphereCloudSlave agent = agent(r, "agent", 5);
+        final FreeStyleBuild run = pipelineRun(r);
+
+        executorListener.taskStarted(executorOf(agent), new ResumedNodeBlockTask(run, true));
+
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+        executorListener.taskStarted(executorOf(agent), new ResumedNodeBlockTask(run, false));
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
+        runListener.onFinalized(run);
+    }
+
+    @Test
     void eachParallelPipelineRunIsCounted(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = agent(r, "agent", 5);
         final FreeStyleBuild run1 = pipelineRun(r);
@@ -194,7 +225,7 @@ class vSphereCloudExecutorListenerTest {
     }
 
     @Test
-    void reachingTheLimitRecyclesTheAgentOnlyOnceTheRunIsOver(JenkinsRule r) throws Exception {
+    void theUseStaysCountedOnceTheRunIsOverUntilTheAgentIsRecycled(JenkinsRule r) throws Exception {
         final vSphereCloudSlave agent = agent(r, "agent", 1);
         final FreeStyleBuild run = pipelineRun(r);
         executorListener.taskStarted(executorOf(agent), new NodeBlockTask(run));
@@ -203,7 +234,8 @@ class vSphereCloudExecutorListenerTest {
 
         runListener.onFinalized(run);
 
-        assertThat(agent.getNumberOfLimitedTestRuns(), is(0));
+        // The run is over, but the use it was counted for is only given back when the agent is recycled.
+        assertThat(agent.getNumberOfLimitedTestRuns(), is(1));
         assertThat(vSphereCloudSlave.hasLimitedTestRun(run), is(false));
     }
 

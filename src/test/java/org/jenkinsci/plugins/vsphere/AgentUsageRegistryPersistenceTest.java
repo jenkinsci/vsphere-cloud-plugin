@@ -72,23 +72,102 @@ class AgentUsageRegistryPersistenceTest {
     }
 
     @Test
-    void anAgentAtItsLimitOrWithoutOneStartsAgainOnLoad(JenkinsRule r, @TempDir Path dir) throws Exception {
+    void anAgentAtItsLimitIsKeptOnLoadAndOneWithoutALimitIsNot(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        // As saved before the runs were: counts only.
+        Files.write(
+                store.toPath(),
+                ("<usage><counts>"
+                                + "<entry><string>atLimit</string><int>3</int></entry>"
+                                + "<entry><string>belowLimit</string><int>2</int></entry>"
+                                + "<entry><string>unlimited</string><int>1</int></entry>"
+                                + "</counts></usage>")
+                        .getBytes(StandardCharsets.UTF_8));
+
+        final AgentUsageRegistry after = registry(store, new ArrayList<>());
+        after.load(node -> true, node -> node.equals("atLimit") ? 3 : node.equals("unlimited") ? 0 : 5);
+
+        // Its machine has not been cleaned, whether or not anything was using it: it is recycled once it is launched.
+        assertThat(after.count("atLimit"), is(3));
+        assertThat(after.count("belowLimit"), is(2));
+        assertThat(after.count("unlimited"), is(0));
+    }
+
+    @Test
+    void theCountedRunsAreSavedAndLoadedBack(JenkinsRule r, @TempDir Path dir) throws Exception {
         final File store = dir.resolve("usage.xml").toFile();
         final AgentUsageRegistry before = registry(store, new ArrayList<>());
-        final List<FreeStyleBuild> run = runs(r, 6);
-        use(before, "atLimit", 5, run.subList(0, 3), 3);
-        use(before, "belowLimit", 5, run.subList(3, 5), 2);
-        use(before, "unlimited", 5, run.subList(5, 6), 1);
+        final List<FreeStyleBuild> run = runs(r, 2);
+        use(before, "agent", 5, run, 2);
         before.save();
 
         final AgentUsageRegistry after = registry(store, new ArrayList<>());
-        // Whatever was using the agents when Jenkins stopped is gone, so an agent that had reached its limit would
-        // never be recycled.
-        after.load(node -> true, node -> node.equals("atLimit") ? 3 : node.equals("unlimited") ? 0 : 5);
+        after.load(node -> true, node -> 5);
 
-        assertThat(after.count("atLimit"), is(0));
-        assertThat(after.count("belowLimit"), is(2));
-        assertThat(after.count("unlimited"), is(0));
+        assertThat(after.isCounted(run.get(0).getExternalizableId()), is(true));
+        assertThat(after.nodeOf(run.get(1).getExternalizableId()), is("agent"));
+        assertThat(after.count("agent"), is(2));
+    }
+
+    @Test
+    void anAgentAtItsLimitIsKeptWhileItHasASavedRun(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final AgentUsageRegistry before = registry(store, new ArrayList<>());
+        final List<FreeStyleBuild> run = runs(r, 1);
+        use(before, "agent", 1, run, 1);
+        before.save();
+
+        final AgentUsageRegistry after = registry(store, new ArrayList<>());
+        after.load(node -> true, node -> 1);
+
+        assertThat(after.count("agent"), is(1));
+        assertThat(after.isCounted(run.get(0).getExternalizableId()), is(true));
+    }
+
+    @Test
+    void runsNoLongerBuildingArePrunedAndTheUsageIsKept(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        final AgentUsageRegistry registry = registry(store, new ArrayList<>());
+        final List<FreeStyleBuild> run = runs(r, 3);
+        use(registry, "atLimit", 1, run.subList(0, 1), 1);
+        use(registry, "below", 5, run.subList(1, 3), 2);
+
+        registry.pruneRuns(id -> id.equals(run.get(1).getExternalizableId()));
+
+        assertThat(registry.count("atLimit"), is(1));
+        assertThat(registry.isCounted(run.get(0).getExternalizableId()), is(false));
+        assertThat(registry.isCounted(run.get(1).getExternalizableId()), is(true));
+        assertThat(registry.isCounted(run.get(2).getExternalizableId()), is(false));
+        // The count of an agent that has uses left is not touched: only the run is forgotten.
+        assertThat(registry.count("below"), is(2));
+    }
+
+    @Test
+    void releasingARunIsSaved(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final List<Runnable> scheduled = new ArrayList<>();
+        final AgentUsageRegistry registry = registry(dir.resolve("usage.xml").toFile(), scheduled);
+        final List<FreeStyleBuild> run = runs(r, 2);
+        use(registry, "agent", 5, run, 2);
+        scheduled.forEach(Runnable::run);
+        scheduled.clear();
+
+        registry.release(run.get(0));
+
+        assertThat(scheduled.size(), is(1));
+    }
+
+    @Test
+    void aFileWithoutRunsStillLoads(JenkinsRule r, @TempDir Path dir) throws Exception {
+        final File store = dir.resolve("usage.xml").toFile();
+        Files.write(
+                store.toPath(),
+                "<usage><counts><entry><string>agent</string><int>2</int></entry></counts></usage>"
+                        .getBytes(StandardCharsets.UTF_8));
+
+        final AgentUsageRegistry loaded = registry(store, new ArrayList<>());
+        loaded.load(node -> true, node -> 5);
+
+        assertThat(loaded.count("agent"), is(2));
     }
 
     @Test

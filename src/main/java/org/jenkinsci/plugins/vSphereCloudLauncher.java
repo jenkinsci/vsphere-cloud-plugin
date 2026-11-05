@@ -18,9 +18,13 @@ import java.rmi.RemoteException;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.List;
+import org.jenkinsci.plugins.vsphere.AgentRecycler;
+import org.jenkinsci.plugins.vsphere.AgentUsageRegistry.RecycleOutcome;
 import org.jenkinsci.plugins.vsphere.VSphereOfflineCause;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
 import org.jenkinsci.plugins.vsphere.tools.VSphereException;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 import org.kohsuke.stapler.DataBoundConstructor;
 
 /**
@@ -326,6 +330,18 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         }
     }
 
+    private static boolean isRevert(MACHINE_ACTION action) {
+        return action == MACHINE_ACTION.REVERT
+                || action == MACHINE_ACTION.REVERT_AND_RESTART
+                || action == MACHINE_ACTION.REVERT_AND_RESET;
+    }
+
+    /** The agent connects again by itself after it is disconnected and its virtual machine is reverted. */
+    @Restricted(NoExternalUse.class)
+    public boolean reconnectsAfterDisconnect() {
+        return idleAction == MACHINE_ACTION.RECONNECT_AND_REVERT;
+    }
+
     @Override
     public synchronized void afterDisconnect(SlaveComputer slaveComputer, TaskListener taskListener) {
         final vSphereCloudSlave vsSlave = (vSphereCloudSlave) slaveComputer.getNode();
@@ -336,6 +352,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                         slaveComputer,
                         taskListener,
                         "Ignoring disconnect attempt because a connect attempt is in progress.");
+                // A recycle waiting for this disconnect would otherwise wait for its timeout.
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
                 return;
             }
             if (Boolean.TRUE.equals(vsSlave.slaveIsDisconnecting)) {
@@ -349,6 +367,8 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
         if (slaveComputer.isTemporarilyOffline()) {
             if (!(slaveComputer.getOfflineCause() instanceof VSphereOfflineCause)) {
                 vSphereCloud.Log(slaveComputer, taskListener, "Not disconnecting VM because it's not accepting tasks");
+                // A recycle waiting for this disconnect would otherwise wait for its timeout.
+                AgentRecycler.idleActionDone(slaveComputer.getName(), RecycleOutcome.FAILED);
                 return;
             }
         }
@@ -360,6 +380,10 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
 
         VSphere v = null;
         boolean reconnect = false;
+        boolean notReverted = false;
+        // How the disconnect went, said when it is over for the agent: not before, as the recycle that waits for it
+        // connects the agent again, which the launcher does not allow while it is still disconnecting.
+        RecycleOutcome outcome = null;
         try {
             vSphereCloud.Log(slaveComputer, taskListener, "Running disconnect procedure...");
             super.afterDisconnect(slaveComputer, taskListener);
@@ -419,7 +443,23 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                             break;
                     }
                 } else {
-                    // VM is already powered down.
+                    // Nothing is reverted in a machine that is not on, so its usage does not start again. Unless the
+                    // agent is launched from a snapshot: it is reverted to it then, whatever the state of the machine.
+                    notReverted = isRevert(localIdle) && (snapName == null || snapName.isEmpty());
+                    if (notReverted && AgentRecycler.isAwaitingDisconnect(slaveComputer.getName())) {
+                        vSphereCloud.Log(
+                                slaveComputer,
+                                taskListener,
+                                "The virtual machine is not powered on: idle action %s was not done, so the agent stays at its limit of builds."
+                                        + " It is recycled again when it is launched.",
+                                localIdle);
+                    } else {
+                        vSphereCloud.Log(
+                                slaveComputer,
+                                taskListener,
+                                "The virtual machine is not powered on: idle action %s has nothing to do to it.",
+                                localIdle);
+                    }
                 }
 
                 // Reconnect and Revert is independent of VM power state
@@ -427,9 +467,44 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                     reconnect = true;
                 }
             }
-            vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
+            if (vm == null && !MACHINE_ACTION.NOTHING.equals(localIdle)) {
+                // Nothing was done to a machine that is not there, so it is not for its usage to start again.
+                if (AgentRecycler.isAwaitingDisconnect(slaveComputer.getName())) {
+                    vSphereCloud.Log(
+                            slaveComputer,
+                            taskListener,
+                            "Could not find the virtual machine %s: idle action %s was not done, so the agent stays at its limit of builds."
+                                    + " Fix the name of the virtual machine of the agent, or reset the usage counts of the cloud.",
+                            vmName,
+                            localIdle);
+                } else {
+                    vSphereCloud.Log(
+                            slaveComputer,
+                            taskListener,
+                            "Could not find the virtual machine %s: idle action %s was not done.",
+                            vmName,
+                            localIdle);
+                }
+                outcome = RecycleOutcome.FAILED;
+            } else if (notReverted) {
+                outcome = RecycleOutcome.FAILED;
+            } else {
+                if (!isRevert(localIdle)
+                        && (snapName == null || snapName.isEmpty())
+                        && AgentRecycler.isAwaitingDisconnect(slaveComputer.getName())) {
+                    vSphereCloud.Log(
+                            slaveComputer,
+                            taskListener,
+                            "Idle action %s does not revert the virtual machine, and it has no snapshot to be launched from:"
+                                    + " it keeps what the builds left on it.",
+                            localIdle);
+                }
+                vSphereCloud.Log(slaveComputer, taskListener, "Idle action %s complete.", localIdle);
+                outcome = RecycleOutcome.COMPLETED;
+            }
         } catch (Throwable t) {
             vSphereCloud.Log(slaveComputer, taskListener, t, "Got an exception");
+            outcome = RecycleOutcome.FAILED;
             taskListener.fatalError(t.getMessage(), t);
         } finally {
             if (v != null) {
@@ -440,8 +515,14 @@ public class vSphereCloudLauncher extends DelegatingComputerLauncher {
                 vsSlave.slaveIsDisconnecting = Boolean.FALSE;
                 vsSlave.slaveIsStarting = Boolean.FALSE;
             }
+            // Asked before saying how it went, which is what lets the recycle end: it connects the agent when it does,
+            // as this is not allowed to connect it while the recycle still marks it offline.
+            final boolean recycleConnects = reconnect && AgentRecycler.isRecycling(slaveComputer.getName());
+            if (outcome != null) {
+                AgentRecycler.idleActionDone(slaveComputer.getName(), outcome);
+            }
 
-            if (reconnect) {
+            if (reconnect && !recycleConnects) {
                 slaveComputer.connect(false);
             }
         }

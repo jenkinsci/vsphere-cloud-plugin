@@ -57,10 +57,25 @@ class AgentUsageRegistryRestartTest {
             final AgentUsageRegistry registry = AgentUsageRegistry.get();
             // Taken back as it was.
             assertThat(registry.count("kept"), is(2));
-            // It had reached its limit and nothing is using it now, so it would never be recycled: it starts again.
-            assertThat(registry.count("full"), is(0));
+            // It had reached its limit and its machine has not been cleaned: it is recycled once it is launched.
+            assertThat(registry.count("full"), is(2));
             // Deleted before the restart.
             assertThat(registry.count("gone"), is(0));
+        });
+    }
+
+    @Test
+    void aSavedRunThatNoLongerExistsIsPrunedAtStartup() throws Throwable {
+        sessions.then(r -> {
+            r.jenkins.addNode(agent("held", 1));
+            AgentUsageRegistry.get().acquire("held", 1, "gone#1", () -> true);
+            assertThat(AgentUsageRegistry.get().count("held"), is(1));
+        });
+
+        sessions.then(r -> {
+            // Nothing is going to end that run, so it would hold the agent from being recycled for ever.
+            assertThat(AgentUsageRegistry.get().isCounted("gone#1"), is(false));
+            assertThat(AgentUsageRegistry.get().count("held"), is(1));
         });
     }
 
