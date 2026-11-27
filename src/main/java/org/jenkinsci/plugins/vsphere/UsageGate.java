@@ -19,6 +19,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import jenkins.util.SystemProperties;
 import org.jenkinsci.plugins.vSphereCloudSlave;
+import org.jvnet.localizer.Localizable;
 import org.kohsuke.accmod.Restricted;
 import org.kohsuke.accmod.restrictions.NoExternalUse;
 
@@ -113,6 +114,24 @@ public final class UsageGate {
             return null;
         }
         return refusal;
+    }
+
+    /**
+     * Why the agent takes no new builds because of its limit, or null if its limit does not keep it from that. Whether
+     * a certain item is let through all the same is for {@link #check} to say.
+     */
+    @CheckForNull
+    public static Localizable limitState(vSphereCloudSlave agent) {
+        final String name = agent.getNodeName();
+        final int limit = agent.getLimitedTestRunCount();
+        if (limit <= 0) {
+            return null;
+        }
+        final AgentUsageRegistry registry = AgentUsageRegistry.get();
+        if (registry.isRecycling(name)) {
+            return Messages._usageGate_Recycling(name);
+        }
+        return registry.isRetiring(name, limit) ? Messages._usageGate_LimitReached(name, limit) : null;
     }
 
     /** For tests. */

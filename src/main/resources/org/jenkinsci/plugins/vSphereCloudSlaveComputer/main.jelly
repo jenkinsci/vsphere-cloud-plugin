@@ -3,6 +3,13 @@
 
   <h2>vSphere Information</h2>
   <table class="pane bigtable" style="text-align: left;">
+    <j:set var="limitNotice" value="${it.limitNotice}"/>
+    <j:if test="${limitNotice != null}">
+      <tr>
+        <th>Build limit</th>
+        <td>${limitNotice}</td>
+      </tr>
+    </j:if>
     <j:choose>
       <j:when test="${it.cloudDescription != null}">
         <tr>
