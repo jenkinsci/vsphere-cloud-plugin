@@ -8,11 +8,17 @@ import com.vmware.vim25.VirtualMachineSummary;
 import com.vmware.vim25.VirtualMachineToolsStatus;
 import com.vmware.vim25.mo.ManagedEntity;
 import com.vmware.vim25.mo.VirtualMachine;
+import hudson.model.Node;
 import hudson.slaves.AbstractCloudComputer;
 import hudson.slaves.AbstractCloudSlave;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import org.jenkinsci.plugins.vsphere.DrainingCheck;
+import org.jenkinsci.plugins.vsphere.UsageGate;
 import org.jenkinsci.plugins.vsphere.tools.VSphere;
+import org.jvnet.localizer.Localizable;
+import org.kohsuke.accmod.Restricted;
+import org.kohsuke.accmod.restrictions.NoExternalUse;
 
 public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
     private final vSphereCloudSlave vSlave;
@@ -23,9 +29,29 @@ public class vSphereCloudSlaveComputer extends AbstractCloudComputer {
      */
     private transient VMInformation vmInformation;
 
+    /** Whether the agent is to stop accepting tasks because of its limit. */
+    private final transient DrainingCheck drainingCheck = new DrainingCheck();
+
     public vSphereCloudSlaveComputer(AbstractCloudSlave slave) {
         super(slave);
         vSlave = (vSphereCloudSlave) slave;
+    }
+
+    @Override
+    public boolean isAcceptingTasks() {
+        // The node as it is now: saving the agent replaces it.
+        final Node node = getNode();
+        return super.isAcceptingTasks()
+                && !(node instanceof vSphereCloudSlave && drainingCheck.isDraining((vSphereCloudSlave) node, this));
+    }
+
+    /** Why the agent takes no new builds because of its limit, or null. For the page of the agent. */
+    @Restricted(NoExternalUse.class)
+    public String getLimitNotice() {
+        final Node node = getNode();
+        final Localizable state =
+                node instanceof vSphereCloudSlave ? UsageGate.limitState((vSphereCloudSlave) node) : null;
+        return state == null ? null : state.toString();
     }
 
     @Override
